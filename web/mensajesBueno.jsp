@@ -1,0 +1,42 @@
+<%-- 
+    Document   : mensajesBueno
+    Created on : 30 oct 2025, 16:59:30
+    Author     : ferre
+--%>
+
+<%@page contentType="text/html" pageEncoding="UTF-8"%>
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <title>Aplicacion agenda de contactos</title>
+        <link rel="stylesheet" href="styles/styles.css">
+    </head>
+    <body>
+    <center>
+        <div class="fCent">
+            <h1>Feedback de la aplicación votos</h1>
+        <h2 class="success"><%=session.getAttribute("mensajeBueno")%></h2>
+                    <%if (((String)session.getAttribute("rolDelUsu")).equalsIgnoreCase("analista")) {%>
+                          <form action="vistas/analista/panelAnalista.jsp">
+                            <input type="submit" value="Volver al panel">
+                    </form>
+                     <% }
+            
+            if (((String)session.getAttribute("rolDelUsu")).equalsIgnoreCase("admin")) {%>
+                    <form action="vistas/admin/panelAdmin.jsp">
+                            <input type="submit" value="Volver al panel">
+                    </form>
+            <%  } else if (((String)session.getAttribute("rolDelUsu")).equalsIgnoreCase("usuario")||((String)session.getAttribute("rolDelUsu")).equalsIgnoreCase("nuevoregistrado")) {
+                      %>
+                    <form action="vistas/usuario/panelUsuario.jsp">
+                            <input type="submit" value="Volver al panel">
+                    </form>
+            <%  
+                  }else 
+            %>
+            
+        </div>
+    </center>
+    </body>
+</html>
