@@ -115,7 +115,7 @@ El nombre de la base de datos sigue el formato:
 bbdd_amr_elecciones
 ```
 
-(donde `xxx` son las iniciales del nombre y apellidos del autor)
+(donde `xxx` son las iniciales del nombre y apellidos del autor, en mi caso amr)
 
 ### 🛠 Gestión de datos iniciales
 
