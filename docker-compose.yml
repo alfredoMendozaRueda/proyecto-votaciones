@@ -1,10 +1,54 @@
-# Para desarrollo local: levanta un RabbitMQ con su panel de administracion,
-# sin tener que instalarlo a mano. El backend (mvn spring-boot:run) se sigue
-# ejecutando fuera de este compose, apuntando a localhost:5672.
+# Stack completo para desarrollo local: backend+frontend (imagen construida
+# con el Dockerfile del repo), MySQL con el esquema/datos de ejemplo ya
+# importados, y RabbitMQ con su panel de administracion.
 #
-# Uso: docker compose up -d
-# Panel de administracion: http://localhost:15672 (usuario/contraseña: guest/guest)
+# Uso: docker compose up --build
+#   App:                 http://localhost:8080
+#   RabbitMQ (panel):    http://localhost:15672  (guest/guest)
+#   MySQL:                localhost:3306         (root/rootpass)
+#
+# No hace falta tener Java, Node, MySQL ni RabbitMQ instalados: todo corre
+# dentro de los contenedores. Solo Docker.
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/bbdd_amr_elecciones?useUnicode=true&characterEncoding=UTF-8
+      DB_USUARIO: root
+      DB_CONTRASENA: rootpass
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USUARIO: guest
+      RABBITMQ_CONTRASENA: guest
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: bbdd_amr_elecciones
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # El propio dump crea la base de datos y las tablas, y las deja con
+      # los datos de ejemplo: usuarios de prueba, censo, partidos... (ver
+      # README, sección "Usuarios de prueba").
+      - ./database/bbdd_amr_elecciones.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   rabbitmq:
     image: rabbitmq:3-management-alpine
     ports:
@@ -13,3 +57,6 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
+
+volumes:
+  mysql_data:

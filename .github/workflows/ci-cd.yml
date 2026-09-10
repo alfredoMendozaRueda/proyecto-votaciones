@@ -1,0 +1,68 @@
+name: CI/CD
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test-backend:
+    name: Tests backend (Maven)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Ejecutar tests del backend
+        run: mvn -B test
+
+  build-frontend:
+    name: Build frontend (Angular)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar dependencias
+        working-directory: frontend
+        run: npm ci
+      - name: Compilar
+        working-directory: frontend
+        run: npm run build
+
+  # Se ejecuta solo en push a main (no en pull requests ni otras ramas), y
+  # solo si los dos jobs anteriores han pasado. Render ya despliega solo en
+  # cada push a la rama conectada (auto-deploy nativo, sin webhook), asi
+  # que este job solo se encarga de avisar por email de que el push ha
+  # pasado los tests y va camino de desplegarse.
+  notificar-push-main:
+    name: Avisar por email del push a main
+    needs: [test-backend, build-frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enviar email de aviso
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "[proyecto-votaciones] Push a main: ${{ github.event.head_commit.message }}"
+          to: ${{ secrets.NOTIFY_EMAIL }}
+          from: "proyecto-votaciones CI <${{ secrets.MAIL_USERNAME }}>"
+          body: |
+            Se ha hecho push a la rama main de ${{ github.repository }} y los tests (backend + build del frontend) han pasado en GitHub Actions.
+
+            Commit: ${{ github.sha }}
+            Autor: ${{ github.actor }}
+            Mensaje: ${{ github.event.head_commit.message }}
+            Ver commit: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+
+            Si Render esta conectado a esta rama (auto-deploy), el despliegue se dispara solo a partir de este push.

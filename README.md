@@ -190,6 +190,22 @@ bbdd_amr_elecciones
 
 ## Cómo ejecutar el proyecto
 
+### La forma rápida: todo con Docker
+
+Si solo tienes Docker instalado (nada de Java, Node, MySQL ni RabbitMQ), esto levanta el stack completo — app, base de datos con los datos de ejemplo ya importados, y RabbitMQ:
+
+```bash
+docker compose up --build
+```
+
+* App: <http://localhost:8080> (usuarios de prueba más abajo)
+* Panel de RabbitMQ: <http://localhost:15672> (`guest`/`guest`)
+* MySQL: `localhost:3306` (`root`/`rootpass`)
+
+La primera vez tarda unos minutos (compila Angular y el backend dentro de la imagen); las siguientes veces solo reconstruye lo que haya cambiado. `docker compose down` lo para todo; añade `-v` si además quieres borrar los datos de MySQL y volver a partir del dump original.
+
+El resto de esta sección explica cómo trabajar sin Docker (día a día en desarrollo) y cómo desplegarlo de verdad en internet.
+
 ### Requisitos
 
 * JDK 17+
@@ -213,10 +229,10 @@ Ninguna credencial va fija en el código: todo se configura con variables de ent
 | `RABBITMQ_CONTRASENA` | `guest` |
 | `SERVER_PORT` | `8080` |
 
-Para levantar un RabbitMQ local rápidamente (con panel de administración en `http://localhost:15672`, usuario/contraseña `guest`/`guest`):
+Para levantar solo RabbitMQ (por ejemplo si el backend lo ejecutas tú directamente con `mvn spring-boot:run`, como en la sección siguiente):
 
 ```bash
-docker compose up -d
+docker compose up -d rabbitmq
 ```
 
 ### Desarrollo: dos servidores en paralelo
@@ -259,6 +275,24 @@ El repositorio incluye un `Dockerfile` multi-stage (compila Angular, compila el 
 RabbitMQ es opcional: si no configuras `RABBITMQ_HOST` en Render, la app arranca igual y simplemente no llega a publicar las notificaciones (se registra un aviso en el log, nada más). Si quieres que funcionen, añade también `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USUARIO` y `RABBITMQ_CONTRASENA` apuntando a un broker gratuito externo (por ejemplo CloudAMQP, que ofrece un plan gratuito pequeño pensado para esto).
 
 Ten en cuenta las limitaciones propias de un tier gratuito: el servicio "duerme" tras un rato de inactividad (la primera petición tras dormir tarda unos segundos en responder) y las bases de datos gratuitas de terceros suelen tener límites de almacenamiento pequeños — para un proyecto en producción real, conviene pasar a un plan de pago.
+
+### CI/CD
+
+El workflow `.github/workflows/ci-cd.yml` de GitHub Actions hace tres cosas:
+
+1. **En cada push (a cualquier rama) y en cada pull request**: ejecuta `mvn test` (los tests del backend) y compila el frontend (`npm ci && npm run build`), como comprobación de que nada se ha roto.
+2. **Solo en un push a `main`** (la rama por defecto de este repositorio — ojo, **no** se llama `master`) y solo si el punto anterior ha pasado: envía un correo avisando de que el push ha superado los tests, con el commit, el autor y el mensaje.
+3. El despliegue en sí **no** lo dispara este workflow: si conectaste Render por Blueprint como se explica arriba, Render ya despliega automáticamente en cada push a la rama conectada (su "auto-deploy" nativo) — no hace falta ningún paso extra aquí. El correo, por tanto, avisa de que el push ha pasado los tests y de que el despliegue en Render se disparará solo, no confirma que Render haya terminado de desplegar (Render no se lo comunica a GitHub Actions).
+
+Para que el envío de correo funcione, añade estos secrets en **Settings → Secrets and variables → Actions** del repositorio:
+
+| Secret | Valor |
+|---|---|
+| `MAIL_USERNAME` | Tu dirección de Gmail (el remitente) |
+| `MAIL_PASSWORD` | Una **contraseña de aplicación** de Gmail (no tu contraseña normal) — se genera en [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), requiere tener activada la verificación en dos pasos |
+| `NOTIFY_EMAIL` | La dirección a la que quieres que llegue el aviso |
+
+Si no añades estos secrets, los jobs de tests siguen funcionando igual; solo falla (o se salta) el paso de enviar el correo.
 
 ---
 
