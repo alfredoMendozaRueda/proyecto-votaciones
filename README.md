@@ -234,6 +234,17 @@ Sin este perfil (`mvn package` a secas), el jar se genera solo con el backend y 
 
 No requiere desplegar en un servidor externo: el jar incluye un Tomcat embebido.
 
+### Despliegue gratuito (Docker + Render)
+
+El repositorio incluye un `Dockerfile` multi-stage (compila Angular, compila el jar con el front ya embebido y genera una imagen final mínima con solo el JRE) y un `render.yaml` para desplegar en [Render](https://render.com) con su tier gratuito:
+
+1. Crea una base de datos MySQL gratuita en algún proveedor externo (Render no ofrece MySQL gestionado, solo PostgreSQL) — por ejemplo [db4free.net](https://www.db4free.net) o [freesqldatabase.com](https://www.freesqldatabase.com), pensados justo para proyectos de prueba/hobby. Importa `database/bbdd_amr_elecciones.sql` con el phpMyAdmin que te den.
+2. En Render: **New +** → **Blueprint**, conecta tu cuenta de GitHub y selecciona este repositorio (Render detecta `render.yaml` automáticamente).
+3. Al desplegar, Render te pedirá rellenar `DB_URL`, `DB_USUARIO` y `DB_CONTRASENA` con los datos que te dio el proveedor de MySQL (el formato de `DB_URL` es el mismo que en local: `jdbc:mysql://<host>:<puerto>/<nombre_bd>?useUnicode=true&characterEncoding=UTF-8`).
+4. Render construye la imagen Docker y publica la app en una URL `https://<nombre>.onrender.com`.
+
+Ten en cuenta las limitaciones propias de un tier gratuito: el servicio "duerme" tras un rato de inactividad (la primera petición tras dormir tarda unos segundos en responder) y las bases de datos gratuitas de terceros suelen tener límites de almacenamiento pequeños — para un proyecto en producción real, conviene pasar a un plan de pago.
+
 ---
 
 ## Conclusión

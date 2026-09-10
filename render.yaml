@@ -1,0 +1,17 @@
+# Blueprint de Render (https://render.com/docs/blueprint-spec).
+# Con este fichero en el repo, "New +" -> "Blueprint" en Render detecta el
+# servicio automaticamente y solo pide rellenar las variables de entorno
+# marcadas como "sync: false" (las credenciales de la base de datos).
+services:
+  - type: web
+    name: proyecto-votaciones
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: DB_URL
+        sync: false
+      - key: DB_USUARIO
+        sync: false
+      - key: DB_CONTRASENA
+        sync: false

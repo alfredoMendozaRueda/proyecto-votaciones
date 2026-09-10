@@ -17,4 +17,7 @@ spring:
     show-sql: false
 
 server:
-  port: ${SERVER_PORT:8080}
+  # La mayoria de plataformas de hosting (Render, Railway...) inyectan su
+  # propio puerto en la variable PORT; si no existe, se usa SERVER_PORT o,
+  # en su defecto, 8080 para desarrollo local.
+  port: ${PORT:${SERVER_PORT:8080}}
