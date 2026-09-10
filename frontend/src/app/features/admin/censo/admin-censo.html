@@ -18,7 +18,13 @@
     @if (ambito === 'localidad') {
       <div>
         <label class="form-label" for="localidad">Localidad</label>
-        <select class="form-select" id="localidad" name="localidad" [(ngModel)]="localidad" required>
+        <select
+          class="form-select"
+          id="localidad"
+          name="localidad"
+          [(ngModel)]="localidad"
+          required
+        >
           <option value="" disabled selected>Selecciona una localidad</option>
           @for (nombre of localidades(); track nombre) {
             <option [value]="nombre">{{ nombre }}</option>
@@ -30,7 +36,13 @@
     @if (ambito === 'comunidad') {
       <div>
         <label class="form-label" for="comunidad">Comunidad autónoma</label>
-        <select class="form-select" id="comunidad" name="comunidad" [(ngModel)]="comunidad" required>
+        <select
+          class="form-select"
+          id="comunidad"
+          name="comunidad"
+          [(ngModel)]="comunidad"
+          required
+        >
           <option value="" disabled selected>Selecciona una comunidad</option>
           @for (nombre of comunidades(); track nombre) {
             <option [value]="nombre">{{ nombre }}</option>
@@ -39,7 +51,11 @@
       </div>
     }
 
-    <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2" [disabled]="consultando()">
+    <button
+      type="submit"
+      class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2"
+      [disabled]="consultando()"
+    >
       @if (consultando()) {
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       } @else {

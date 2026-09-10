@@ -15,11 +15,24 @@
     </div>
     <div>
       <label class="form-label" for="nombreCompleto">Nombre completo</label>
-      <input class="form-control" id="nombreCompleto" type="text" name="nombreCompleto" [(ngModel)]="nombreCompleto" required />
+      <input
+        class="form-control"
+        id="nombreCompleto"
+        type="text"
+        name="nombreCompleto"
+        [(ngModel)]="nombreCompleto"
+        required
+      />
     </div>
     <div>
       <label class="form-label" for="siglasPartido">Partido</label>
-      <select class="form-select" id="siglasPartido" name="siglasPartido" [(ngModel)]="siglasPartido" required>
+      <select
+        class="form-select"
+        id="siglasPartido"
+        name="siglasPartido"
+        [(ngModel)]="siglasPartido"
+        required
+      >
         <option value="" disabled selected>Selecciona un partido</option>
         @for (partido of partidos(); track partido.siglas) {
           <option [value]="partido.siglas">{{ partido.siglas }} · {{ partido.descripcion }}</option>
@@ -28,9 +41,21 @@
     </div>
     <div>
       <label class="form-label" for="orden">Orden en la candidatura</label>
-      <input class="form-control" id="orden" type="number" name="orden" [(ngModel)]="orden" min="1" required />
+      <input
+        class="form-control"
+        id="orden"
+        type="number"
+        name="orden"
+        [(ngModel)]="orden"
+        min="1"
+        required
+      />
     </div>
-    <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2" [disabled]="enviando()">
+    <button
+      type="submit"
+      class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2"
+      [disabled]="enviando()"
+    >
       @if (enviando()) {
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       } @else {

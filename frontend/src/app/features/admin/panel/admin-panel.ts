@@ -6,6 +6,6 @@ import { Icon } from '../../../shared/components/icon/icon';
 @Component({
   selector: 'app-admin-panel',
   imports: [RouterLink, Icon],
-  templateUrl: './admin-panel.html'
+  templateUrl: './admin-panel.html',
 })
 export class AdminPanel {}

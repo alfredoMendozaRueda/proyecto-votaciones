@@ -2,17 +2,27 @@
   <div class="col-lg-6 auth-marca d-flex flex-column justify-content-center gap-4 p-5">
     <span class="logo-marca"><app-icon nombre="boleta" [size]="26" [strokeWidth]="1.6" /></span>
     <h1 class="text-white">e-Votaciones</h1>
-    <p class="fs-5">Gestiona elecciones, censo y votaciones de forma sencilla, segura y transparente.</p>
+    <p class="fs-5">
+      Gestiona elecciones, censo y votaciones de forma sencilla, segura y transparente.
+    </p>
 
     <div class="d-flex flex-column gap-3 mt-2">
-      <span class="caracteristica d-flex align-items-center gap-2"><app-icon nombre="votar" [size]="18" class="text-primary" /> Vota en un par de clics</span>
-      <span class="caracteristica d-flex align-items-center gap-2"><app-icon nombre="resultados" [size]="18" class="text-primary" /> Resultados en tiempo real por localidad</span>
-      <span class="caracteristica d-flex align-items-center gap-2"><app-icon nombre="candado" [size]="18" class="text-primary" /> Contraseñas cifradas y acceso por rol</span>
+      <span class="caracteristica d-flex align-items-center gap-2"
+        ><app-icon nombre="votar" [size]="18" class="text-primary" /> Vota en un par de clics</span
+      >
+      <span class="caracteristica d-flex align-items-center gap-2"
+        ><app-icon nombre="resultados" [size]="18" class="text-primary" /> Resultados en tiempo real
+        por localidad</span
+      >
+      <span class="caracteristica d-flex align-items-center gap-2"
+        ><app-icon nombre="candado" [size]="18" class="text-primary" /> Contraseñas cifradas y
+        acceso por rol</span
+      >
     </div>
   </div>
 
   <div class="col-lg-6 d-flex align-items-center justify-content-center p-4">
-    <div class="w-100 animar-entrada" style="max-width: 420px;">
+    <div class="w-100 animar-entrada" style="max-width: 420px">
       <h1>Iniciar sesión</h1>
 
       @if (error()) {
@@ -22,15 +32,35 @@
       <form class="card card-body shadow-sm d-flex flex-column gap-3" (ngSubmit)="enviar()">
         <div>
           <label class="form-label" for="dni">DNI</label>
-          <input class="form-control" id="dni" type="text" name="dni" [(ngModel)]="dni" required autocomplete="username" />
+          <input
+            class="form-control"
+            id="dni"
+            type="text"
+            name="dni"
+            [(ngModel)]="dni"
+            required
+            autocomplete="username"
+          />
         </div>
 
         <div>
           <label class="form-label" for="contrasena">Contraseña</label>
-          <input class="form-control" id="contrasena" type="password" name="contrasena" [(ngModel)]="contrasena" required autocomplete="current-password" />
+          <input
+            class="form-control"
+            id="contrasena"
+            type="password"
+            name="contrasena"
+            [(ngModel)]="contrasena"
+            required
+            autocomplete="current-password"
+          />
         </div>
 
-        <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2" [disabled]="enviando()">
+        <button
+          type="submit"
+          class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2"
+          [disabled]="enviando()"
+        >
           @if (enviando()) {
             <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
           } @else {

@@ -10,7 +10,7 @@ import { Alert } from '../../shared/components/alert/alert';
 @Component({
   selector: 'app-votacion',
   imports: [Icon, Alert],
-  templateUrl: './votacion.html'
+  templateUrl: './votacion.html',
 })
 export class Votacion implements OnInit {
   private readonly votacionService = inject(VotacionService);
@@ -32,7 +32,7 @@ export class Votacion implements OnInit {
         this.cargando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se ha podido cargar la lista de partidos');
-      }
+      },
     });
   }
 
@@ -60,7 +60,7 @@ export class Votacion implements OnInit {
         this.votando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se ha podido registrar el voto');
-      }
+      },
     });
   }
 }

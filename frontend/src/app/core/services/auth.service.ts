@@ -22,7 +22,7 @@ export class AuthService {
         this.usuarioSignal.set(null);
         return of(null);
       }),
-      finalize(() => this.cargandoSignal.set(false))
+      finalize(() => this.cargandoSignal.set(false)),
     );
   }
 

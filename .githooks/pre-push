@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Hook de pre-push: valida el proyecto completo antes de que el código salga
+# de la máquina, en la misma línea que el workflow de CI.
+# Instalación: git config core.hooksPath .githooks (una sola vez por clon).
+# Se puede saltar puntualmente con: git push --no-verify
+set -euo pipefail
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+cd "$ROOT_DIR"
+
+echo "pre-push: ejecutando los tests del backend (mvn test)..."
+mvn -q -DskipITs test
+
+echo "pre-push: compilando el frontend (ng build)..."
+(cd frontend && npx ng build --configuration development)
+
+echo "pre-push: todo correcto, continuando con el push."

@@ -12,7 +12,7 @@ import { Alert } from '../../../shared/components/alert/alert';
 @Component({
   selector: 'app-candidatos-localidad',
   imports: [FormsModule, Icon, Alert],
-  templateUrl: './candidatos-localidad.html'
+  templateUrl: './candidatos-localidad.html',
 })
 export class CandidatosLocalidad implements OnInit {
   private readonly candidatoService = inject(CandidatoService);
@@ -26,7 +26,9 @@ export class CandidatosLocalidad implements OnInit {
   localidad = '';
 
   ngOnInit(): void {
-    this.localidadService.localidades().subscribe((localidades) => this.localidades.set(localidades));
+    this.localidadService
+      .localidades()
+      .subscribe((localidades) => this.localidades.set(localidades));
   }
 
   consultar(): void {
@@ -43,7 +45,7 @@ export class CandidatosLocalidad implements OnInit {
         this.consultando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se ha podido consultar los candidatos');
-      }
+      },
     });
   }
 }

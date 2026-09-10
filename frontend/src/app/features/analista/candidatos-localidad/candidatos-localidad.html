@@ -15,7 +15,11 @@
         }
       </select>
     </div>
-    <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2" [disabled]="consultando()">
+    <button
+      type="submit"
+      class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2"
+      [disabled]="consultando()"
+    >
       @if (consultando()) {
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       } @else {

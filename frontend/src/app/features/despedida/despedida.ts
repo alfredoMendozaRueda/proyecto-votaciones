@@ -9,12 +9,12 @@ import { Icon } from '../../shared/components/icon/icon';
 @Component({
   selector: 'app-despedida',
   imports: [RouterLink, Icon],
-  templateUrl: './despedida.html'
+  templateUrl: './despedida.html',
 })
 export class Despedida {
   private readonly route = inject(ActivatedRoute);
 
   readonly dni = toSignal(this.route.queryParamMap.pipe(map((params) => params.get('dni'))), {
-    initialValue: null
+    initialValue: null,
   });
 }

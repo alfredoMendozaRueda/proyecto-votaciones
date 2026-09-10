@@ -5,7 +5,8 @@
    directamente las clases y componentes de Bootstrap en las plantillas. */
 
 :root {
-  --bs-font-sans-serif: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --bs-font-sans-serif:
+    'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --bs-body-bg: #f2f1ec;
   --bs-body-color: #211f2e;
   --bs-primary: #5b3ccb;
@@ -28,7 +29,9 @@ body {
   min-height: 100vh;
 }
 
-h1, h2, h3 {
+h1,
+h2,
+h3 {
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -63,7 +66,8 @@ h1 {
   --bs-btn-focus-box-shadow: 0 0 0 0.25rem rgba(91, 60, 203, 0.35);
 }
 
-.form-control:focus, .form-select:focus {
+.form-control:focus,
+.form-select:focus {
   border-color: var(--bs-primary);
   box-shadow: 0 0 0 0.25rem rgba(91, 60, 203, 0.15);
 }
@@ -109,7 +113,10 @@ h1 {
 
 .tarjeta-partido {
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
 }
 
 .tarjeta-partido:hover {
@@ -149,7 +156,10 @@ h1 {
 .enlace-panel {
   color: inherit;
   text-decoration: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
 }
 
 .enlace-panel:hover {
@@ -273,7 +283,8 @@ h1 {
 }
 
 @keyframes pulso-suave {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 0 0 rgba(91, 60, 203, 0.35);
   }
   50% {
@@ -282,7 +293,8 @@ h1 {
 }
 
 @keyframes flotar {
-  0%, 100% {
+  0%,
+  100% {
     transform: translate(0, 0) scale(1);
   }
   50% {
@@ -299,15 +311,35 @@ h1 {
   animation: entrada-suave 0.4s ease both;
 }
 
-.rejilla-partidos > :nth-child(1), .enlaces-panel > :nth-child(1) { animation-delay: 0.03s; }
-.rejilla-partidos > :nth-child(2), .enlaces-panel > :nth-child(2) { animation-delay: 0.07s; }
-.rejilla-partidos > :nth-child(3), .enlaces-panel > :nth-child(3) { animation-delay: 0.11s; }
-.rejilla-partidos > :nth-child(4), .enlaces-panel > :nth-child(4) { animation-delay: 0.15s; }
-.rejilla-partidos > :nth-child(5), .enlaces-panel > :nth-child(5) { animation-delay: 0.19s; }
-.rejilla-partidos > :nth-child(n+6), .enlaces-panel > :nth-child(n+6) { animation-delay: 0.22s; }
+.rejilla-partidos > :nth-child(1),
+.enlaces-panel > :nth-child(1) {
+  animation-delay: 0.03s;
+}
+.rejilla-partidos > :nth-child(2),
+.enlaces-panel > :nth-child(2) {
+  animation-delay: 0.07s;
+}
+.rejilla-partidos > :nth-child(3),
+.enlaces-panel > :nth-child(3) {
+  animation-delay: 0.11s;
+}
+.rejilla-partidos > :nth-child(4),
+.enlaces-panel > :nth-child(4) {
+  animation-delay: 0.15s;
+}
+.rejilla-partidos > :nth-child(5),
+.enlaces-panel > :nth-child(5) {
+  animation-delay: 0.19s;
+}
+.rejilla-partidos > :nth-child(n + 6),
+.enlaces-panel > :nth-child(n + 6) {
+  animation-delay: 0.22s;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;

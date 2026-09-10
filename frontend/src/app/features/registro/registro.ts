@@ -11,7 +11,7 @@ import { Alert } from '../../shared/components/alert/alert';
 @Component({
   selector: 'app-registro',
   imports: [FormsModule, RouterLink, Icon, Alert],
-  templateUrl: './registro.html'
+  templateUrl: './registro.html',
 })
 export class Registro {
   private readonly registroService = inject(RegistroService);
@@ -38,7 +38,7 @@ export class Registro {
         this.enviando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se ha podido completar el registro');
-      }
+      },
     });
   }
 }

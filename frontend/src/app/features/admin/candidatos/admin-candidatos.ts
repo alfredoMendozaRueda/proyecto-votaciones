@@ -12,7 +12,7 @@ import { Alert } from '../../../shared/components/alert/alert';
 @Component({
   selector: 'app-admin-candidatos',
   imports: [FormsModule, Icon, Alert],
-  templateUrl: './admin-candidatos.html'
+  templateUrl: './admin-candidatos.html',
 })
 export class AdminCandidatos implements OnInit {
   private readonly candidatoService = inject(CandidatoService);
@@ -42,7 +42,7 @@ export class AdminCandidatos implements OnInit {
         dni: this.dni,
         nombreCompleto: this.nombreCompleto,
         siglasPartido: this.siglasPartido,
-        orden: Number(this.orden)
+        orden: Number(this.orden),
       })
       .subscribe({
         next: () => {
@@ -56,7 +56,7 @@ export class AdminCandidatos implements OnInit {
           this.enviando.set(false);
           const cuerpo = respuesta.error as Mensaje | undefined;
           this.error.set(cuerpo?.mensaje ?? 'No se ha podido registrar el candidato');
-        }
+        },
       });
   }
 }

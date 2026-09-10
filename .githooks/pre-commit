@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Hook de pre-commit: comprobaciones rápidas sobre lo que se va a commitear.
+# Instalación: git config core.hooksPath .githooks (una sola vez por clon).
+# Se puede saltar puntualmente con: git commit --no-verify
+set -euo pipefail
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+cd "$ROOT_DIR"
+
+STAGED_FILES="$(git diff --cached --name-only --diff-filter=ACM)"
+
+if [ -z "$STAGED_FILES" ]; then
+  exit 0
+fi
+
+fallo=0
+
+# 1) Marcas de conflicto de merge sin resolver
+conflictivos=""
+while IFS= read -r archivo; do
+  [ -f "$archivo" ] || continue
+  if grep -qE '^(<<<<<<< |>>>>>>> )' "$archivo" 2>/dev/null; then
+    conflictivos="$conflictivos  - $archivo\n"
+  fi
+done <<<"$STAGED_FILES"
+
+if [ -n "$conflictivos" ]; then
+  echo "pre-commit: quedan marcas de conflicto sin resolver:" >&2
+  printf '%b' "$conflictivos" >&2
+  fallo=1
+fi
+
+# 2) Ficheros que huelen a secretos (evita commitear credenciales por error)
+secretos="$(echo "$STAGED_FILES" | grep -E '(^|/)(\.env(\..*)?|.*\.pem|.*\.p12|.*\.pfx|id_rsa.*|credentials\.json)$' || true)"
+if [ -n "$secretos" ]; then
+  echo "pre-commit: estos ficheros parecen contener credenciales y no deberían commitearse:" >&2
+  echo "$secretos" | sed 's/^/  - /' >&2
+  fallo=1
+fi
+
+# 3) Backend: si hay cambios en código Java, comprobar que compila (rápido, sin tests)
+java_staged="$(echo "$STAGED_FILES" | grep -E '^(src/(main|test)/java/.*\.java|pom\.xml)$' || true)"
+if [ -n "$java_staged" ]; then
+  echo "pre-commit: compilando el backend (mvn test-compile)..."
+  if ! mvn -q -DskipTests test-compile; then
+    echo "pre-commit: el backend no compila." >&2
+    fallo=1
+  fi
+fi
+
+# 4) Frontend: si hay .ts/.html/.css staged dentro de frontend/src, comprobar formato con Prettier
+frontend_staged="$(echo "$STAGED_FILES" | grep -E '^frontend/src/.*\.(ts|html|css)$' || true)"
+if [ -n "$frontend_staged" ]; then
+  echo "pre-commit: comprobando formato con Prettier..."
+  rutas_relativas="$(echo "$frontend_staged" | sed 's#^frontend/##')"
+  if ! (cd frontend && echo "$rutas_relativas" | xargs npx prettier --check); then
+    echo "pre-commit: hay ficheros sin formatear. Ejecuta 'npm run format' dentro de frontend/ y vuelve a commitear." >&2
+    fallo=1
+  fi
+fi
+
+if [ "$fallo" -ne 0 ]; then
+  echo "pre-commit: commit abortado. Corrige lo anterior o usa 'git commit --no-verify' si es intencional." >&2
+  exit 1
+fi
+
+exit 0

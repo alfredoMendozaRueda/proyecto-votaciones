@@ -31,8 +31,8 @@ import { ICONOS, NombreIcono } from '../../icons';
         display: inline-flex;
         flex: none;
       }
-    `
-  ]
+    `,
+  ],
 })
 export class Icon {
   private readonly sanitizer = inject(DomSanitizer);

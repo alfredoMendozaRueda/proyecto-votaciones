@@ -7,7 +7,7 @@ import { Icon } from '../icon/icon';
 @Component({
   selector: 'app-navbar',
   imports: [RouterLink, RouterLinkActive, Icon],
-  templateUrl: './navbar.html'
+  templateUrl: './navbar.html',
 })
 export class Navbar {
   private readonly authService = inject(AuthService);
@@ -19,7 +19,7 @@ export class Navbar {
     const dni = this.usuario()?.dni;
     this.authService.logout().subscribe({
       next: () => this.router.navigate(['/despedida'], { queryParams: { dni } }),
-      error: () => this.router.navigate(['/despedida'], { queryParams: { dni } })
+      error: () => this.router.navigate(['/despedida'], { queryParams: { dni } }),
     });
   }
 }

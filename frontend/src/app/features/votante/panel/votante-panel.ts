@@ -6,6 +6,6 @@ import { Icon } from '../../../shared/components/icon/icon';
 @Component({
   selector: 'app-votante-panel',
   imports: [RouterLink, Icon],
-  templateUrl: './votante-panel.html'
+  templateUrl: './votante-panel.html',
 })
 export class VotantePanel {}

@@ -7,7 +7,7 @@ import { Icon } from '../../shared/components/icon/icon';
 @Component({
   selector: 'app-ganador',
   imports: [Icon],
-  templateUrl: './ganador.html'
+  templateUrl: './ganador.html',
 })
 export class Ganador implements OnInit {
   private readonly resultadosService = inject(ResultadosService);

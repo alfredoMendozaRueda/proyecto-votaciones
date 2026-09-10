@@ -10,7 +10,7 @@ import { Alert } from '../../../shared/components/alert/alert';
 @Component({
   selector: 'app-admin-elecciones',
   imports: [FormsModule, Icon, Alert],
-  templateUrl: './admin-elecciones.html'
+  templateUrl: './admin-elecciones.html',
 })
 export class AdminElecciones {
   private readonly eleccionService = inject(EleccionService);
@@ -42,16 +42,23 @@ export class AdminElecciones {
     this.limpiarMensajes();
     this.enviando.set(true);
 
-    this.eleccionService.crear({ idElecciones: this.idElecciones, descripcion: this.descripcion, fechaFin: this.fechaFin }).subscribe({
-      next: (respuesta) => {
-        this.enviando.set(false);
-        this.mensajeExito.set(respuesta.mensaje);
-        this.idElecciones = '';
-        this.descripcion = '';
-        this.fechaFin = '';
-      },
-      error: (respuesta: HttpErrorResponse) => this.manejarError(respuesta, 'No se ha podido crear la elección')
-    });
+    this.eleccionService
+      .crear({
+        idElecciones: this.idElecciones,
+        descripcion: this.descripcion,
+        fechaFin: this.fechaFin,
+      })
+      .subscribe({
+        next: (respuesta) => {
+          this.enviando.set(false);
+          this.mensajeExito.set(respuesta.mensaje);
+          this.idElecciones = '';
+          this.descripcion = '';
+          this.fechaFin = '';
+        },
+        error: (respuesta: HttpErrorResponse) =>
+          this.manejarError(respuesta, 'No se ha podido crear la elección'),
+      });
   }
 
   habilitar(): void {
@@ -62,7 +69,8 @@ export class AdminElecciones {
         this.procesando.set(null);
         this.mensajeExito.set(respuesta.mensaje);
       },
-      error: (respuesta: HttpErrorResponse) => this.manejarError(respuesta, 'No se ha podido habilitar la elección')
+      error: (respuesta: HttpErrorResponse) =>
+        this.manejarError(respuesta, 'No se ha podido habilitar la elección'),
     });
   }
 
@@ -74,7 +82,8 @@ export class AdminElecciones {
         this.procesando.set(null);
         this.mensajeExito.set(respuesta.mensaje);
       },
-      error: (respuesta: HttpErrorResponse) => this.manejarError(respuesta, 'No se ha podido deshabilitar la elección')
+      error: (respuesta: HttpErrorResponse) =>
+        this.manejarError(respuesta, 'No se ha podido deshabilitar la elección'),
     });
   }
 
@@ -86,7 +95,8 @@ export class AdminElecciones {
         this.procesando.set(null);
         this.mensajeExito.set(respuesta.mensaje);
       },
-      error: (respuesta: HttpErrorResponse) => this.manejarError(respuesta, 'No se ha podido eliminar la elección')
+      error: (respuesta: HttpErrorResponse) =>
+        this.manejarError(respuesta, 'No se ha podido eliminar la elección'),
     });
   }
 }

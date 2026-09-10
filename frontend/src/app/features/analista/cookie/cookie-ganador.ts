@@ -9,7 +9,7 @@ import { Alert } from '../../../shared/components/alert/alert';
 @Component({
   selector: 'app-cookie-ganador',
   imports: [Icon, Alert],
-  templateUrl: './cookie-ganador.html'
+  templateUrl: './cookie-ganador.html',
 })
 export class CookieGanador implements OnInit {
   private readonly cookieGanadorService = inject(CookieGanadorService);
@@ -47,7 +47,7 @@ export class CookieGanador implements OnInit {
         this.creando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se ha podido crear la cookie');
-      }
+      },
     });
   }
 }

@@ -1,5 +1,7 @@
 <div class="container py-4 animar-entrada">
-  <h1><app-icon nombre="porcentajes" [size]="26" [strokeWidth]="1.6" />Participación por localidad</h1>
+  <h1>
+    <app-icon nombre="porcentajes" [size]="26" [strokeWidth]="1.6" />Participación por localidad
+  </h1>
 
   @if (error()) {
     <app-alert tipo="error" [mensaje]="error()!" />
@@ -9,7 +11,12 @@
   }
 
   <div class="d-flex gap-2 flex-wrap my-3">
-    <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-2" (click)="recalcular()" [disabled]="recalculando()">
+    <button
+      type="button"
+      class="btn btn-primary d-inline-flex align-items-center gap-2"
+      (click)="recalcular()"
+      [disabled]="recalculando()"
+    >
       @if (recalculando()) {
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       } @else {
@@ -39,11 +46,19 @@
           @for (fila of porcentajes(); track fila.localidad) {
             <tr>
               <td>{{ fila.localidad }}</td>
-              <td style="min-width: 160px;">
-                <div class="progress barra-resultado" role="progressbar" [attr.aria-valuenow]="fila.porcentaje" aria-valuemin="0" aria-valuemax="100">
+              <td style="min-width: 160px">
+                <div
+                  class="progress barra-resultado"
+                  role="progressbar"
+                  [attr.aria-valuenow]="fila.porcentaje"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                >
                   <div class="progress-bar" [style.width.%]="fila.porcentaje"></div>
                 </div>
-                <span class="text-secondary small d-inline-block mt-1">{{ fila.porcentaje | number: '1.0-2' }}%</span>
+                <span class="text-secondary small d-inline-block mt-1"
+                  >{{ fila.porcentaje | number: '1.0-2' }}%</span
+                >
               </td>
             </tr>
           } @empty {

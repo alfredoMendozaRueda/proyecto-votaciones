@@ -11,7 +11,7 @@ import { Alert } from '../../../shared/components/alert/alert';
 @Component({
   selector: 'app-porcentajes',
   imports: [DecimalPipe, Icon, Alert],
-  templateUrl: './porcentajes.html'
+  templateUrl: './porcentajes.html',
 })
 export class Porcentajes implements OnInit {
   private readonly participacionService = inject(ParticipacionService);
@@ -37,7 +37,7 @@ export class Porcentajes implements OnInit {
         this.cargando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se ha podido consultar la participación');
-      }
+      },
     });
   }
 
@@ -56,7 +56,7 @@ export class Porcentajes implements OnInit {
         this.recalculando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se ha podido recalcular la participación');
-      }
+      },
     });
   }
 }

@@ -9,6 +9,6 @@ import { Navbar } from '../components/navbar/navbar';
   template: `
     <app-navbar />
     <router-outlet />
-  `
+  `,
 })
 export class AuthenticatedLayout {}

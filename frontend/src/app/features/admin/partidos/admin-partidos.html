@@ -11,17 +11,43 @@
   <form class="card card-body shadow-sm d-flex flex-column gap-3" (ngSubmit)="crear()">
     <div>
       <label class="form-label" for="siglas">Siglas</label>
-      <input class="form-control" id="siglas" type="text" name="siglas" [(ngModel)]="siglas" required />
+      <input
+        class="form-control"
+        id="siglas"
+        type="text"
+        name="siglas"
+        [(ngModel)]="siglas"
+        required
+      />
     </div>
     <div>
       <label class="form-label" for="descripcion">Descripción</label>
-      <input class="form-control" id="descripcion" type="text" name="descripcion" [(ngModel)]="descripcion" required />
+      <input
+        class="form-control"
+        id="descripcion"
+        type="text"
+        name="descripcion"
+        [(ngModel)]="descripcion"
+        required
+      />
     </div>
     <div>
       <label class="form-label" for="imagen">Nombre del archivo de imagen</label>
-      <input class="form-control" id="imagen" type="text" name="imagen" [(ngModel)]="imagen" placeholder="PARTIDO.jpg" required />
+      <input
+        class="form-control"
+        id="imagen"
+        type="text"
+        name="imagen"
+        [(ngModel)]="imagen"
+        placeholder="PARTIDO.jpg"
+        required
+      />
     </div>
-    <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2" [disabled]="enviando()">
+    <button
+      type="submit"
+      class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2"
+      [disabled]="enviando()"
+    >
       @if (enviando()) {
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       } @else {
@@ -46,7 +72,12 @@
         @if (cargando()) {
           @for (fila of [1, 2, 3]; track fila) {
             <tr>
-              <td><span class="placeholder rounded" style="display: block; width: 36px; height: 36px;"></span></td>
+              <td>
+                <span
+                  class="placeholder rounded"
+                  style="display: block; width: 36px; height: 36px"
+                ></span>
+              </td>
               <td><span class="placeholder col-8"></span></td>
               <td><span class="placeholder col-10"></span></td>
             </tr>
@@ -54,7 +85,13 @@
         } @else {
           @for (partido of partidos(); track partido.siglas) {
             <tr>
-              <td><img class="miniatura-partido rounded border" [src]="partido.imagen" [alt]="partido.descripcion" /></td>
+              <td>
+                <img
+                  class="miniatura-partido rounded border"
+                  [src]="partido.imagen"
+                  [alt]="partido.descripcion"
+                />
+              </td>
               <td>{{ partido.siglas }}</td>
               <td>{{ partido.descripcion }}</td>
             </tr>

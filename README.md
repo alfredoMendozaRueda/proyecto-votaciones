@@ -250,6 +250,19 @@ npm start               # arranca el frontend (con proxy a la API) en http://loc
 
 Abre `http://localhost:4200` mientras desarrollas: los cambios en Angular se recargan al vuelo y las llamadas a `/api` llegan al backend en el puerto 8080.
 
+### Git hooks
+
+El repositorio incluye hooks de Git versionados en `.githooks/` (no en `.git/hooks`, que no se comparte al clonar). Actívalos una sola vez por clon:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+* **`pre-commit`**: rápido, solo mira lo que está en el *stage*. Bloquea marcas de conflicto sin resolver y ficheros que parecen credenciales (`.env`, `*.pem`, `id_rsa`...); si hay `.java` o `pom.xml` en el commit, comprueba que el backend compila (`mvn test-compile`); si hay `.ts`/`.html`/`.css` de `frontend/src`, comprueba el formato con Prettier (`npm run format` lo arregla).
+* **`pre-push`**: más lento pero exhaustivo, igual que el CI — ejecuta `mvn test` (backend) y `ng build` (frontend) antes de dejar salir el push.
+
+Ambos se pueden saltar puntualmente con `--no-verify` (`git commit --no-verify`, `git push --no-verify`) cuando de verdad haga falta.
+
 ### Producción: un único jar ejecutable
 
 El perfil Maven `frontend` compila Angular y copia el resultado dentro de `src/main/resources/static`, de modo que Spring Boot sirve la SPA y la API desde el mismo origen (sin problemas de CORS) y todo queda empaquetado en un único jar:

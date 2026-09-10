@@ -19,7 +19,7 @@ import { Icon } from '../icon/icon';
       <app-icon [nombre]="tipo === 'error' ? 'error' : 'exito'" [size]="18" />
       <span>{{ mensaje }}</span>
     </div>
-  `
+  `,
 })
 export class Alert {
   @Input() tipo: 'exito' | 'error' = 'exito';

@@ -10,7 +10,7 @@ import { Alert } from '../../shared/components/alert/alert';
 @Component({
   selector: 'app-login',
   imports: [FormsModule, RouterLink, Icon, Alert],
-  templateUrl: './login.html'
+  templateUrl: './login.html',
 })
 export class Login {
   private readonly authService = inject(AuthService);
@@ -35,9 +35,9 @@ export class Login {
         this.error.set(
           respuesta.status === 401
             ? 'DNI o contraseña incorrectos'
-            : 'No se ha podido iniciar sesión, inténtalo de nuevo'
+            : 'No se ha podido iniciar sesión, inténtalo de nuevo',
         );
-      }
+      },
     });
   }
 }

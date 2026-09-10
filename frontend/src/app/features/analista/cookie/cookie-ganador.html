@@ -9,10 +9,12 @@
   }
 
   <div class="card card-body shadow-sm text-center d-flex flex-column align-items-center gap-2">
-    <span class="insignia-circular"><app-icon nombre="cookie" [size]="26" [strokeWidth]="1.6" /></span>
+    <span class="insignia-circular"
+      ><app-icon nombre="cookie" [size]="26" [strokeWidth]="1.6"
+    /></span>
     <p class="mb-0">
       @if (consultando()) {
-        <span class="placeholder col-6 d-inline-block" style="width: 10rem;"></span>
+        <span class="placeholder col-6 d-inline-block" style="width: 10rem"></span>
       } @else if (partidoGanador()) {
         Cookie actual: <strong>{{ partidoGanador() }}</strong>
       } @else {
@@ -20,7 +22,12 @@
       }
     </p>
     <div class="d-flex gap-2 flex-wrap justify-content-center my-2">
-      <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-2" (click)="crear()" [disabled]="creando()">
+      <button
+        type="button"
+        class="btn btn-primary d-inline-flex align-items-center gap-2"
+        (click)="crear()"
+        [disabled]="creando()"
+      >
         @if (creando()) {
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
         } @else {
@@ -28,7 +35,12 @@
         }
         Crear cookie con el ganador
       </button>
-      <button type="button" class="btn btn-outline-primary d-inline-flex align-items-center gap-2" (click)="consultar()" [disabled]="consultando()">
+      <button
+        type="button"
+        class="btn btn-outline-primary d-inline-flex align-items-center gap-2"
+        (click)="consultar()"
+        [disabled]="consultando()"
+      >
         @if (consultando()) {
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
         } @else {

@@ -14,7 +14,7 @@ type Ambito = 'todo' | 'localidad' | 'comunidad';
 @Component({
   selector: 'app-admin-censo',
   imports: [FormsModule, Icon, Alert],
-  templateUrl: './admin-censo.html'
+  templateUrl: './admin-censo.html',
 })
 export class AdminCenso implements OnInit {
   private readonly censoService = inject(CensoService);
@@ -32,8 +32,12 @@ export class AdminCenso implements OnInit {
   comunidad = '';
 
   ngOnInit(): void {
-    this.localidadService.localidades().subscribe((localidades) => this.localidades.set(localidades));
-    this.localidadService.comunidades().subscribe((comunidades) => this.comunidades.set(comunidades));
+    this.localidadService
+      .localidades()
+      .subscribe((localidades) => this.localidades.set(localidades));
+    this.localidadService
+      .comunidades()
+      .subscribe((comunidades) => this.comunidades.set(comunidades));
   }
 
   consultar(): void {
@@ -58,7 +62,7 @@ export class AdminCenso implements OnInit {
         this.consultando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se ha podido consultar el censo');
-      }
+      },
     });
   }
 }

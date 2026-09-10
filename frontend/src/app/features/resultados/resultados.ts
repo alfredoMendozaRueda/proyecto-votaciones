@@ -16,7 +16,7 @@ type Ambito = 'todo' | 'localidad' | 'comunidad';
 @Component({
   selector: 'app-resultados',
   imports: [FormsModule, RouterLink, DecimalPipe, Icon, Alert],
-  templateUrl: './resultados.html'
+  templateUrl: './resultados.html',
 })
 export class Resultados implements OnInit {
   private readonly resultadosService = inject(ResultadosService);
@@ -33,8 +33,12 @@ export class Resultados implements OnInit {
   comunidad = '';
 
   ngOnInit(): void {
-    this.localidadService.localidades().subscribe((localidades) => this.localidades.set(localidades));
-    this.localidadService.comunidades().subscribe((comunidades) => this.comunidades.set(comunidades));
+    this.localidadService
+      .localidades()
+      .subscribe((localidades) => this.localidades.set(localidades));
+    this.localidadService
+      .comunidades()
+      .subscribe((comunidades) => this.comunidades.set(comunidades));
   }
 
   consultar(): void {
@@ -58,7 +62,7 @@ export class Resultados implements OnInit {
         this.consultando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se han podido consultar los resultados');
-      }
+      },
     });
   }
 

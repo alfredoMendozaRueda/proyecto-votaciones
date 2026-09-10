@@ -8,19 +8,29 @@
   } @else if (ganador(); as resultado) {
     @if (resultado.eleccionesTodaviaHabilitadas) {
       <div class="card card-body shadow-sm text-center d-flex flex-column align-items-center gap-2">
-        <span class="insignia-circular"><app-icon nombre="elecciones" [size]="28" [strokeWidth]="1.6" /></span>
-        <p class="text-secondary mb-0">Las elecciones siguen habilitadas: el ganador se conocerá cuando se inhabiliten.</p>
+        <span class="insignia-circular"
+          ><app-icon nombre="elecciones" [size]="28" [strokeWidth]="1.6"
+        /></span>
+        <p class="text-secondary mb-0">
+          Las elecciones siguen habilitadas: el ganador se conocerá cuando se inhabiliten.
+        </p>
       </div>
     } @else if (resultado.presidenteGanador) {
       <div class="card card-body shadow-sm text-center d-flex flex-column align-items-center gap-2">
-        <span class="insignia-circular insignia-oro"><app-icon nombre="ganador" [size]="30" [strokeWidth]="1.6" /></span>
+        <span class="insignia-circular insignia-oro"
+          ><app-icon nombre="ganador" [size]="30" [strokeWidth]="1.6"
+        /></span>
         <p class="text-secondary mb-0">Candidato nº1 del partido más votado</p>
         <h2 class="mb-0">{{ resultado.presidenteGanador }}</h2>
       </div>
     } @else {
       <div class="card card-body shadow-sm text-center d-flex flex-column align-items-center gap-2">
-        <span class="insignia-circular"><app-icon nombre="resultados" [size]="28" [strokeWidth]="1.6" /></span>
-        <p class="text-secondary mb-0">Todavía no hay votos suficientes para determinar un ganador.</p>
+        <span class="insignia-circular"
+          ><app-icon nombre="resultados" [size]="28" [strokeWidth]="1.6"
+        /></span>
+        <p class="text-secondary mb-0">
+          Todavía no hay votos suficientes para determinar un ganador.
+        </p>
       </div>
     }
   }

@@ -12,17 +12,42 @@
   <form class="card card-body shadow-sm d-flex flex-column gap-3" (ngSubmit)="crear()">
     <div>
       <label class="form-label" for="idElecciones">Identificador</label>
-      <input class="form-control" id="idElecciones" type="text" name="idElecciones" [(ngModel)]="idElecciones" required />
+      <input
+        class="form-control"
+        id="idElecciones"
+        type="text"
+        name="idElecciones"
+        [(ngModel)]="idElecciones"
+        required
+      />
     </div>
     <div>
       <label class="form-label" for="descripcion">Descripción</label>
-      <input class="form-control" id="descripcion" type="text" name="descripcion" [(ngModel)]="descripcion" required />
+      <input
+        class="form-control"
+        id="descripcion"
+        type="text"
+        name="descripcion"
+        [(ngModel)]="descripcion"
+        required
+      />
     </div>
     <div>
       <label class="form-label" for="fechaFin">Fecha de fin</label>
-      <input class="form-control" id="fechaFin" type="date" name="fechaFin" [(ngModel)]="fechaFin" required />
+      <input
+        class="form-control"
+        id="fechaFin"
+        type="date"
+        name="fechaFin"
+        [(ngModel)]="fechaFin"
+        required
+      />
     </div>
-    <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2" [disabled]="enviando()">
+    <button
+      type="submit"
+      class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2"
+      [disabled]="enviando()"
+    >
       @if (enviando()) {
         <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       } @else {
@@ -38,10 +63,22 @@
   <div class="card card-body shadow-sm d-flex flex-column gap-3">
     <div>
       <label class="form-label" for="idGestion">Identificador de la elección</label>
-      <input class="form-control" id="idGestion" type="text" name="idGestion" [(ngModel)]="idGestion" required />
+      <input
+        class="form-control"
+        id="idGestion"
+        type="text"
+        name="idGestion"
+        [(ngModel)]="idGestion"
+        required
+      />
     </div>
     <div class="d-flex gap-2 flex-wrap">
-      <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-2" [disabled]="!!procesando()" (click)="habilitar()">
+      <button
+        type="button"
+        class="btn btn-primary d-inline-flex align-items-center gap-2"
+        [disabled]="!!procesando()"
+        (click)="habilitar()"
+      >
         @if (procesando() === 'habilitar') {
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
         } @else {
@@ -49,7 +86,12 @@
         }
         Habilitar
       </button>
-      <button type="button" class="btn btn-outline-primary d-inline-flex align-items-center gap-2" [disabled]="!!procesando()" (click)="deshabilitar()">
+      <button
+        type="button"
+        class="btn btn-outline-primary d-inline-flex align-items-center gap-2"
+        [disabled]="!!procesando()"
+        (click)="deshabilitar()"
+      >
         @if (procesando() === 'deshabilitar') {
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
         } @else {
@@ -57,7 +99,12 @@
         }
         Deshabilitar
       </button>
-      <button type="button" class="btn btn-danger d-inline-flex align-items-center gap-2" [disabled]="!!procesando()" (click)="eliminar()">
+      <button
+        type="button"
+        class="btn btn-danger d-inline-flex align-items-center gap-2"
+        [disabled]="!!procesando()"
+        (click)="eliminar()"
+      >
         @if (procesando() === 'eliminar') {
           <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
         } @else {

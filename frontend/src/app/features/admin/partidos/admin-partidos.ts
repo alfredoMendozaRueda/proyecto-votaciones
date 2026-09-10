@@ -11,7 +11,7 @@ import { Alert } from '../../../shared/components/alert/alert';
 @Component({
   selector: 'app-admin-partidos',
   imports: [FormsModule, Icon, Alert],
-  templateUrl: './admin-partidos.html'
+  templateUrl: './admin-partidos.html',
 })
 export class AdminPartidos implements OnInit {
   private readonly partidoService = inject(PartidoService);
@@ -58,7 +58,7 @@ export class AdminPartidos implements OnInit {
           this.enviando.set(false);
           const cuerpo = respuesta.error as Mensaje | undefined;
           this.error.set(cuerpo?.mensaje ?? 'No se ha podido registrar el partido');
-        }
+        },
       });
   }
 }

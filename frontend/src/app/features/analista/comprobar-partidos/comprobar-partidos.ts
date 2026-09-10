@@ -10,7 +10,7 @@ import { Alert } from '../../../shared/components/alert/alert';
 @Component({
   selector: 'app-comprobar-partidos',
   imports: [Icon, Alert],
-  templateUrl: './comprobar-partidos.html'
+  templateUrl: './comprobar-partidos.html',
 })
 export class ComprobarPartidos implements OnInit {
   private readonly partidoService = inject(PartidoService);
@@ -29,7 +29,7 @@ export class ComprobarPartidos implements OnInit {
         this.cargando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se ha podido comprobar los partidos');
-      }
+      },
     });
   }
 }
