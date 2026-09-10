@@ -25,13 +25,23 @@
       Selecciona un partido y confirma tu voto. No podrás cambiarlo después.
     </p>
 
-    <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-3 my-2">
+    <div
+      class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-3 my-2"
+      role="radiogroup"
+      aria-label="Partidos"
+    >
       @for (partido of partidos(); track partido.siglas) {
         <div class="col">
           <div
             class="card tarjeta-partido position-relative h-100 text-center p-3"
             [class.seleccionado]="seleccionado() === partido.siglas"
+            role="radio"
+            tabindex="0"
+            [attr.aria-checked]="seleccionado() === partido.siglas"
+            [attr.aria-label]="partido.siglas + ' · ' + partido.descripcion"
             (click)="seleccionar(partido.siglas)"
+            (keydown.enter)="seleccionar(partido.siglas)"
+            (keydown.space)="$event.preventDefault(); seleccionar(partido.siglas)"
           >
             @if (seleccionado() === partido.siglas) {
               <span class="insignia-seleccionado badge rounded-circle bg-primary p-2"

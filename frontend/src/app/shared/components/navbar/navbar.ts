@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 
 import { AuthService } from '../../../core/services/auth.service';
@@ -14,6 +14,20 @@ export class Navbar {
   private readonly router = inject(Router);
 
   readonly usuario = this.authService.usuario;
+
+  /**
+   * Menú móvil colapsable, implementado a mano (sin el JS de Bootstrap:
+   * solo se usaba para esto y el bundle no compensa por un simple toggle).
+   */
+  readonly menuAbierto = signal(false);
+
+  toggleMenu(): void {
+    this.menuAbierto.update((abierto) => !abierto);
+  }
+
+  cerrarMenu(): void {
+    this.menuAbierto.set(false);
+  }
 
   cerrarSesion(): void {
     const dni = this.usuario()?.dni;

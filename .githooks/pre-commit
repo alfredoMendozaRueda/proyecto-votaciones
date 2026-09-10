@@ -59,6 +59,17 @@ if [ -n "$frontend_staged" ]; then
   fi
 fi
 
+# 5) Frontend: si hay .ts/.html staged, comprobar que pasan ESLint
+frontend_lintable="$(echo "$STAGED_FILES" | grep -E '^frontend/src/.*\.(ts|html)$' || true)"
+if [ -n "$frontend_lintable" ]; then
+  echo "pre-commit: comprobando ESLint..."
+  rutas_relativas="$(echo "$frontend_lintable" | sed 's#^frontend/##')"
+  if ! (cd frontend && echo "$rutas_relativas" | xargs npx eslint); then
+    echo "pre-commit: ESLint ha encontrado errores. Corrígelos y vuelve a commitear." >&2
+    fallo=1
+  fi
+fi
+
 if [ "$fallo" -ne 0 ]; then
   echo "pre-commit: commit abortado. Corrige lo anterior o usa 'git commit --no-verify' si es intencional." >&2
   exit 1

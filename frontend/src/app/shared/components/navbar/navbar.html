@@ -17,17 +17,19 @@
     <button
       class="navbar-toggler"
       type="button"
-      data-bs-toggle="collapse"
-      data-bs-target="#navbarPrincipal"
       aria-controls="navbarPrincipal"
-      aria-expanded="false"
+      [attr.aria-expanded]="menuAbierto()"
       aria-label="Abrir menú"
+      (click)="toggleMenu()"
     >
       <span class="navbar-toggler-icon"></span>
     </button>
 
-    <div class="collapse navbar-collapse" id="navbarPrincipal">
-      <ul class="navbar-nav me-auto mb-2 mb-lg-0 gap-lg-1">
+    <div class="collapse navbar-collapse" [class.show]="menuAbierto()" id="navbarPrincipal">
+      <!-- El (click) solo cierra el menú al pulsar un enlace dentro (delegación de eventos);
+           los propios <a> ya son focales y accesibles por teclado. -->
+      <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0 gap-lg-1" (click)="cerrarMenu()">
         @if (usuario()?.rol === 'admin') {
           <li class="nav-item">
             <a
