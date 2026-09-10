@@ -1,0 +1,25 @@
+<%--
+    Cabecera comun a todas las paginas. Se incluye con:
+        <% String tituloPagina = "..."; %>
+        <%@ include file="/WEB-INF/incluidos/cabecera.jspf" %>
+    "tituloPagina" debe declararse ANTES del include (es una variable local
+    de la pagina que lo incluye, no un atributo de peticion).
+--%>
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title><%= tituloPagina %></title>
+        <link rel="stylesheet" href="<%= request.getContextPath() %>/styles/styles.css">
+    </head>
+    <body>
+        <div class="barra-superior">
+            <span class="titulo-app">Sistema de Votaciones</span>
+            <%
+                String rolActual = (String) session.getAttribute("rolDelUsu");
+                if (rolActual != null && !rolActual.isEmpty()) {
+            %>
+            <span class="rol-usuario"><%= rolActual %></span>
+            <% } %>
+        </div>

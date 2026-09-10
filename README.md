@@ -9,7 +9,7 @@ El sistema se basa en partidos políticos y candidatos, y a través de las votac
 * El número de votos obtenidos por cada partido.
 * El **Presidente del Gobierno**, que será el **candidato nº1 del partido con mayor número de votos**.
 
-La aplicación ha sido desarrollada en **NetBeans**, siguiendo el **patrón MVC** con una **capa DAO adicional**, utilizando **Java, HTML y CSS**.
+La aplicación sigue una arquitectura en capas (**Servlets/JSP → Servicios → Repositorios → JDBC**), construida con **Maven**, utilizando **Java, HTML y CSS**.
 
 ---
 
@@ -155,23 +155,56 @@ bbdd_amr_elecciones
 
 ## Aspectos de implementación
 
-* Arquitectura **MVC** con **capa DAO**.
+* Arquitectura en capas: los **servlets** son controladores finos que delegan en la capa de **servicios** (reglas de negocio), que a su vez depende de **interfaces de repositorio** implementadas con JDBC (`repositorios.jdbc`). Los servlets y JSP solo conocen las interfaces, nunca el driver JDBC directamente.
+* Cada operación de negocio con reglas propias (login, registro, voto, alta de eleccion/candidato...) tiene su propia **excepción de dominio** en el paquete `excepciones`, en vez de comprobaciones dispersas de booleanos.
+* La contraseña se cifra a través de la interfaz `seguridad.EncriptadorContrasena` (implementación MD5 por compatibilidad con los datos existentes; ver aviso de seguridad en `EncriptadorMd5`).
+* Los recuentos de resultados (global, por localidad, por comunidad) y el porcentaje de participación se calculan con una única consulta SQL agregada por caso, evitando los bucles N+1 de la versión original.
 * Uso de **sentencias preparadas** para evitar **SQL Injection**.
 * Uso de **cookies**:
 
   * Al cerrar sesión se muestra un mensaje de despedida agradeciendo la visita y mostrando el nombre del usuario.
-* Interfaz desarrollada con **HTML y CSS**.
+* Interfaz desarrollada con **HTML y CSS**, con una hoja de estilos común y fragmentos JSP reutilizables (`WEB-INF/incluidos`) para la cabecera y el pie de cada página.
 
 ---
 
 ## Tecnologías utilizadas
 
-* Java (Entorno Servidor)
+* Java 11 (Servlets 4.0 / JSP)
+* Maven
 * HTML5
 * CSS3
 * MySQL / MariaDB
-* PHPMyAdmin
-* NetBeans IDE
+* JUnit 5 + Mockito + AssertJ (tests unitarios)
+
+---
+
+## Cómo ejecutar el proyecto
+
+### Requisitos
+
+* JDK 11+
+* Maven 3.6+
+* Un servidor MySQL/MariaDB con la base de datos de `database/bbdd_amr_elecciones.sql` importada
+* Un contenedor de servlets compatible con Servlet 4.0 (p. ej. Tomcat 9 o GlassFish 5)
+
+### Configuración de la base de datos
+
+La conexión ya no lleva credenciales fijas en el código: se configura con variables de entorno (o propiedades de sistema equivalentes), con valores por defecto pensados para desarrollo local:
+
+| Variable | Por defecto |
+|---|---|
+| `DB_URL` | `jdbc:mysql://localhost:3306/bbdd_amr_elecciones?useUnicode=true&characterEncoding=UTF-8` |
+| `DB_USUARIO` | `root` |
+| `DB_CONTRASENA` | (vacío) |
+
+### Compilar y probar
+
+```bash
+mvn test        # ejecuta la batería de tests JUnit5 + Mockito
+mvn package      # genera target/proyecto-votaciones.war
+```
+
+Despliega el `.war` generado en tu servidor de aplicaciones habitual.
 
 ---
 

@@ -1,0 +1,346 @@
+/* =========================================================
+   Sistema de Votaciones - hoja de estilos global
+   ========================================================= */
+
+:root {
+    --color-fondo-inicio: #1e2a78;
+    --color-fondo-fin: #4b3c91;
+    --color-superficie: #2c2f4a;
+    --color-superficie-clara: #3a3f66;
+    --color-texto: #f0f0f0;
+    --color-titulo: #cfc3ff;
+    --color-etiqueta: #aab4ff;
+    --color-acento: #6c63ff;
+    --color-acento-hover: #4b3c91;
+    --color-acento-claro: #a88aff;
+    --color-exito-fondo: #274b3f;
+    --color-exito-texto: #8effc9;
+    --color-error-fondo: #4b2530;
+    --color-error-texto: #ff9eb0;
+    --radio-borde: 12px;
+    --sombra: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Poppins', system-ui, -apple-system, Segoe UI, sans-serif;
+}
+
+html {
+    color-scheme: dark;
+}
+
+body {
+    background: linear-gradient(135deg, var(--color-fondo-inicio), var(--color-fondo-fin)) fixed;
+    color: var(--color-texto);
+    min-height: 100vh;
+    padding: 32px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+a {
+    color: var(--color-acento-claro);
+    text-decoration: none;
+}
+
+a:hover,
+a:focus-visible {
+    color: var(--color-titulo);
+    text-decoration: underline;
+}
+
+:focus-visible {
+    outline: 3px solid var(--color-acento-claro);
+    outline-offset: 2px;
+}
+
+/* Barra superior de navegacion, comun a todas las paginas internas */
+.barra-superior {
+    width: 100%;
+    max-width: 1000px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 14px 20px;
+    border-radius: var(--radio-borde);
+    margin-bottom: 24px;
+}
+
+.barra-superior .titulo-app {
+    font-weight: 700;
+    font-size: 1.1em;
+    color: var(--color-titulo);
+}
+
+.barra-superior .rol-usuario {
+    font-size: 0.8em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background-color: var(--color-acento);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 999px;
+}
+
+/* Contenedor estrecho: formularios y paneles de opciones */
+.container {
+    background-color: var(--color-superficie);
+    padding: 40px;
+    border-radius: 16px;
+    box-shadow: var(--sombra);
+    width: 100%;
+    max-width: 600px;
+    text-align: center;
+    margin: 0 auto 24px;
+}
+
+/* Contenedor ancho: listados y tablas de resultados/censo */
+.container-ancho {
+    background-color: var(--color-superficie);
+    padding: 32px;
+    border-radius: 16px;
+    box-shadow: var(--sombra);
+    width: 100%;
+    max-width: 1000px;
+    text-align: center;
+    margin: 0 auto 24px;
+}
+
+h1, h2, h3 {
+    color: var(--color-titulo);
+    margin-bottom: 20px;
+}
+
+p {
+    margin-bottom: 12px;
+}
+
+/* Etiquetas */
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: var(--color-etiqueta);
+    text-align: left;
+}
+
+/* Inputs y selects */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="date"],
+select,
+textarea {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 20px;
+    border: 2px solid var(--color-acento);
+    border-radius: 8px;
+    background-color: var(--color-superficie-clara);
+    color: #ffffff;
+    font-size: 1em;
+    transition: all 0.2s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: var(--color-acento-claro);
+    box-shadow: 0 0 8px rgba(168, 138, 255, 0.5);
+    outline: none;
+}
+
+/* Botones */
+button,
+input[type="submit"],
+input[type="button"] {
+    background-color: var(--color-acento);
+    color: white;
+    padding: 12px 22px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.95em;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+button:hover,
+input[type="submit"]:hover,
+input[type="button"]:hover {
+    background-color: var(--color-acento-hover);
+}
+
+button:active,
+input[type="submit"]:active,
+input[type="button"]:active {
+    transform: scale(0.98);
+}
+
+button:disabled,
+input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Grupo de acciones/botones que se acomoda en varias lineas */
+.acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 8px;
+}
+
+.acciones form {
+    margin: 0;
+}
+
+.separador {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    margin: 24px 0;
+}
+
+/* Mensajes de estado */
+.success,
+.error {
+    padding: 14px 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.success {
+    background-color: var(--color-exito-fondo);
+    color: var(--color-exito-texto);
+    border-left: 5px solid #2ecc87;
+}
+
+.error {
+    background-color: var(--color-error-fondo);
+    color: var(--color-error-texto);
+    border-left: 5px solid #ff4d6d;
+}
+
+/* Tablas: censo, resultados, candidatos... */
+.tabla-responsive {
+    width: 100%;
+    overflow-x: auto;
+    margin-bottom: 20px;
+    border-radius: 8px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: var(--color-superficie-clara);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+caption {
+    caption-side: top;
+    text-align: left;
+    color: var(--color-etiqueta);
+    margin-bottom: 8px;
+}
+
+th, td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+th {
+    background-color: rgba(0, 0, 0, 0.25);
+    color: var(--color-titulo);
+    text-transform: uppercase;
+    font-size: 0.8em;
+    letter-spacing: 0.04em;
+}
+
+tbody tr:hover {
+    background-color: rgba(108, 99, 255, 0.15);
+}
+
+/* Rejilla de partidos/candidatos para votar */
+.rejilla-partidos {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+.tarjeta-partido {
+    background-color: var(--color-superficie-clara);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.tarjeta-partido img {
+    width: 100%;
+    max-width: 140px;
+    height: 90px;
+    object-fit: cover;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.tarjeta-partido .siglas {
+    font-weight: 700;
+    color: var(--color-titulo);
+}
+
+.tarjeta-partido form {
+    width: 100%;
+}
+
+.tarjeta-partido input[type="submit"] {
+    width: 100%;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    body {
+        padding: 20px 12px;
+    }
+
+    .container,
+    .container-ancho {
+        padding: 24px 18px;
+    }
+}
+
+@media (max-width: 480px) {
+    .container,
+    .container-ancho {
+        padding: 20px 15px;
+    }
+
+    h1 {
+        font-size: 1.4em;
+    }
+
+    .acciones {
+        flex-direction: column;
+    }
+
+    .acciones button,
+    .acciones input[type="submit"] {
+        width: 100%;
+    }
+}
