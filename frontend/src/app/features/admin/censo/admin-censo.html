@@ -107,8 +107,8 @@
         <tbody>
           @for (persona of censo(); track persona.dni) {
             <tr>
-              <td>{{ persona.dni }}</td>
-              <td>{{ persona.nombreCompleto }}</td>
+              <td class="cifra">{{ persona.dni }}</td>
+              <td class="fw-semibold">{{ persona.nombreCompleto }}</td>
               <td>{{ persona.fechaNacimiento }}</td>
               <td>{{ persona.direccion }}</td>
               <td>{{ persona.idLocalidad }}</td>

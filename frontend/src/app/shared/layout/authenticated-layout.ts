@@ -8,7 +8,9 @@ import { Navbar } from '../components/navbar/navbar';
   imports: [Navbar, RouterOutlet],
   template: `
     <app-navbar />
-    <router-outlet />
+    <main>
+      <router-outlet />
+    </main>
   `,
 })
 export class AuthenticatedLayout {}

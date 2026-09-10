@@ -68,9 +68,9 @@
         <tbody>
           @for (candidato of candidatos(); track candidato.dni) {
             <tr>
-              <td>{{ candidato.orden }}</td>
-              <td>{{ candidato.dni }}</td>
-              <td>{{ candidato.nombreCompleto }}</td>
+              <td class="cifra">{{ candidato.orden }}</td>
+              <td class="cifra">{{ candidato.dni }}</td>
+              <td class="fw-semibold">{{ candidato.nombreCompleto }}</td>
               <td>{{ candidato.siglasPartido }}</td>
             </tr>
           } @empty {

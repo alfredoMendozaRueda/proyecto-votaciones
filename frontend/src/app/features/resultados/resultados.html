@@ -104,9 +104,9 @@
         <tbody>
           @for (resultado of resultados(); track resultado.siglas) {
             <tr>
-              <td>{{ resultado.siglas }}</td>
+              <td class="fw-semibold">{{ resultado.siglas }}</td>
               <td>{{ resultado.descripcion }}</td>
-              <td>{{ resultado.votos }}</td>
+              <td class="cifra">{{ resultado.votos }}</td>
               <td style="min-width: 160px">
                 <div
                   class="progress barra-resultado"
@@ -117,7 +117,7 @@
                 >
                   <div class="progress-bar" [style.width.%]="porcentaje(resultado.votos)"></div>
                 </div>
-                <span class="text-secondary small d-inline-block mt-1"
+                <span class="text-secondary small d-inline-block mt-1 cifra"
                   >{{ porcentaje(resultado.votos) | number: '1.0-2' }}%</span
                 >
               </td>
@@ -130,7 +130,9 @@
         </tbody>
       </table>
     </div>
-    <p class="text-secondary mt-2">Total de votos: {{ totalVotos() }}</p>
+    <p class="text-secondary mt-2">
+      Total de votos: <span class="cifra fw-semibold">{{ totalVotos() }}</span>
+    </p>
   }
 
   <p class="text-secondary mt-3">

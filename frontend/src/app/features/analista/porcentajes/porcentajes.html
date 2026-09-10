@@ -45,7 +45,7 @@
         } @else {
           @for (fila of porcentajes(); track fila.localidad) {
             <tr>
-              <td>{{ fila.localidad }}</td>
+              <td class="fw-semibold">{{ fila.localidad }}</td>
               <td style="min-width: 160px">
                 <div
                   class="progress barra-resultado"
@@ -56,7 +56,7 @@
                 >
                   <div class="progress-bar" [style.width.%]="fila.porcentaje"></div>
                 </div>
-                <span class="text-secondary small d-inline-block mt-1"
+                <span class="text-secondary small d-inline-block mt-1 cifra"
                   >{{ fila.porcentaje | number: '1.0-2' }}%</span
                 >
               </td>

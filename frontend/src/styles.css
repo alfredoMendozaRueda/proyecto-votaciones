@@ -21,6 +21,16 @@
   --bs-border-radius-lg: 12px;
   --bs-border-radius-sm: 8px;
 
+  /* Gris cálido (no el gris frío por defecto de Bootstrap), para que
+     combine con el fondo crema en vez de desentonar. */
+  --bs-border-color: #e3e0d4;
+  --bs-border-color-translucent: rgba(33, 31, 47, 0.09);
+
+  /* Sombras teñidas de violeta de marca en vez del negro genérico de
+     Bootstrap: todo lo que usa .shadow/.shadow-sm hereda esto solo. */
+  --bs-box-shadow: 0 0.75rem 1.75rem rgba(37, 24, 89, 0.14);
+  --bs-box-shadow-sm: 0 0.25rem 0.6rem rgba(37, 24, 89, 0.08);
+
   --color-navbar: #1b1830;
   --color-acento: #c8a24d;
 }
@@ -33,13 +43,21 @@ h1,
 h2,
 h3 {
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
 }
 
 h1 {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+}
+
+/* Cifras (votos, porcentajes, DNIs) alineadas en columna: se leen mejor
+   con figuras tabulares que con la fuente proporcional por defecto. */
+.cifra {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
 }
 
 /* Botones: recoloreados al morado de marca sin recompilar Bootstrap. */
@@ -72,11 +90,23 @@ h1 {
   box-shadow: 0 0 0 0.25rem rgba(91, 60, 203, 0.15);
 }
 
+/* Feedback de pulsacion: un botón sin respuesta al clic se nota "muerto". */
+.btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.98);
+}
+
+/* Tarjetas sin el borde gris plano de Bootstrap: la sombra teñida ya basta
+   para separarlas del fondo, y queda menos "plantilla". */
+.card {
+  --bs-card-border-color: transparent;
+}
+
 /* Barra de navegacion de marca */
 
 .navbar-marca {
-  background-color: var(--color-navbar);
+  background: linear-gradient(180deg, var(--color-navbar) 0%, #211c3d 100%);
   border-bottom: 2px solid var(--color-acento);
+  box-shadow: 0 0.5rem 1.5rem rgba(15, 12, 33, 0.35);
 }
 
 .navbar-marca .nav-link {
@@ -121,7 +151,7 @@ h1 {
 
 .tarjeta-partido:hover {
   border-color: var(--bs-primary);
-  box-shadow: 0 0.5rem 1rem rgba(15, 23, 42, 0.1);
+  box-shadow: 0 0.6rem 1.5rem rgba(91, 60, 203, 0.18);
   transform: translateY(-2px);
 }
 
@@ -129,6 +159,7 @@ h1 {
   border-color: var(--bs-primary);
   border-width: 2px;
   background-color: #f0ecfb;
+  box-shadow: 0 0 0 4px rgba(91, 60, 203, 0.12);
 }
 
 .tarjeta-partido img {
@@ -164,9 +195,14 @@ h1 {
 
 .enlace-panel:hover {
   border-color: var(--bs-primary);
-  box-shadow: 0 0.5rem 1rem rgba(15, 23, 42, 0.1);
+  box-shadow: 0 0.6rem 1.5rem rgba(91, 60, 203, 0.18);
   transform: translateY(-2px);
   color: inherit;
+}
+
+.enlace-panel:hover .icono-enlace {
+  background-color: var(--bs-primary);
+  color: #ffffff;
 }
 
 .icono-enlace {
@@ -179,6 +215,9 @@ h1 {
   border-radius: var(--bs-border-radius-sm);
   background-color: #f0ecfb;
   color: var(--bs-primary);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .insignia-circular {
@@ -203,7 +242,12 @@ h1 {
 .auth-marca {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(160deg, var(--color-navbar) 0%, #2a2350 100%);
+  /* Grano sutil superpuesto al degradado: sin él, un fondo tan liso se ve
+     plano en pantalla. La textura es un SVG de ruido inline, sin peticiones
+     externas. */
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E"),
+    linear-gradient(160deg, var(--color-navbar) 0%, #2a2350 100%);
   color: #ffffff;
 }
 
