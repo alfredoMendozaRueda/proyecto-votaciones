@@ -1,0 +1,76 @@
+<div class="container-ancho">
+  <h1>Censo electoral</h1>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+
+  <form class="tarjeta" (ngSubmit)="consultar()">
+    <label>
+      Ámbito
+      <select name="ambito" [(ngModel)]="ambito">
+        <option value="todo">Censo completo</option>
+        <option value="localidad">Por localidad</option>
+        <option value="comunidad">Por comunidad autónoma</option>
+      </select>
+    </label>
+
+    @if (ambito === 'localidad') {
+      <label>
+        Localidad
+        <select name="localidad" [(ngModel)]="localidad" required>
+          <option value="" disabled selected>Selecciona una localidad</option>
+          @for (nombre of localidades(); track nombre) {
+            <option [value]="nombre">{{ nombre }}</option>
+          }
+        </select>
+      </label>
+    }
+
+    @if (ambito === 'comunidad') {
+      <label>
+        Comunidad autónoma
+        <select name="comunidad" [(ngModel)]="comunidad" required>
+          <option value="" disabled selected>Selecciona una comunidad</option>
+          @for (nombre of comunidades(); track nombre) {
+            <option [value]="nombre">{{ nombre }}</option>
+          }
+        </select>
+      </label>
+    }
+
+    <button type="submit">Consultar</button>
+  </form>
+
+  @if (consultado()) {
+    <hr class="separador" />
+    <div class="tabla-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>DNI</th>
+            <th>Nombre completo</th>
+            <th>Fecha de nacimiento</th>
+            <th>Dirección</th>
+            <th>Localidad</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (persona of censo(); track persona.dni) {
+            <tr>
+              <td>{{ persona.dni }}</td>
+              <td>{{ persona.nombreCompleto }}</td>
+              <td>{{ persona.fechaNacimiento }}</td>
+              <td>{{ persona.direccion }}</td>
+              <td>{{ persona.idLocalidad }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="5" class="texto-muted">No hay personas censadas en este ámbito.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

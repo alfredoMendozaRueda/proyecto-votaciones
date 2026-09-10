@@ -16,8 +16,5 @@ spring:
         format_sql: true
     show-sql: false
 
-  thymeleaf:
-    cache: false
-
 server:
   port: ${SERVER_PORT:8080}

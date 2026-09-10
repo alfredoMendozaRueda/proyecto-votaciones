@@ -1,0 +1,50 @@
+<div class="container-ancho">
+  <h1>Candidatos por localidad</h1>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+
+  <form class="tarjeta" (ngSubmit)="consultar()">
+    <label>
+      Localidad
+      <select name="localidad" [(ngModel)]="localidad" required>
+        <option value="" disabled selected>Selecciona una localidad</option>
+        @for (nombre of localidades(); track nombre) {
+          <option [value]="nombre">{{ nombre }}</option>
+        }
+      </select>
+    </label>
+    <button type="submit">Consultar</button>
+  </form>
+
+  @if (candidatos()) {
+    <hr class="separador" />
+    <div class="tabla-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>Orden</th>
+            <th>DNI</th>
+            <th>Nombre completo</th>
+            <th>Partido</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (candidato of candidatos(); track candidato.dni) {
+            <tr>
+              <td>{{ candidato.orden }}</td>
+              <td>{{ candidato.dni }}</td>
+              <td>{{ candidato.nombreCompleto }}</td>
+              <td>{{ candidato.siglasPartido }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4" class="texto-muted">No hay candidatos en esta localidad.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

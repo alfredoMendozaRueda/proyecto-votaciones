@@ -1,0 +1,29 @@
+<div class="container-ancho">
+  <h1>Comprobar partidos políticos</h1>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+
+  @if (partidos()) {
+    <p class="success">Hay suficientes partidos políticos dados de alta.</p>
+    <div class="tabla-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>Siglas</th>
+            <th>Descripción</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (partido of partidos(); track partido.siglas) {
+            <tr>
+              <td>{{ partido.siglas }}</td>
+              <td>{{ partido.descripcion }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

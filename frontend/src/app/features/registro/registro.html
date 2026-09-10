@@ -1,0 +1,26 @@
+<div class="container">
+  <h1>Crear cuenta de votante</h1>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+  @if (mensajeExito()) {
+    <p class="success">{{ mensajeExito() }}</p>
+  }
+
+  <form class="tarjeta" (ngSubmit)="enviar()">
+    <label>
+      DNI
+      <input type="text" name="dni" [(ngModel)]="dni" required autocomplete="username" />
+    </label>
+
+    <label>
+      Contraseña
+      <input type="password" name="contrasena" [(ngModel)]="contrasena" required autocomplete="new-password" />
+    </label>
+
+    <button type="submit" [disabled]="enviando()">Registrarme</button>
+  </form>
+
+  <p class="texto-muted">Debes figurar en el censo electoral y ser mayor de edad. ¿Ya tienes cuenta? <a routerLink="/login">Inicia sesión</a></p>
+</div>

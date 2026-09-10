@@ -1,0 +1,32 @@
+<nav class="barra-superior">
+  <a class="titulo-app" [routerLink]="usuario()?.rol === 'admin' ? '/admin/panel' : usuario()?.rol === 'analista' ? '/analista/panel' : '/usuario/panel'">
+    e-Votaciones
+  </a>
+
+  <div class="enlaces">
+    @if (usuario()?.rol === 'admin') {
+      <a routerLink="/admin/panel">Panel</a>
+      <a routerLink="/admin/partidos">Partidos</a>
+      <a routerLink="/admin/candidatos">Candidatos</a>
+      <a routerLink="/admin/elecciones">Elecciones</a>
+      <a routerLink="/admin/censo">Censo</a>
+      <a routerLink="/votacion">Votar</a>
+      <a routerLink="/resultados">Resultados</a>
+    }
+    @if (usuario()?.rol === 'analista') {
+      <a routerLink="/analista/panel">Panel</a>
+      <a routerLink="/analista/partidos/comprobar">Comprobar partidos</a>
+      <a routerLink="/analista/candidatos">Candidatos por localidad</a>
+      <a routerLink="/analista/porcentajes">Participación</a>
+      <a routerLink="/analista/cookie">Cookie ganador</a>
+    }
+    @if (usuario()?.rol === 'votante') {
+      <a routerLink="/usuario/panel">Panel</a>
+      <a routerLink="/votacion">Votar</a>
+      <a routerLink="/resultados">Resultados</a>
+    }
+
+    <span class="rol-usuario">{{ usuario()?.dni }} · {{ usuario()?.rol }}</span>
+    <button type="button" class="boton-salir" (click)="cerrarSesion()">Cerrar sesión</button>
+  </div>
+</nav>

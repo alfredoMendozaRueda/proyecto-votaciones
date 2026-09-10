@@ -1,0 +1,37 @@
+<div class="container-ancho">
+  <h1>Participación por localidad</h1>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+  @if (mensajeExito()) {
+    <p class="success">{{ mensajeExito() }}</p>
+  }
+
+  <div class="acciones">
+    <button type="button" (click)="recalcular()" [disabled]="recalculando()">Recalcular participación</button>
+  </div>
+
+  <div class="tabla-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th>Localidad</th>
+          <th>Participación</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (fila of porcentajes(); track fila.localidad) {
+          <tr>
+            <td>{{ fila.localidad }}</td>
+            <td>{{ fila.porcentaje | number: '1.0-2' }}%</td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="2" class="texto-muted">No hay datos de participación todavía.</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>

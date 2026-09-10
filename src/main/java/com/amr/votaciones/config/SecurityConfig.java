@@ -21,6 +21,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
@@ -46,7 +47,12 @@ public class SecurityConfig {
                 .requestMatchers("/api/participacion/**", "/api/cookie-ganador").hasRole("ANALISTA")
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll())
-            .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
+            .csrf(csrf -> csrf
+                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                // Handler sin mascara XOR: el HttpClient de Angular reenvia el
+                // valor de la cookie XSRF-TOKEN tal cual en la cabecera, sin
+                // aplicar el BREACH-masking que exige el handler por defecto.
+                .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
             .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
             .httpBasic(AbstractHttpConfigurer::disable)
             .formLogin(AbstractHttpConfigurer::disable)

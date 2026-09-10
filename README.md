@@ -9,7 +9,10 @@ El sistema se basa en partidos políticos y candidatos, y a través de las votac
 * El número de votos obtenidos por cada partido.
 * El **Presidente del Gobierno**, que será el **candidato nº1 del partido con mayor número de votos**.
 
-La aplicación es un proyecto **Spring Boot** (arquitectura **Controladores MVC → Servicios → Repositorios Spring Data JPA**), con vistas **Thymeleaf** y autenticación/autorización por rol con **Spring Security**.
+La aplicación tiene dos partes independientes:
+
+* Un **backend Spring Boot** que expone una **API REST en JSON** (arquitectura **Controladores → Servicios → Repositorios Spring Data JPA**), con autenticación por sesión y autorización por rol con **Spring Security**.
+* Un **frontend Angular** (`frontend/`), una SPA independiente que consume esa API y se sirve desde el mismo origen que el backend en producción (empaquetada dentro del propio jar).
 
 ---
 
@@ -155,24 +158,31 @@ bbdd_amr_elecciones
 
 ## Aspectos de implementación
 
-* **Arquitectura en capas**: los **controladores** (`web`) son finos y delegan en la capa de **servicios** (`servicios`, anotada `@Service`/`@Transactional`), que a su vez depende de **interfaces de repositorio Spring Data JPA** (`repositorios`, `extends JpaRepository`). Los controladores y plantillas no conocen JPA/SQL, solo las interfaces de servicio.
+### Backend
+
+* **Arquitectura en capas**: los **controladores REST** (`web`, `@RestController`) son finos y delegan en la capa de **servicios** (`servicios`, anotada `@Service`/`@Transactional`), que a su vez depende de **interfaces de repositorio Spring Data JPA** (`repositorios`, `extends JpaRepository`). Los controladores solo conocen las interfaces de servicio, nunca JPA/SQL directamente.
+* **API JSON**: cada pantalla del front tiene su propio endpoint bajo `/api/**`; las peticiones y respuestas se modelan con **records** de Java (`web/dto`).
 * **Persistencia con Spring Data JPA**: las entidades (`modelos`) están anotadas con JPA; los recuentos de resultados (global, por localidad, por comunidad) y el porcentaje de participación se calculan con una única consulta SQL agregada por caso (nativa u JPQL), evitando los bucles N+1 de la versión original basada en JDBC manual.
-* **Spring Security**: login por formulario (DNI + contraseña) respaldado por un `UserDetailsService` propio y control de acceso declarativo por rol (`ROLE_ADMIN`, `ROLE_ANALISTA`, `ROLE_VOTANTE`) en `SecurityConfig`, con protección CSRF activa en todos los formularios.
+* **Spring Security para SPA**: sin `formLogin` ni vistas de error propias del backend. El login es un `POST /api/auth/login` en JSON que autentica manualmente contra un `AuthenticationManager` y persiste la sesión en una cookie `JSESSIONID`; `GET /api/auth/me` permite a Angular recuperar la sesión activa al recargar la página. Control de acceso declarativo por rol (`ROLE_ADMIN`, `ROLE_ANALISTA`, `ROLE_VOTANTE`) en `SecurityConfig`. Protección CSRF activa mediante cookie `XSRF-TOKEN` legible por JavaScript (patrón *double submit cookie* que el `HttpClient` de Angular rellena automáticamente en la cabecera `X-XSRF-TOKEN`); los errores de autenticación/autorización devuelven `401`/`403` sin cuerpo en vez de redirigir a una página de login.
 * La contraseña se verifica a través de un `PasswordEncoder` (`Md5PasswordEncoder`) que envuelve `seguridad.EncriptadorContrasena` (implementación MD5 por compatibilidad con los datos existentes; ver aviso de seguridad en `EncriptadorMd5`).
-* Cada operación de negocio con reglas propias (registro, voto, alta de elección/candidato...) tiene su propia **excepción de dominio** en el paquete `excepciones`; un `@ControllerAdvice` (`ManejadorErroresGlobal`) las traduce a la página de error compartida, en vez de repetir un try/catch en cada controlador.
+* Cada operación de negocio con reglas propias (registro, voto, alta de elección/candidato...) tiene su propia **excepción de dominio** en el paquete `excepciones`; un `@RestControllerAdvice` (`ManejadorErroresGlobal`) las traduce a una respuesta JSON `{"mensaje": "..."}` con el código HTTP adecuado (`404`, `409`, `422`), en vez de un `500` genérico o de repetir un try/catch en cada controlador.
 * Uso de **sentencias preparadas / JPQL parametrizado** para evitar **SQL Injection**.
-* Vistas con **Thymeleaf**, con un fragmento de cabecera reutilizable (`fragments/barra.html`) y hojas de estilos comunes en `static/css`.
-* Al cerrar sesión (`/logout`) se invalida la sesión y se muestra una página de despedida con el nombre del usuario (leído de una cookie).
+
+### Frontend
+
+* **Angular** (standalone components, sin `NgModule`), con **routing basado en hash** (`#/...`) para no requerir configuración de rutas en el servidor.
+* Estado de sesión con **signals** (`AuthService`), guards funcionales por rol (`authGuard`, `roleGuard`) y un interceptor HTTP que redirige a `/login` ante una respuesta `401`.
+* Un servicio Angular por recurso de la API (`partido`, `candidato`, `censo`, `resultados`, `elecciones`, `participacion`, `cookie-ganador`...), todos consumiendo `HttpClient` sobre `/api/**`.
+* Estilos globales con **custom properties CSS** (paleta violeta/oro) en `frontend/src/styles.css`.
 
 ---
 
 ## Tecnologías utilizadas
 
-* Java 17 · Spring Boot 3
-* Spring MVC, Spring Data JPA (Hibernate), Spring Security, Thymeleaf
-* MySQL / MariaDB (H2 en memoria para los tests)
-* Maven
-* JUnit 5 + Mockito + AssertJ + Spring Test / MockMvc (tests unitarios y de integración)
+* **Backend**: Java 17 · Spring Boot 3 (Spring Web, Spring Data JPA/Hibernate, Spring Security) · Maven
+* **Frontend**: Angular · TypeScript · RxJS
+* MySQL / MariaDB (H2 en memoria para los tests y para previsualizar sin base de datos externa)
+* JUnit 5 + Mockito + AssertJ + Spring Test / MockMvc (tests unitarios y de integración del backend)
 
 ---
 
@@ -182,6 +192,7 @@ bbdd_amr_elecciones
 
 * JDK 17+
 * Maven 3.6+
+* Node.js 20+ y npm (solo para trabajar en el frontend o generar el jar con el front incluido)
 * Un servidor MySQL/MariaDB con la base de datos de `database/bbdd_amr_elecciones.sql` importada
 
 ### Configuración de la base de datos
@@ -195,14 +206,31 @@ La conexión no lleva credenciales fijas en el código: se configura con variabl
 | `DB_CONTRASENA` | (vacío) |
 | `SERVER_PORT` | `8080` |
 
-### Compilar, probar y ejecutar
+### Desarrollo: dos servidores en paralelo
+
+Durante el desarrollo, el backend y el frontend se ejecutan por separado; Angular usa un proxy (`frontend/proxy.conf.json`) para redirigir `/api` y `/imagenes` al backend, así que en el navegador todo parece servido desde el mismo origen.
 
 ```bash
-mvn test               # ejecuta la batería de tests (unitarios + integración con H2)
-mvn spring-boot:run    # arranca la aplicación en http://localhost:8080
-mvn package             # genera target/proyecto-votaciones-<version>.jar ejecutable
+mvn test               # ejecuta la batería de tests del backend (unitarios + integración con H2)
+mvn spring-boot:run    # arranca el backend en http://localhost:8080
+
+cd frontend
+npm install
+npm start               # arranca el frontend (con proxy a la API) en http://localhost:4200
+```
+
+Abre `http://localhost:4200` mientras desarrollas: los cambios en Angular se recargan al vuelo y las llamadas a `/api` llegan al backend en el puerto 8080.
+
+### Producción: un único jar ejecutable
+
+El perfil Maven `frontend` compila Angular y copia el resultado dentro de `src/main/resources/static`, de modo que Spring Boot sirve la SPA y la API desde el mismo origen (sin problemas de CORS) y todo queda empaquetado en un único jar:
+
+```bash
+mvn clean package -Pfrontend   # compila el front (npm install + ng build) y lo empaqueta en el jar
 java -jar target/proyecto-votaciones-2.0.0.jar
 ```
+
+Sin este perfil (`mvn package` a secas), el jar se genera solo con el backend y sin necesidad de tener Node instalado, útil para iterar rápido en el día a día en Java.
 
 No requiere desplegar en un servidor externo: el jar incluye un Tomcat embebido.
 

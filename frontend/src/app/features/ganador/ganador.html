@@ -1,0 +1,16 @@
+<div class="container">
+  <h1>Presidente del Gobierno</h1>
+
+  @if (ganador(); as resultado) {
+    @if (resultado.eleccionesTodaviaHabilitadas) {
+      <p class="tarjeta texto-muted">Las elecciones siguen habilitadas: el ganador se conocerá cuando se inhabiliten.</p>
+    } @else if (resultado.presidenteGanador) {
+      <div class="tarjeta" style="text-align: center;">
+        <p class="texto-muted">Candidato nº1 del partido más votado</p>
+        <h2>{{ resultado.presidenteGanador }}</h2>
+      </div>
+    } @else {
+      <p class="tarjeta texto-muted">Todavía no hay votos suficientes para determinar un ganador.</p>
+    }
+  }
+</div>

@@ -1,0 +1,42 @@
+<div class="container-ancho">
+  <h1>Elecciones</h1>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+  @if (mensajeExito()) {
+    <p class="success">{{ mensajeExito() }}</p>
+  }
+
+  <h2>Nueva elección</h2>
+  <form class="tarjeta" (ngSubmit)="crear()">
+    <label>
+      Identificador
+      <input type="text" name="idElecciones" [(ngModel)]="idElecciones" required />
+    </label>
+    <label>
+      Descripción
+      <input type="text" name="descripcion" [(ngModel)]="descripcion" required />
+    </label>
+    <label>
+      Fecha de fin
+      <input type="date" name="fechaFin" [(ngModel)]="fechaFin" required />
+    </label>
+    <button type="submit" [disabled]="enviando()">Crear elección</button>
+  </form>
+
+  <hr class="separador" />
+
+  <h2>Gestionar elección existente</h2>
+  <div class="tarjeta">
+    <label>
+      Identificador de la elección
+      <input type="text" name="idGestion" [(ngModel)]="idGestion" required />
+    </label>
+    <div class="acciones">
+      <button type="button" (click)="habilitar()">Habilitar</button>
+      <button type="button" class="boton-secundario" (click)="deshabilitar()">Deshabilitar</button>
+      <button type="button" class="boton-peligro" (click)="eliminar()">Eliminar</button>
+    </div>
+  </div>
+</div>

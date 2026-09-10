@@ -1,0 +1,75 @@
+<div class="container-ancho">
+  <h1>Resultados electorales</h1>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+
+  <form class="tarjeta" (ngSubmit)="consultar()">
+    <label>
+      Ámbito
+      <select name="ambito" [(ngModel)]="ambito">
+        <option value="todo">Total nacional</option>
+        <option value="localidad">Por localidad</option>
+        <option value="comunidad">Por comunidad autónoma</option>
+      </select>
+    </label>
+
+    @if (ambito === 'localidad') {
+      <label>
+        Localidad
+        <select name="localidad" [(ngModel)]="localidad" required>
+          <option value="" disabled selected>Selecciona una localidad</option>
+          @for (nombre of localidades(); track nombre) {
+            <option [value]="nombre">{{ nombre }}</option>
+          }
+        </select>
+      </label>
+    }
+
+    @if (ambito === 'comunidad') {
+      <label>
+        Comunidad autónoma
+        <select name="comunidad" [(ngModel)]="comunidad" required>
+          <option value="" disabled selected>Selecciona una comunidad</option>
+          @for (nombre of comunidades(); track nombre) {
+            <option [value]="nombre">{{ nombre }}</option>
+          }
+        </select>
+      </label>
+    }
+
+    <button type="submit">Consultar</button>
+  </form>
+
+  @if (resultados()) {
+    <hr class="separador" />
+    <div class="tabla-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>Siglas</th>
+            <th>Partido</th>
+            <th>Votos</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (resultado of resultados(); track resultado.siglas) {
+            <tr>
+              <td>{{ resultado.siglas }}</td>
+              <td>{{ resultado.descripcion }}</td>
+              <td>{{ resultado.votos }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="3" class="texto-muted">Todavía no hay votos registrados.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <p class="texto-muted">Total de votos: {{ totalVotos() }}</p>
+  }
+
+  <p class="texto-muted"><a routerLink="/ganador">Ver presidente ganador</a></p>
+</div>

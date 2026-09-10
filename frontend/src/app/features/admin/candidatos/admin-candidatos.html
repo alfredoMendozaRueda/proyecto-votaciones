@@ -1,0 +1,35 @@
+<div class="container">
+  <h1>Registrar candidato</h1>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+  @if (mensajeExito()) {
+    <p class="success">{{ mensajeExito() }}</p>
+  }
+
+  <form class="tarjeta" (ngSubmit)="crear()">
+    <label>
+      DNI
+      <input type="text" name="dni" [(ngModel)]="dni" required />
+    </label>
+    <label>
+      Nombre completo
+      <input type="text" name="nombreCompleto" [(ngModel)]="nombreCompleto" required />
+    </label>
+    <label>
+      Partido
+      <select name="siglasPartido" [(ngModel)]="siglasPartido" required>
+        <option value="" disabled selected>Selecciona un partido</option>
+        @for (partido of partidos(); track partido.siglas) {
+          <option [value]="partido.siglas">{{ partido.siglas }} · {{ partido.descripcion }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      Orden en la candidatura
+      <input type="number" name="orden" [(ngModel)]="orden" min="1" required />
+    </label>
+    <button type="submit" [disabled]="enviando()">Registrar candidato</button>
+  </form>
+</div>

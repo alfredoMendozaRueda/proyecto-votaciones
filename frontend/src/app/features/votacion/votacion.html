@@ -1,0 +1,32 @@
+<div class="container-ancho">
+  <h1>Votación</h1>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+  @if (mensajeExito()) {
+    <p class="success">{{ mensajeExito() }}</p>
+  }
+
+  @if (partidos().length > 0) {
+    <p class="texto-muted">Selecciona un partido y confirma tu voto. No podrás cambiarlo después.</p>
+
+    <div class="rejilla-partidos">
+      @for (partido of partidos(); track partido.siglas) {
+        <div
+          class="tarjeta-partido"
+          [class.seleccionado]="seleccionado() === partido.siglas"
+          (click)="seleccionar(partido.siglas)"
+        >
+          <img [src]="partido.imagen" [alt]="partido.descripcion" />
+          <span class="siglas">{{ partido.siglas }}</span>
+          <span class="descripcion">{{ partido.descripcion }}</span>
+        </div>
+      }
+    </div>
+
+    <div class="acciones">
+      <button type="button" [disabled]="!seleccionado() || votando()" (click)="votar()">Confirmar voto</button>
+    </div>
+  }
+</div>

@@ -1,0 +1,358 @@
+/* Tema global de e-Votaciones: paleta violeta/oro, tipografia del sistema. */
+
+:root {
+  --color-fondo: #f2f1ec;
+  --color-superficie: #ffffff;
+  --color-superficie-alt: #f8f7f3;
+  --color-borde: #e5e3da;
+  --color-borde-fuerte: #cdc9ba;
+  --color-texto: #211f2e;
+  --color-texto-muted: #6b6880;
+  --color-titulo: #161521;
+  --color-navbar: #1b1830;
+  --color-primario: #5b3ccb;
+  --color-primario-hover: #4a2fb0;
+  --color-primario-claro: #f0ecfb;
+  --color-acento-claro: #c8a24d;
+  --color-exito-fondo: #eefaf1;
+  --color-exito-texto: #14663b;
+  --color-exito-borde: #2f9e5e;
+  --color-error-fondo: #fdf1ee;
+  --color-error-texto: #96351f;
+  --color-error-borde: #c84a2c;
+  --radio-borde: 10px;
+  --sombra: 0 1px 2px rgba(15, 23, 42, 0.06), 0 6px 20px rgba(15, 23, 42, 0.07);
+  --sombra-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--color-fondo);
+  color: var(--color-texto);
+  line-height: 1.5;
+}
+
+h1, h2, h3 {
+  color: var(--color-titulo);
+  font-weight: 600;
+}
+
+a {
+  color: var(--color-primario);
+}
+
+/* Barra de navegacion */
+
+.barra-superior {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.5rem;
+  background-color: var(--color-navbar);
+  border-bottom: 2px solid var(--color-acento-claro);
+  color: #ffffff;
+  flex-wrap: wrap;
+}
+
+.barra-superior .enlaces {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.barra-superior a {
+  color: #e7e4f5;
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.barra-superior a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+.titulo-app {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #ffffff;
+  text-decoration: none;
+  letter-spacing: 0.01em;
+}
+
+.rol-usuario {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(200, 162, 77, 0.45);
+  color: #f0e6c8;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.boton-salir {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  border-radius: var(--radio-borde);
+  padding: 0.35rem 0.9rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.boton-salir:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Contenedores */
+
+.container {
+  max-width: 520px;
+  margin: 2.5rem auto;
+  padding: 0 1.25rem;
+}
+
+.container-ancho {
+  max-width: 980px;
+  margin: 2.5rem auto;
+  padding: 0 1.25rem;
+}
+
+.tarjeta {
+  background-color: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio-borde);
+  box-shadow: var(--sombra);
+  padding: 1.75rem;
+}
+
+/* Formularios */
+
+form.tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+label {
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--color-texto);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+input, select, textarea {
+  font: inherit;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--color-borde-fuerte);
+  border-radius: 8px;
+  background-color: var(--color-superficie);
+  color: var(--color-texto);
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--color-primario);
+  box-shadow: 0 0 0 3px var(--color-primario-claro);
+}
+
+button, .boton {
+  font: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radio-borde);
+  padding: 0.6rem 1.1rem;
+  font-weight: 600;
+  background-color: var(--color-primario);
+  color: #ffffff;
+  transition: background-color 0.15s ease;
+}
+
+button:hover, .boton:hover {
+  background-color: var(--color-primario-hover);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.boton-secundario {
+  background-color: var(--color-superficie);
+  color: var(--color-primario);
+  border: 1px solid var(--color-primario);
+}
+
+.boton-secundario:hover {
+  background-color: var(--color-primario-claro);
+}
+
+.boton-peligro {
+  background-color: var(--color-error-borde);
+}
+
+.boton-peligro:hover {
+  background-color: #a53a20;
+}
+
+.acciones {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+}
+
+.separador {
+  border: none;
+  border-top: 1px solid var(--color-borde);
+  margin: 1.5rem 0;
+}
+
+/* Mensajes de estado */
+
+.success, .error {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radio-borde);
+  border: 1px solid transparent;
+  margin-bottom: 1rem;
+  font-size: 0.92rem;
+}
+
+.success {
+  background-color: var(--color-exito-fondo);
+  color: var(--color-exito-texto);
+  border-color: var(--color-exito-borde);
+}
+
+.error {
+  background-color: var(--color-error-fondo);
+  color: var(--color-error-texto);
+  border-color: var(--color-error-borde);
+}
+
+/* Tablas */
+
+.tabla-responsive {
+  overflow-x: auto;
+  background-color: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio-borde);
+  box-shadow: var(--sombra-sm);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+th, td {
+  text-align: left;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--color-borde);
+  white-space: nowrap;
+}
+
+th {
+  background-color: var(--color-superficie-alt);
+  color: var(--color-texto-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+/* Tarjetas de partidos y candidatos */
+
+.rejilla-partidos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0;
+}
+
+.tarjeta-partido {
+  background-color: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio-borde);
+  box-shadow: var(--sombra-sm);
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tarjeta-partido:hover {
+  border-color: var(--color-primario);
+  box-shadow: var(--sombra);
+}
+
+.tarjeta-partido.seleccionado {
+  border-color: var(--color-primario);
+  background-color: var(--color-primario-claro);
+}
+
+.tarjeta-partido img {
+  max-width: 100%;
+  max-height: 90px;
+  object-fit: contain;
+}
+
+.tarjeta-partido .siglas {
+  font-weight: 700;
+  color: var(--color-titulo);
+}
+
+.tarjeta-partido .descripcion {
+  font-size: 0.85rem;
+  color: var(--color-texto-muted);
+}
+
+/* Utilidades */
+
+.texto-muted {
+  color: var(--color-texto-muted);
+  font-size: 0.9rem;
+}
+
+.enlaces-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.enlaces-panel a {
+  display: block;
+  background-color: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio-borde);
+  box-shadow: var(--sombra-sm);
+  padding: 1.1rem 1.25rem;
+  text-decoration: none;
+  color: var(--color-titulo);
+  font-weight: 600;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.enlaces-panel a:hover {
+  border-color: var(--color-primario);
+  box-shadow: var(--sombra);
+}

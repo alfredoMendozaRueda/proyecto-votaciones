@@ -1,0 +1,25 @@
+<div class="container">
+  <h1>Cookie del partido ganador</h1>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+  @if (mensajeExito()) {
+    <p class="success">{{ mensajeExito() }}</p>
+  }
+
+  <div class="tarjeta">
+    <p>
+      @if (partidoGanador()) {
+        Cookie actual: <strong>{{ partidoGanador() }}</strong>
+      } @else {
+        <span class="texto-muted">No hay ninguna cookie guardada.</span>
+      }
+    </p>
+    <div class="acciones">
+      <button type="button" (click)="crear()" [disabled]="creando()">Crear cookie con el ganador</button>
+      <button type="button" class="boton-secundario" (click)="consultar()">Actualizar</button>
+    </div>
+    <p class="texto-muted">Solo puede crearse cuando las elecciones están inhabilitadas.</p>
+  </div>
+</div>
