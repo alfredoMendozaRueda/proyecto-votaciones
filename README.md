@@ -196,6 +196,12 @@ bbdd_amr_elecciones
 Si solo tienes Docker instalado (nada de Java, Node, MySQL ni RabbitMQ), esto levanta el stack completo — app, base de datos con los datos de ejemplo ya importados, y RabbitMQ:
 
 ```bash
+./run-stack.sh
+```
+
+Es un wrapper fino sobre `docker compose up --build` que además comprueba que Docker esté instalado y arrancado antes de intentarlo. Equivalente directo con `docker compose` por si lo prefieres:
+
+```bash
 docker compose up --build
 ```
 
@@ -203,7 +209,14 @@ docker compose up --build
 * Panel de RabbitMQ: <http://localhost:15672> (`guest`/`guest`)
 * MySQL: `localhost:3306` (`root`/`rootpass`)
 
-La primera vez tarda unos minutos (compila Angular y el backend dentro de la imagen); las siguientes veces solo reconstruye lo que haya cambiado. `docker compose down` lo para todo; añade `-v` si además quieres borrar los datos de MySQL y volver a partir del dump original.
+La primera vez tarda unos minutos (compila Angular y el backend dentro de la imagen); las siguientes veces solo reconstruye lo que haya cambiado.
+
+```bash
+./run-stack.sh -d          # igual, pero en segundo plano
+./run-stack.sh logs        # sigue los logs de todos los servicios (o de uno: logs app)
+./run-stack.sh down        # para y elimina los contenedores
+./run-stack.sh down -v     # además borra el volumen de datos de MySQL, para partir del dump original
+```
 
 El resto de esta sección explica cómo trabajar sin Docker (día a día en desarrollo) y cómo desplegarlo de verdad en internet.
 
@@ -263,6 +276,16 @@ npm run test:ci         # igual, pero sin watch y con el Chromium de Puppeteer s
 ```
 
 Los tests unitarios cubren de momento la capa `core/` (servicios, guards e interceptor de autenticación) — donde vive la lógica con más impacto si se rompe — en vez de cada componente de pantalla uno a uno.
+
+Para correr toda la batería del proyecto (backend + frontend) en un único comando, en vez de ir mandando cada uno por separado:
+
+```bash
+./run-tests.sh              # mvn test + lint + format:check + test:ci
+./run-tests.sh --backend    # solo mvn test
+./run-tests.sh --frontend   # solo lint + format:check + test:ci
+```
+
+Es justo lo que ejecuta el hook de `pre-push` (backend) más las comprobaciones de frontend que añade el CI.
 
 ### Git hooks
 
