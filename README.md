@@ -174,14 +174,15 @@ bbdd_amr_elecciones
 * **Angular** (standalone components, sin `NgModule`), con **routing basado en hash** (`#/...`) para no requerir configuración de rutas en el servidor.
 * Estado de sesión con **signals** (`AuthService`), guards funcionales por rol (`authGuard`, `roleGuard`) y un interceptor HTTP que redirige a `/login` ante una respuesta `401`.
 * Un servicio Angular por recurso de la API (`partido`, `candidato`, `censo`, `resultados`, `elecciones`, `participacion`, `cookie-ganador`...), todos consumiendo `HttpClient` sobre `/api/**`.
-* Estilos globales con **custom properties CSS** (paleta violeta/oro) en `frontend/src/styles.css`.
+* UI con **Bootstrap 5**: `frontend/src/styles.css` se limita a los tokens de marca (variables `--bs-*`, paleta violeta/oro) y a los detalles que Bootstrap no trae de fábrica (animaciones, panel de login); el resto son clases y componentes de Bootstrap directamente en las plantillas. El menú móvil se colapsa con una signal propia en vez del JS de Bootstrap, para no cargar ~70 kB de más por un simple toggle.
+* **ESLint** (`@angular-eslint` + `typescript-eslint`) y **Prettier** para lint/formato; tests unitarios con **Karma + Jasmine** para la capa `core/` (servicios, guards, interceptor).
 
 ---
 
 ## Tecnologías utilizadas
 
 * **Backend**: Java 17 · Spring Boot 3 (Spring Web, Spring Data JPA/Hibernate, Spring Security, Spring AMQP) · Maven
-* **Frontend**: Angular · TypeScript · RxJS
+* **Frontend**: Angular · TypeScript · RxJS · Bootstrap 5 · ESLint + Prettier · Karma + Jasmine
 * MySQL / MariaDB (H2 en memoria para los tests y para previsualizar sin base de datos externa)
 * **RabbitMQ** para la mensajería de eventos electorales
 * JUnit 5 + Mockito + AssertJ + Spring Test / MockMvc (tests unitarios y de integración del backend)
@@ -250,6 +251,19 @@ npm start               # arranca el frontend (con proxy a la API) en http://loc
 
 Abre `http://localhost:4200` mientras desarrollas: los cambios en Angular se recargan al vuelo y las llamadas a `/api` llegan al backend en el puerto 8080.
 
+### Calidad del frontend: lint, formato y tests
+
+```bash
+cd frontend
+npm run lint            # ESLint (@angular-eslint + typescript-eslint)
+npm run format:check    # Prettier, sin escribir cambios ('npm run format' sí los aplica)
+npm test                # Karma + Jasmine en modo watch (navegador real)
+npm run test:ci         # igual, pero sin watch y con el Chromium de Puppeteer sin sandbox
+                         # (headless, pensado para CI/contenedores; ver frontend/scripts/chrome-headless-ci.sh)
+```
+
+Los tests unitarios cubren de momento la capa `core/` (servicios, guards e interceptor de autenticación) — donde vive la lógica con más impacto si se rompe — en vez de cada componente de pantalla uno a uno.
+
 ### Git hooks
 
 El repositorio incluye hooks de Git versionados en `.githooks/` (no en `.git/hooks`, que no se comparte al clonar). Actívalos una sola vez por clon:
@@ -258,7 +272,7 @@ El repositorio incluye hooks de Git versionados en `.githooks/` (no en `.git/hoo
 git config core.hooksPath .githooks
 ```
 
-* **`pre-commit`**: rápido, solo mira lo que está en el *stage*. Bloquea marcas de conflicto sin resolver y ficheros que parecen credenciales (`.env`, `*.pem`, `id_rsa`...); si hay `.java` o `pom.xml` en el commit, comprueba que el backend compila (`mvn test-compile`); si hay `.ts`/`.html`/`.css` de `frontend/src`, comprueba el formato con Prettier (`npm run format` lo arregla).
+* **`pre-commit`**: rápido, solo mira lo que está en el *stage*. Bloquea marcas de conflicto sin resolver y ficheros que parecen credenciales (`.env`, `*.pem`, `id_rsa`...); si hay `.java` o `pom.xml` en el commit, comprueba que el backend compila (`mvn test-compile`); si hay `.ts`/`.html`/`.css` de `frontend/src`, comprueba el formato con Prettier (`npm run format` lo arregla) y, si son `.ts`/`.html`, que pasan ESLint.
 * **`pre-push`**: más lento pero exhaustivo, igual que el CI — ejecuta `mvn test` (backend) y `ng build` (frontend) antes de dejar salir el push.
 
 Ambos se pueden saltar puntualmente con `--no-verify` (`git commit --no-verify`, `git push --no-verify`) cuando de verdad haga falta.
@@ -293,9 +307,11 @@ Ten en cuenta las limitaciones propias de un tier gratuito: el servicio "duerme"
 
 El workflow `.github/workflows/ci-cd.yml` de GitHub Actions hace tres cosas:
 
-1. **En cada push (a cualquier rama) y en cada pull request**: ejecuta `mvn test` (los tests del backend) y compila el frontend (`npm ci && npm run build`), como comprobación de que nada se ha roto.
+1. **En cada push (a cualquier rama) y en cada pull request**: ejecuta `mvn test` (los tests del backend) y, para el frontend, `npm audit --audit-level=high`, `npm run lint`, `npm run format:check`, `npm run test:ci` y `npm run build`, en ese orden — cualquiera de ellos que falle detiene el job, como comprobación de que nada se ha roto ni se ha colado una dependencia con una vulnerabilidad conocida.
 2. **Solo en un push a `main`** (la rama por defecto de este repositorio — ojo, **no** se llama `master`) y solo si el punto anterior ha pasado: envía un correo avisando de que el push ha superado los tests, con el commit, el autor y el mensaje.
 3. El despliegue en sí **no** lo dispara este workflow: si conectaste Render por Blueprint como se explica arriba, Render ya despliega automáticamente en cada push a la rama conectada (su "auto-deploy" nativo) — no hace falta ningún paso extra aquí. El correo, por tanto, avisa de que el push ha pasado los tests y de que el despliegue en Render se disparará solo, no confirma que Render haya terminado de desplegar (Render no se lo comunica a GitHub Actions).
+
+Además, `.github/dependabot.yml` revisa semanalmente las dependencias de Maven, npm (`frontend/`) y las propias GitHub Actions del workflow, abriendo un PR cuando hay una versión nueva o una vulnerabilidad conocida — así no depende de que alguien acuerde ejecutar `npm audit` a mano. Para que también lleguen alertas de seguridad fuera de esas PRs semanales, conviene activar **Settings → Code security → Dependabot alerts** en el repositorio (es un interruptor, no requiere ningún fichero).
 
 Para que el envío de correo funcione, añade estos secrets en **Settings → Secrets and variables → Actions** del repositorio:
 
