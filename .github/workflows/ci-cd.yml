@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Enviar email de aviso
-        uses: dawidd6/action-send-mail@v3
+        uses: dawidd6/action-send-mail@v19
         with:
           server_address: smtp.gmail.com
           server_port: 465
