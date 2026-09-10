@@ -10,7 +10,12 @@
 
   <div class="acciones">
     <button type="button" (click)="recalcular()" [disabled]="recalculando()">
-      <app-icon nombre="refrescar" [size]="16" /> Recalcular participación
+      @if (recalculando()) {
+        <span class="spinner"></span>
+      } @else {
+        <app-icon nombre="refrescar" [size]="16" />
+      }
+      Recalcular participación
     </button>
   </div>
 
@@ -23,20 +28,29 @@
         </tr>
       </thead>
       <tbody>
-        @for (fila of porcentajes(); track fila.localidad) {
-          <tr>
-            <td>{{ fila.localidad }}</td>
-            <td class="celda-barra">
-              <div class="barra-resultado" [style.--porcentaje.%]="fila.porcentaje">
-                <span></span>
-              </div>
-              <span class="texto-muted">{{ fila.porcentaje | number: '1.0-2' }}%</span>
-            </td>
-          </tr>
-        } @empty {
-          <tr>
-            <td colspan="2" class="texto-muted">No hay datos de participación todavía.</td>
-          </tr>
+        @if (cargando()) {
+          @for (fila of [1, 2, 3]; track fila) {
+            <tr class="skeleton-fila">
+              <td><span class="skeleton skeleton-linea" style="width: 6rem;"></span></td>
+              <td><span class="skeleton skeleton-linea" style="width: 100%;"></span></td>
+            </tr>
+          }
+        } @else {
+          @for (fila of porcentajes(); track fila.localidad) {
+            <tr>
+              <td>{{ fila.localidad }}</td>
+              <td class="celda-barra">
+                <div class="barra-resultado" [style.--porcentaje.%]="fila.porcentaje">
+                  <span></span>
+                </div>
+                <span class="texto-muted">{{ fila.porcentaje | number: '1.0-2' }}%</span>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="2" class="texto-muted">No hay datos de participación todavía.</td>
+            </tr>
+          }
         }
       </tbody>
     </table>

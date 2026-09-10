@@ -18,13 +18,18 @@ export class CookieGanador implements OnInit {
   readonly error = signal<string | null>(null);
   readonly mensajeExito = signal<string | null>(null);
   readonly creando = signal(false);
+  readonly consultando = signal(true);
 
   ngOnInit(): void {
     this.consultar();
   }
 
   consultar(): void {
-    this.cookieGanadorService.ver().subscribe((cookie) => this.partidoGanador.set(cookie.partidoGanador));
+    this.consultando.set(true);
+    this.cookieGanadorService.ver().subscribe((cookie) => {
+      this.partidoGanador.set(cookie.partidoGanador);
+      this.consultando.set(false);
+    });
   }
 
   crear(): void {

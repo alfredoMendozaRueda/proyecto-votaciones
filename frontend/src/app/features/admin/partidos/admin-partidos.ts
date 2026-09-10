@@ -20,6 +20,7 @@ export class AdminPartidos implements OnInit {
   readonly error = signal<string | null>(null);
   readonly mensajeExito = signal<string | null>(null);
   readonly enviando = signal(false);
+  readonly cargando = signal(true);
 
   siglas = '';
   descripcion = '';
@@ -30,7 +31,11 @@ export class AdminPartidos implements OnInit {
   }
 
   cargar(): void {
-    this.partidoService.listar().subscribe((partidos) => this.partidos.set(partidos));
+    this.cargando.set(true);
+    this.partidoService.listar().subscribe((partidos) => {
+      this.partidos.set(partidos);
+      this.cargando.set(false);
+    });
   }
 
   crear(): void {

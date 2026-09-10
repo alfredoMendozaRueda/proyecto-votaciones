@@ -31,7 +31,12 @@
       <input type="number" name="orden" [(ngModel)]="orden" min="1" required />
     </label>
     <button type="submit" [disabled]="enviando()">
-      <app-icon nombre="candidatos" [size]="16" /> Registrar candidato
+      @if (enviando()) {
+        <span class="spinner"></span>
+      } @else {
+        <app-icon nombre="candidatos" [size]="16" />
+      }
+      Registrar candidato
     </button>
   </form>
 </div>

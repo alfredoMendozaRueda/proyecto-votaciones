@@ -17,11 +17,16 @@ export class ComprobarPartidos implements OnInit {
 
   readonly partidos = signal<Partido[] | null>(null);
   readonly error = signal<string | null>(null);
+  readonly cargando = signal(true);
 
   ngOnInit(): void {
     this.partidoService.comprobarMinimoRequerido().subscribe({
-      next: (partidos) => this.partidos.set(partidos),
+      next: (partidos) => {
+        this.cargando.set(false);
+        this.partidos.set(partidos);
+      },
       error: (respuesta: HttpErrorResponse) => {
+        this.cargando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se ha podido comprobar los partidos');
       }

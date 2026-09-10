@@ -25,6 +25,7 @@ export class AdminCenso implements OnInit {
   readonly censo = signal<Censo[]>([]);
   readonly error = signal<string | null>(null);
   readonly consultado = signal(false);
+  readonly consultando = signal(false);
 
   ambito: Ambito = 'todo';
   localidad = '';
@@ -38,6 +39,7 @@ export class AdminCenso implements OnInit {
   consultar(): void {
     this.error.set(null);
     this.consultado.set(false);
+    this.consultando.set(true);
 
     const resultado$ =
       this.ambito === 'localidad'
@@ -50,8 +52,10 @@ export class AdminCenso implements OnInit {
       next: (censo) => {
         this.censo.set(censo);
         this.consultado.set(true);
+        this.consultando.set(false);
       },
       error: (respuesta: HttpErrorResponse) => {
+        this.consultando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se ha podido consultar el censo');
       }

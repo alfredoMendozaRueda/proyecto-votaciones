@@ -25,6 +25,7 @@ export class Resultados implements OnInit {
   readonly comunidades = signal<string[]>([]);
   readonly resultados = signal<Resultado[] | null>(null);
   readonly error = signal<string | null>(null);
+  readonly consultando = signal(false);
 
   ambito: Ambito = 'todo';
   localidad = '';
@@ -38,6 +39,7 @@ export class Resultados implements OnInit {
   consultar(): void {
     this.error.set(null);
     this.resultados.set(null);
+    this.consultando.set(true);
 
     const resultado$ =
       this.ambito === 'localidad'
@@ -47,8 +49,12 @@ export class Resultados implements OnInit {
           : this.resultadosService.resultadosGlobales();
 
     resultado$.subscribe({
-      next: (resultados) => this.resultados.set(resultados),
+      next: (resultados) => {
+        this.consultando.set(false);
+        this.resultados.set(resultados);
+      },
       error: (respuesta: HttpErrorResponse) => {
+        this.consultando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se han podido consultar los resultados');
       }

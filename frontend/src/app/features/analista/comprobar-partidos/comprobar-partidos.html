@@ -5,7 +5,11 @@
     <app-alert tipo="error" [mensaje]="error()!" />
   }
 
-  @if (partidos()) {
+  @if (cargando()) {
+    <div class="spinner-pagina">
+      <span class="spinner"></span> Comprobando partidos...
+    </div>
+  } @else if (partidos()) {
     <app-alert tipo="exito" mensaje="Hay suficientes partidos políticos dados de alta." />
     <div class="tabla-responsive">
       <table>

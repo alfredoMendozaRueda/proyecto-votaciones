@@ -18,6 +18,7 @@ export class AdminElecciones {
   readonly error = signal<string | null>(null);
   readonly mensajeExito = signal<string | null>(null);
   readonly enviando = signal(false);
+  readonly procesando = signal<'habilitar' | 'deshabilitar' | 'eliminar' | null>(null);
 
   idElecciones = '';
   descripcion = '';
@@ -32,6 +33,7 @@ export class AdminElecciones {
 
   private manejarError(respuesta: HttpErrorResponse, mensajePorDefecto: string): void {
     this.enviando.set(false);
+    this.procesando.set(null);
     const cuerpo = respuesta.error as Mensaje | undefined;
     this.error.set(cuerpo?.mensaje ?? mensajePorDefecto);
   }
@@ -54,24 +56,36 @@ export class AdminElecciones {
 
   habilitar(): void {
     this.limpiarMensajes();
+    this.procesando.set('habilitar');
     this.eleccionService.habilitar(this.idGestion).subscribe({
-      next: (respuesta) => this.mensajeExito.set(respuesta.mensaje),
+      next: (respuesta) => {
+        this.procesando.set(null);
+        this.mensajeExito.set(respuesta.mensaje);
+      },
       error: (respuesta: HttpErrorResponse) => this.manejarError(respuesta, 'No se ha podido habilitar la elección')
     });
   }
 
   deshabilitar(): void {
     this.limpiarMensajes();
+    this.procesando.set('deshabilitar');
     this.eleccionService.deshabilitar(this.idGestion).subscribe({
-      next: (respuesta) => this.mensajeExito.set(respuesta.mensaje),
+      next: (respuesta) => {
+        this.procesando.set(null);
+        this.mensajeExito.set(respuesta.mensaje);
+      },
       error: (respuesta: HttpErrorResponse) => this.manejarError(respuesta, 'No se ha podido deshabilitar la elección')
     });
   }
 
   eliminar(): void {
     this.limpiarMensajes();
+    this.procesando.set('eliminar');
     this.eleccionService.eliminar(this.idGestion).subscribe({
-      next: (respuesta) => this.mensajeExito.set(respuesta.mensaje),
+      next: (respuesta) => {
+        this.procesando.set(null);
+        this.mensajeExito.set(respuesta.mensaje);
+      },
       error: (respuesta: HttpErrorResponse) => this.manejarError(respuesta, 'No se ha podido eliminar la elección')
     });
   }

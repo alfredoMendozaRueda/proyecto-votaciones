@@ -20,6 +20,7 @@ export class Porcentajes implements OnInit {
   readonly error = signal<string | null>(null);
   readonly mensajeExito = signal<string | null>(null);
   readonly recalculando = signal(false);
+  readonly cargando = signal(true);
 
   ngOnInit(): void {
     this.cargar();
@@ -28,8 +29,12 @@ export class Porcentajes implements OnInit {
   cargar(): void {
     this.error.set(null);
     this.participacionService.porcentajes().subscribe({
-      next: (porcentajes) => this.porcentajes.set(porcentajes),
+      next: (porcentajes) => {
+        this.porcentajes.set(porcentajes);
+        this.cargando.set(false);
+      },
       error: (respuesta: HttpErrorResponse) => {
+        this.cargando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se ha podido consultar la participación');
       }

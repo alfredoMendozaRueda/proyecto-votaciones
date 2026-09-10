@@ -39,11 +39,42 @@
       </label>
     }
 
-    <button type="submit"><app-icon nombre="flecha" [size]="16" /> Consultar</button>
+    <button type="submit" [disabled]="consultando()">
+      @if (consultando()) {
+        <span class="spinner"></span>
+      } @else {
+        <app-icon nombre="flecha" [size]="16" />
+      }
+      Consultar
+    </button>
   </form>
 
-  @if (resultados()) {
-    <hr class="separador" />
+  <hr class="separador" />
+
+  @if (consultando()) {
+    <div class="tabla-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>Siglas</th>
+            <th>Partido</th>
+            <th>Votos</th>
+            <th>Proporción</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (fila of [1, 2, 3]; track fila) {
+            <tr class="skeleton-fila">
+              <td><span class="skeleton skeleton-linea" style="width: 3rem;"></span></td>
+              <td><span class="skeleton skeleton-linea" style="width: 8rem;"></span></td>
+              <td><span class="skeleton skeleton-linea" style="width: 2rem;"></span></td>
+              <td><span class="skeleton skeleton-linea" style="width: 100%;"></span></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else if (resultados()) {
     <div class="tabla-responsive">
       <table>
         <thead>

@@ -23,7 +23,12 @@
       <input type="date" name="fechaFin" [(ngModel)]="fechaFin" required />
     </label>
     <button type="submit" [disabled]="enviando()">
-      <app-icon nombre="elecciones" [size]="16" /> Crear elección
+      @if (enviando()) {
+        <span class="spinner"></span>
+      } @else {
+        <app-icon nombre="elecciones" [size]="16" />
+      }
+      Crear elección
     </button>
   </form>
 
@@ -36,14 +41,29 @@
       <input type="text" name="idGestion" [(ngModel)]="idGestion" required />
     </label>
     <div class="acciones">
-      <button type="button" (click)="habilitar()">
-        <app-icon nombre="exito" [size]="16" /> Habilitar
+      <button type="button" [disabled]="!!procesando()" (click)="habilitar()">
+        @if (procesando() === 'habilitar') {
+          <span class="spinner"></span>
+        } @else {
+          <app-icon nombre="exito" [size]="16" />
+        }
+        Habilitar
       </button>
-      <button type="button" class="boton-secundario" (click)="deshabilitar()">
-        <app-icon nombre="error" [size]="16" /> Deshabilitar
+      <button type="button" class="boton-secundario" [disabled]="!!procesando()" (click)="deshabilitar()">
+        @if (procesando() === 'deshabilitar') {
+          <span class="spinner"></span>
+        } @else {
+          <app-icon nombre="error" [size]="16" />
+        }
+        Deshabilitar
       </button>
-      <button type="button" class="boton-peligro" (click)="eliminar()">
-        <app-icon nombre="papelera" [size]="16" /> Eliminar
+      <button type="button" class="boton-peligro" [disabled]="!!procesando()" (click)="eliminar()">
+        @if (procesando() === 'eliminar') {
+          <span class="spinner"></span>
+        } @else {
+          <app-icon nombre="papelera" [size]="16" />
+        }
+        Eliminar
       </button>
     </div>
   </div>

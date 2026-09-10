@@ -29,6 +29,59 @@
   box-sizing: border-box;
 }
 
+/* Animaciones globales. Todo el movimiento de la app pasa por aqui, para
+   poder apagarlo de un plumazo con prefers-reduced-motion (ver mas abajo). */
+
+@keyframes entrada-suave {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes brillo-carga {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes pulso-suave {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(91, 60, 203, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(91, 60, 203, 0);
+  }
+}
+
+@keyframes flotar {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(2%, -3%) scale(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 body {
   margin: 0;
   font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -118,6 +171,11 @@ a {
   background: linear-gradient(135deg, var(--color-primario), #7a52e8);
   color: var(--color-acento-claro);
   box-shadow: var(--sombra-sm);
+  transition: transform 0.2s ease;
+}
+
+.titulo-app:hover .logo-marca {
+  transform: scale(1.06) rotate(-4deg);
 }
 
 .rol-usuario {
@@ -151,12 +209,14 @@ a {
   max-width: 520px;
   margin: 2.5rem auto;
   padding: 0 1.25rem;
+  animation: entrada-suave 0.45s ease both;
 }
 
 .container-ancho {
   max-width: 980px;
   margin: 2.5rem auto;
   padding: 0 1.25rem;
+  animation: entrada-suave 0.45s ease both;
 }
 
 .tarjeta {
@@ -292,6 +352,7 @@ button:disabled {
   margin-bottom: 1rem;
   font-size: 0.92rem;
   font-weight: 500;
+  animation: entrada-suave 0.3s ease both;
 }
 
 .alerta app-icon {
@@ -356,6 +417,7 @@ tr:last-child td {
 }
 
 .tarjeta-partido {
+  position: relative;
   background-color: var(--color-superficie);
   border: 1px solid var(--color-borde);
   border-radius: var(--radio-borde);
@@ -367,16 +429,14 @@ tr:last-child td {
   gap: 0.6rem;
   text-align: center;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  animation: entrada-suave 0.4s ease both;
 }
 
 .tarjeta-partido:hover {
   border-color: var(--color-primario);
   box-shadow: var(--sombra);
-}
-
-.tarjeta-partido {
-  position: relative;
+  transform: translateY(-2px);
 }
 
 .tarjeta-partido.seleccionado {
@@ -396,7 +456,16 @@ tr:last-child td {
   border-radius: 999px;
   background-color: var(--color-primario);
   color: #ffffff;
+  animation: entrada-suave 0.25s ease both;
 }
+
+.rejilla-partidos > :nth-child(1) { animation-delay: 0.03s; }
+.rejilla-partidos > :nth-child(2) { animation-delay: 0.07s; }
+.rejilla-partidos > :nth-child(3) { animation-delay: 0.11s; }
+.rejilla-partidos > :nth-child(4) { animation-delay: 0.15s; }
+.rejilla-partidos > :nth-child(5) { animation-delay: 0.19s; }
+.rejilla-partidos > :nth-child(6) { animation-delay: 0.23s; }
+.rejilla-partidos > :nth-child(n+7) { animation-delay: 0.26s; }
 
 .tarjeta-partido img {
   max-width: 100%;
@@ -441,6 +510,7 @@ tr:last-child td {
   color: var(--color-titulo);
   font-weight: 600;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  animation: entrada-suave 0.4s ease both;
 }
 
 .enlaces-panel a:hover {
@@ -448,6 +518,13 @@ tr:last-child td {
   box-shadow: var(--sombra);
   transform: translateY(-2px);
 }
+
+.enlaces-panel a:nth-child(1) { animation-delay: 0.03s; }
+.enlaces-panel a:nth-child(2) { animation-delay: 0.07s; }
+.enlaces-panel a:nth-child(3) { animation-delay: 0.11s; }
+.enlaces-panel a:nth-child(4) { animation-delay: 0.15s; }
+.enlaces-panel a:nth-child(5) { animation-delay: 0.19s; }
+.enlaces-panel a:nth-child(n+6) { animation-delay: 0.22s; }
 
 /* Pantallas de autenticacion (login, registro) */
 
@@ -464,6 +541,8 @@ tr:last-child td {
 }
 
 .auth-marca {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -483,6 +562,7 @@ tr:last-child td {
   width: 52px;
   height: 52px;
   border-radius: 14px;
+  animation: pulso-suave 2.6s ease-in-out infinite;
 }
 
 .auth-marca h1 {
@@ -605,4 +685,102 @@ tr:last-child td {
   border-radius: 10px;
   background-color: var(--color-primario-claro);
   color: var(--color-primario);
+}
+
+/* Spinner de carga, para botones y bloques de contenido */
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+  animation: girar 0.7s linear infinite;
+}
+
+.boton-secundario .spinner {
+  border-color: rgba(91, 60, 203, 0.25);
+  border-top-color: var(--color-primario);
+}
+
+.spinner-pagina {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 3rem 1rem;
+  color: var(--color-texto-muted);
+}
+
+.spinner-pagina .spinner {
+  width: 22px;
+  height: 22px;
+  border-width: 3px;
+  border-color: var(--color-borde-fuerte);
+  border-top-color: var(--color-primario);
+}
+
+/* Placeholders "esqueleto" mientras carga una tabla o lista */
+
+.skeleton {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background-color: var(--color-superficie-alt);
+  border-radius: 6px;
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+  animation: brillo-carga 1.3s ease-in-out infinite;
+}
+
+.skeleton-linea {
+  height: 0.85em;
+  margin: 0.2rem 0;
+}
+
+.skeleton-fila td {
+  padding-top: 0.9rem;
+  padding-bottom: 0.9rem;
+}
+
+/* Fondo decorativo del panel de marca en login/registro: manchas suaves y
+   un punteado sutil, sin restar legibilidad al contenido. */
+
+.auth-marca::before,
+.auth-marca::after {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(50px);
+  animation: flotar 10s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.auth-marca::before {
+  width: 320px;
+  height: 320px;
+  top: -80px;
+  right: -100px;
+  background: radial-gradient(circle, rgba(122, 82, 232, 0.45), transparent 70%);
+}
+
+.auth-marca::after {
+  width: 260px;
+  height: 260px;
+  bottom: -90px;
+  left: -60px;
+  background: radial-gradient(circle, rgba(200, 162, 77, 0.28), transparent 70%);
+  animation-delay: -5s;
+}
+
+.auth-marca > * {
+  position: relative;
 }

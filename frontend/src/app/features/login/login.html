@@ -31,7 +31,12 @@
         </label>
 
         <button type="submit" [disabled]="enviando()">
-          <app-icon nombre="flecha" [size]="16" /> Entrar
+          @if (enviando()) {
+            <span class="spinner"></span>
+          } @else {
+            <app-icon nombre="flecha" [size]="16" />
+          }
+          Entrar
         </button>
       </form>
 

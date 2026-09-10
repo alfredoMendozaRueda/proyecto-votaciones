@@ -20,11 +20,16 @@ export class Votacion implements OnInit {
   readonly error = signal<string | null>(null);
   readonly mensajeExito = signal<string | null>(null);
   readonly votando = signal(false);
+  readonly cargando = signal(true);
 
   ngOnInit(): void {
     this.votacionService.partidosParaVotar().subscribe({
-      next: (partidos) => this.partidos.set(partidos),
+      next: (partidos) => {
+        this.partidos.set(partidos);
+        this.cargando.set(false);
+      },
       error: (respuesta: HttpErrorResponse) => {
+        this.cargando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se ha podido cargar la lista de partidos');
       }

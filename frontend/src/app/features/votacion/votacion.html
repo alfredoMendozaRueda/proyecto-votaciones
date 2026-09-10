@@ -8,7 +8,17 @@
     <app-alert tipo="exito" [mensaje]="mensajeExito()!" />
   }
 
-  @if (partidos().length > 0) {
+  @if (cargando()) {
+    <div class="rejilla-partidos">
+      @for (fila of [1, 2, 3, 4]; track fila) {
+        <div class="tarjeta-partido">
+          <span class="skeleton" style="width: 100%; height: 90px;"></span>
+          <span class="skeleton skeleton-linea" style="width: 60%;"></span>
+          <span class="skeleton skeleton-linea" style="width: 85%;"></span>
+        </div>
+      }
+    </div>
+  } @else if (partidos().length > 0) {
     <p class="texto-muted">Selecciona un partido y confirma tu voto. No podrás cambiarlo después.</p>
 
     <div class="rejilla-partidos">
@@ -30,7 +40,12 @@
 
     <div class="acciones">
       <button type="button" [disabled]="!seleccionado() || votando()" (click)="votar()">
-        <app-icon nombre="votar" [size]="16" /> Confirmar voto
+        @if (votando()) {
+          <span class="spinner"></span>
+        } @else {
+          <app-icon nombre="votar" [size]="16" />
+        }
+        Confirmar voto
       </button>
     </div>
   }

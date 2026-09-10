@@ -34,7 +34,12 @@
         </label>
 
         <button type="submit" [disabled]="enviando()">
-          <app-icon nombre="usuario" [size]="16" /> Registrarme
+          @if (enviando()) {
+            <span class="spinner"></span>
+          } @else {
+            <app-icon nombre="usuario" [size]="16" />
+          }
+          Registrarme
         </button>
       </form>
 

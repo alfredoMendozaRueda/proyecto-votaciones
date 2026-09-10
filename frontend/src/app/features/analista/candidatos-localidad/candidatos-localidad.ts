@@ -21,6 +21,7 @@ export class CandidatosLocalidad implements OnInit {
   readonly localidades = signal<string[]>([]);
   readonly candidatos = signal<Candidato[] | null>(null);
   readonly error = signal<string | null>(null);
+  readonly consultando = signal(false);
 
   localidad = '';
 
@@ -31,10 +32,15 @@ export class CandidatosLocalidad implements OnInit {
   consultar(): void {
     this.error.set(null);
     this.candidatos.set(null);
+    this.consultando.set(true);
 
     this.candidatoService.candidatosDeLocalidad(this.localidad).subscribe({
-      next: (candidatos) => this.candidatos.set(candidatos),
+      next: (candidatos) => {
+        this.consultando.set(false);
+        this.candidatos.set(candidatos);
+      },
       error: (respuesta: HttpErrorResponse) => {
+        this.consultando.set(false);
         const cuerpo = respuesta.error as Mensaje | undefined;
         this.error.set(cuerpo?.mensaje ?? 'No se ha podido consultar los candidatos');
       }
