@@ -5,10 +5,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 
 import { RegistroService } from '../../core/services/registro.service';
 import { Mensaje } from '../../core/models/mensaje.model';
+import { Icon } from '../../shared/components/icon/icon';
+import { Alert } from '../../shared/components/alert/alert';
 
 @Component({
   selector: 'app-registro',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, Icon, Alert],
   templateUrl: './registro.html'
 })
 export class Registro {

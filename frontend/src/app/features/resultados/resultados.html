@@ -1,8 +1,8 @@
 <div class="container-ancho">
-  <h1>Resultados electorales</h1>
+  <h1><app-icon nombre="resultados" [size]="26" [strokeWidth]="1.6" />Resultados electorales</h1>
 
   @if (error()) {
-    <p class="error">{{ error() }}</p>
+    <app-alert tipo="error" [mensaje]="error()!" />
   }
 
   <form class="tarjeta" (ngSubmit)="consultar()">
@@ -39,7 +39,7 @@
       </label>
     }
 
-    <button type="submit">Consultar</button>
+    <button type="submit"><app-icon nombre="flecha" [size]="16" /> Consultar</button>
   </form>
 
   @if (resultados()) {
@@ -51,6 +51,7 @@
             <th>Siglas</th>
             <th>Partido</th>
             <th>Votos</th>
+            <th>Proporción</th>
           </tr>
         </thead>
         <tbody>
@@ -59,10 +60,15 @@
               <td>{{ resultado.siglas }}</td>
               <td>{{ resultado.descripcion }}</td>
               <td>{{ resultado.votos }}</td>
+              <td class="celda-barra">
+                <div class="barra-resultado" [style.--porcentaje.%]="porcentaje(resultado.votos)">
+                  <span></span>
+                </div>
+              </td>
             </tr>
           } @empty {
             <tr>
-              <td colspan="3" class="texto-muted">Todavía no hay votos registrados.</td>
+              <td colspan="4" class="texto-muted">Todavía no hay votos registrados.</td>
             </tr>
           }
         </tbody>
@@ -71,5 +77,7 @@
     <p class="texto-muted">Total de votos: {{ totalVotos() }}</p>
   }
 
-  <p class="texto-muted"><a routerLink="/ganador">Ver presidente ganador</a></p>
+  <p class="texto-muted">
+    <a routerLink="/ganador"><app-icon nombre="ganador" [size]="15" /> Ver presidente ganador</a>
+  </p>
 </div>

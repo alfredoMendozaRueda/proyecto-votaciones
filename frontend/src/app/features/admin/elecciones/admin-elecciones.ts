@@ -4,10 +4,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 
 import { EleccionService } from '../../../core/services/eleccion.service';
 import { Mensaje } from '../../../core/models/mensaje.model';
+import { Icon } from '../../../shared/components/icon/icon';
+import { Alert } from '../../../shared/components/alert/alert';
 
 @Component({
   selector: 'app-admin-elecciones',
-  imports: [FormsModule],
+  imports: [FormsModule, Icon, Alert],
   templateUrl: './admin-elecciones.html'
 })
 export class AdminElecciones {

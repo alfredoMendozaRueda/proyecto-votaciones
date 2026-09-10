@@ -1,26 +1,44 @@
-<div class="container">
-  <h1>Crear cuenta de votante</h1>
+<div class="auth-layout">
+  <div class="auth-marca">
+    <span class="logo-marca"><app-icon nombre="boleta" [size]="26" [strokeWidth]="1.6" /></span>
+    <h1>e-Votaciones</h1>
+    <p>Crea tu cuenta de votante en segundos y participa en el proceso electoral.</p>
 
-  @if (error()) {
-    <p class="error">{{ error() }}</p>
-  }
-  @if (mensajeExito()) {
-    <p class="success">{{ mensajeExito() }}</p>
-  }
+    <div class="lista-caracteristicas">
+      <span class="caracteristica"><app-icon nombre="usuario" [size]="18" /> Solo necesitas figurar en el censo</span>
+      <span class="caracteristica"><app-icon nombre="candado" [size]="18" /> Tu contraseña se guarda cifrada</span>
+      <span class="caracteristica"><app-icon nombre="votar" [size]="18" /> Listo para votar en cuanto te registras</span>
+    </div>
+  </div>
 
-  <form class="tarjeta" (ngSubmit)="enviar()">
-    <label>
-      DNI
-      <input type="text" name="dni" [(ngModel)]="dni" required autocomplete="username" />
-    </label>
+  <div class="auth-formulario">
+    <div class="container">
+      <h1>Crear cuenta de votante</h1>
 
-    <label>
-      Contraseña
-      <input type="password" name="contrasena" [(ngModel)]="contrasena" required autocomplete="new-password" />
-    </label>
+      @if (error()) {
+        <app-alert tipo="error" [mensaje]="error()!" />
+      }
+      @if (mensajeExito()) {
+        <app-alert tipo="exito" [mensaje]="mensajeExito()!" />
+      }
 
-    <button type="submit" [disabled]="enviando()">Registrarme</button>
-  </form>
+      <form class="tarjeta" (ngSubmit)="enviar()">
+        <label>
+          DNI
+          <input type="text" name="dni" [(ngModel)]="dni" required autocomplete="username" />
+        </label>
 
-  <p class="texto-muted">Debes figurar en el censo electoral y ser mayor de edad. ¿Ya tienes cuenta? <a routerLink="/login">Inicia sesión</a></p>
+        <label>
+          Contraseña
+          <input type="password" name="contrasena" [(ngModel)]="contrasena" required autocomplete="new-password" />
+        </label>
+
+        <button type="submit" [disabled]="enviando()">
+          <app-icon nombre="usuario" [size]="16" /> Registrarme
+        </button>
+      </form>
+
+      <p class="texto-muted">Debes figurar en el censo electoral y ser mayor de edad. ¿Ya tienes cuenta? <a routerLink="/login">Inicia sesión</a></p>
+    </div>
+  </div>
 </div>

@@ -1,12 +1,12 @@
 <div class="container-ancho">
-  <h1>Comprobar partidos políticos</h1>
+  <h1><app-icon nombre="comprobar" [size]="26" [strokeWidth]="1.6" />Comprobar partidos políticos</h1>
 
   @if (error()) {
-    <p class="error">{{ error() }}</p>
+    <app-alert tipo="error" [mensaje]="error()!" />
   }
 
   @if (partidos()) {
-    <p class="success">Hay suficientes partidos políticos dados de alta.</p>
+    <app-alert tipo="exito" mensaje="Hay suficientes partidos políticos dados de alta." />
     <div class="tabla-responsive">
       <table>
         <thead>

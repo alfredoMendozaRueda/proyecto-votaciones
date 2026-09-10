@@ -6,12 +6,14 @@ import { CensoService } from '../../../core/services/censo.service';
 import { LocalidadService } from '../../../core/services/localidad.service';
 import { Censo } from '../../../core/models/censo.model';
 import { Mensaje } from '../../../core/models/mensaje.model';
+import { Icon } from '../../../shared/components/icon/icon';
+import { Alert } from '../../../shared/components/alert/alert';
 
 type Ambito = 'todo' | 'localidad' | 'comunidad';
 
 @Component({
   selector: 'app-admin-censo',
-  imports: [FormsModule],
+  imports: [FormsModule, Icon, Alert],
   templateUrl: './admin-censo.html'
 })
 export class AdminCenso implements OnInit {

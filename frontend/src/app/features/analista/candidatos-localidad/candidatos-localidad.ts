@@ -6,10 +6,12 @@ import { CandidatoService } from '../../../core/services/candidato.service';
 import { LocalidadService } from '../../../core/services/localidad.service';
 import { Candidato } from '../../../core/models/candidato.model';
 import { Mensaje } from '../../../core/models/mensaje.model';
+import { Icon } from '../../../shared/components/icon/icon';
+import { Alert } from '../../../shared/components/alert/alert';
 
 @Component({
   selector: 'app-candidatos-localidad',
-  imports: [FormsModule],
+  imports: [FormsModule, Icon, Alert],
   templateUrl: './candidatos-localidad.html'
 })
 export class CandidatosLocalidad implements OnInit {

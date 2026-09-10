@@ -7,12 +7,14 @@ import { ResultadosService } from '../../core/services/resultados.service';
 import { LocalidadService } from '../../core/services/localidad.service';
 import { Resultado } from '../../core/models/resultado.model';
 import { Mensaje } from '../../core/models/mensaje.model';
+import { Icon } from '../../shared/components/icon/icon';
+import { Alert } from '../../shared/components/alert/alert';
 
 type Ambito = 'todo' | 'localidad' | 'comunidad';
 
 @Component({
   selector: 'app-resultados',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, Icon, Alert],
   templateUrl: './resultados.html'
 })
 export class Resultados implements OnInit {
@@ -55,5 +57,10 @@ export class Resultados implements OnInit {
 
   totalVotos(): number {
     return (this.resultados() ?? []).reduce((total, resultado) => total + resultado.votos, 0);
+  }
+
+  porcentaje(votos: number): number {
+    const total = this.totalVotos();
+    return total > 0 ? (votos / total) * 100 : 0;
   }
 }

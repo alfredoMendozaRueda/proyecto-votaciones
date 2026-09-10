@@ -1,11 +1,23 @@
 <div class="container-ancho">
-  <h1>Panel de analista</h1>
+  <h1><app-icon nombre="inicio" [size]="26" [strokeWidth]="1.6" />Panel de analista</h1>
   <p class="texto-muted">Comprobaciones y estadísticas del proceso electoral.</p>
 
   <div class="enlaces-panel">
-    <a routerLink="/analista/partidos/comprobar">Comprobar partidos</a>
-    <a routerLink="/analista/candidatos">Candidatos por localidad</a>
-    <a routerLink="/analista/porcentajes">Participación</a>
-    <a routerLink="/analista/cookie">Cookie del ganador</a>
+    <a routerLink="/analista/partidos/comprobar">
+      <span class="icono-enlace"><app-icon nombre="comprobar" /></span>
+      Comprobar partidos
+    </a>
+    <a routerLink="/analista/candidatos">
+      <span class="icono-enlace"><app-icon nombre="candidatos" /></span>
+      Candidatos por localidad
+    </a>
+    <a routerLink="/analista/porcentajes">
+      <span class="icono-enlace"><app-icon nombre="porcentajes" /></span>
+      Participación
+    </a>
+    <a routerLink="/analista/cookie">
+      <span class="icono-enlace"><app-icon nombre="cookie" /></span>
+      Cookie del ganador
+    </a>
   </div>
 </div>

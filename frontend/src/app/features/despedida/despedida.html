@@ -1,7 +1,10 @@
 <div class="container">
-  <div class="tarjeta" style="text-align: center;">
+  <div class="tarjeta tarjeta-centrada">
+    <span class="insignia-circular"><app-icon nombre="salir" [size]="28" [strokeWidth]="1.6" /></span>
     <h1>Hasta pronto{{ dni() ? ', ' + dni() : '' }}</h1>
     <p class="texto-muted">Has cerrado sesión correctamente.</p>
-    <a class="boton" routerLink="/login">Volver a iniciar sesión</a>
+    <a class="boton" routerLink="/login">
+      <app-icon nombre="flecha" [size]="16" /> Volver a iniciar sesión
+    </a>
   </div>
 </div>

@@ -4,10 +4,12 @@ import { Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 
 import { AuthService } from '../../core/services/auth.service';
+import { Icon } from '../../shared/components/icon/icon';
+import { Alert } from '../../shared/components/alert/alert';
 
 @Component({
   selector: 'app-login',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, Icon, Alert],
   templateUrl: './login.html'
 })
 export class Login {

@@ -1,11 +1,11 @@
 <div class="container-ancho">
-  <h1>Votación</h1>
+  <h1><app-icon nombre="votar" [size]="26" [strokeWidth]="1.6" />Votación</h1>
 
   @if (error()) {
-    <p class="error">{{ error() }}</p>
+    <app-alert tipo="error" [mensaje]="error()!" />
   }
   @if (mensajeExito()) {
-    <p class="success">{{ mensajeExito() }}</p>
+    <app-alert tipo="exito" [mensaje]="mensajeExito()!" />
   }
 
   @if (partidos().length > 0) {
@@ -18,6 +18,9 @@
           [class.seleccionado]="seleccionado() === partido.siglas"
           (click)="seleccionar(partido.siglas)"
         >
+          @if (seleccionado() === partido.siglas) {
+            <span class="insignia-seleccionado"><app-icon nombre="exito" [size]="16" [strokeWidth]="2" /></span>
+          }
           <img [src]="partido.imagen" [alt]="partido.descripcion" />
           <span class="siglas">{{ partido.siglas }}</span>
           <span class="descripcion">{{ partido.descripcion }}</span>
@@ -26,7 +29,9 @@
     </div>
 
     <div class="acciones">
-      <button type="button" [disabled]="!seleccionado() || votando()" (click)="votar()">Confirmar voto</button>
+      <button type="button" [disabled]="!seleccionado() || votando()" (click)="votar()">
+        <app-icon nombre="votar" [size]="16" /> Confirmar voto
+      </button>
     </div>
   }
 </div>

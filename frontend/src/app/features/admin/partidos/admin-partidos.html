@@ -1,11 +1,11 @@
 <div class="container-ancho">
-  <h1>Partidos políticos</h1>
+  <h1><app-icon nombre="partidos" [size]="26" [strokeWidth]="1.6" />Partidos políticos</h1>
 
   @if (error()) {
-    <p class="error">{{ error() }}</p>
+    <app-alert tipo="error" [mensaje]="error()!" />
   }
   @if (mensajeExito()) {
-    <p class="success">{{ mensajeExito() }}</p>
+    <app-alert tipo="exito" [mensaje]="mensajeExito()!" />
   }
 
   <form class="tarjeta" (ngSubmit)="crear()">
@@ -21,7 +21,9 @@
       Nombre del archivo de imagen
       <input type="text" name="imagen" [(ngModel)]="imagen" placeholder="PARTIDO.jpg" required />
     </label>
-    <button type="submit" [disabled]="enviando()">Registrar partido</button>
+    <button type="submit" [disabled]="enviando()">
+      <app-icon nombre="partidos" [size]="16" /> Registrar partido
+    </button>
   </form>
 
   <hr class="separador" />
@@ -30,17 +32,17 @@
     <table>
       <thead>
         <tr>
+          <th>Logo</th>
           <th>Siglas</th>
           <th>Descripción</th>
-          <th>Imagen</th>
         </tr>
       </thead>
       <tbody>
         @for (partido of partidos(); track partido.siglas) {
           <tr>
+            <td><img class="miniatura-partido" [src]="partido.imagen" [alt]="partido.descripcion" /></td>
             <td>{{ partido.siglas }}</td>
             <td>{{ partido.descripcion }}</td>
-            <td>{{ partido.imagen }}</td>
           </tr>
         } @empty {
           <tr>

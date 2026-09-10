@@ -1,9 +1,15 @@
 <div class="container-ancho">
-  <h1>Panel de votante</h1>
+  <h1><app-icon nombre="inicio" [size]="26" [strokeWidth]="1.6" />Panel de votante</h1>
   <p class="texto-muted">Ejerce tu derecho al voto y consulta los resultados.</p>
 
   <div class="enlaces-panel">
-    <a routerLink="/votacion">Votar</a>
-    <a routerLink="/resultados">Resultados</a>
+    <a routerLink="/votacion">
+      <span class="icono-enlace"><app-icon nombre="votar" /></span>
+      Votar
+    </a>
+    <a routerLink="/resultados">
+      <span class="icono-enlace"><app-icon nombre="resultados" /></span>
+      Resultados
+    </a>
   </div>
 </div>

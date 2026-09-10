@@ -1,11 +1,11 @@
 <div class="container-ancho">
-  <h1>Elecciones</h1>
+  <h1><app-icon nombre="elecciones" [size]="26" [strokeWidth]="1.6" />Elecciones</h1>
 
   @if (error()) {
-    <p class="error">{{ error() }}</p>
+    <app-alert tipo="error" [mensaje]="error()!" />
   }
   @if (mensajeExito()) {
-    <p class="success">{{ mensajeExito() }}</p>
+    <app-alert tipo="exito" [mensaje]="mensajeExito()!" />
   }
 
   <h2>Nueva elección</h2>
@@ -22,7 +22,9 @@
       Fecha de fin
       <input type="date" name="fechaFin" [(ngModel)]="fechaFin" required />
     </label>
-    <button type="submit" [disabled]="enviando()">Crear elección</button>
+    <button type="submit" [disabled]="enviando()">
+      <app-icon nombre="elecciones" [size]="16" /> Crear elección
+    </button>
   </form>
 
   <hr class="separador" />
@@ -34,9 +36,15 @@
       <input type="text" name="idGestion" [(ngModel)]="idGestion" required />
     </label>
     <div class="acciones">
-      <button type="button" (click)="habilitar()">Habilitar</button>
-      <button type="button" class="boton-secundario" (click)="deshabilitar()">Deshabilitar</button>
-      <button type="button" class="boton-peligro" (click)="eliminar()">Eliminar</button>
+      <button type="button" (click)="habilitar()">
+        <app-icon nombre="exito" [size]="16" /> Habilitar
+      </button>
+      <button type="button" class="boton-secundario" (click)="deshabilitar()">
+        <app-icon nombre="error" [size]="16" /> Deshabilitar
+      </button>
+      <button type="button" class="boton-peligro" (click)="eliminar()">
+        <app-icon nombre="papelera" [size]="16" /> Eliminar
+      </button>
     </div>
   </div>
 </div>

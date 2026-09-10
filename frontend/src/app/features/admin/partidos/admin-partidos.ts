@@ -5,10 +5,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { PartidoService } from '../../../core/services/partido.service';
 import { Partido } from '../../../core/models/partido.model';
 import { Mensaje } from '../../../core/models/mensaje.model';
+import { Icon } from '../../../shared/components/icon/icon';
+import { Alert } from '../../../shared/components/alert/alert';
 
 @Component({
   selector: 'app-admin-partidos',
-  imports: [FormsModule],
+  imports: [FormsModule, Icon, Alert],
   templateUrl: './admin-partidos.html'
 })
 export class AdminPartidos implements OnInit {

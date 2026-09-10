@@ -1,8 +1,8 @@
 <div class="container-ancho">
-  <h1>Candidatos por localidad</h1>
+  <h1><app-icon nombre="candidatos" [size]="26" [strokeWidth]="1.6" />Candidatos por localidad</h1>
 
   @if (error()) {
-    <p class="error">{{ error() }}</p>
+    <app-alert tipo="error" [mensaje]="error()!" />
   }
 
   <form class="tarjeta" (ngSubmit)="consultar()">
@@ -15,7 +15,7 @@
         }
       </select>
     </label>
-    <button type="submit">Consultar</button>
+    <button type="submit"><app-icon nombre="flecha" [size]="16" /> Consultar</button>
   </form>
 
   @if (candidatos()) {

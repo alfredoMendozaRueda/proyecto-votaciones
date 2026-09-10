@@ -6,10 +6,12 @@ import { CandidatoService } from '../../../core/services/candidato.service';
 import { PartidoService } from '../../../core/services/partido.service';
 import { Partido } from '../../../core/models/partido.model';
 import { Mensaje } from '../../../core/models/mensaje.model';
+import { Icon } from '../../../shared/components/icon/icon';
+import { Alert } from '../../../shared/components/alert/alert';
 
 @Component({
   selector: 'app-admin-candidatos',
-  imports: [FormsModule],
+  imports: [FormsModule, Icon, Alert],
   templateUrl: './admin-candidatos.html'
 })
 export class AdminCandidatos implements OnInit {

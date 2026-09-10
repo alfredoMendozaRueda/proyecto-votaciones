@@ -4,9 +4,11 @@ import { ActivatedRoute } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 
+import { Icon } from '../../shared/components/icon/icon';
+
 @Component({
   selector: 'app-despedida',
-  imports: [RouterLink],
+  imports: [RouterLink, Icon],
   templateUrl: './despedida.html'
 })
 export class Despedida {

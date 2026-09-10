@@ -4,9 +4,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { PartidoService } from '../../../core/services/partido.service';
 import { Partido } from '../../../core/models/partido.model';
 import { Mensaje } from '../../../core/models/mensaje.model';
+import { Icon } from '../../../shared/components/icon/icon';
+import { Alert } from '../../../shared/components/alert/alert';
 
 @Component({
   selector: 'app-comprobar-partidos',
+  imports: [Icon, Alert],
   templateUrl: './comprobar-partidos.html'
 })
 export class ComprobarPartidos implements OnInit {

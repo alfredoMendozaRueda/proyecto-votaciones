@@ -31,7 +31,7 @@
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--color-fondo);
   color: var(--color-texto);
   line-height: 1.5;
@@ -39,7 +39,14 @@ body {
 
 h1, h2, h3 {
   color: var(--color-titulo);
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 a {
@@ -63,27 +70,54 @@ a {
 .barra-superior .enlaces {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.35rem;
   flex-wrap: wrap;
 }
 
 .barra-superior a {
-  color: #e7e4f5;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #cbc7e6;
   text-decoration: none;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0.4rem 0.65rem;
+  border-radius: 8px;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .barra-superior a:hover {
   color: #ffffff;
-  text-decoration: underline;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.barra-superior a.enlace-activo {
+  color: #ffffff;
+  background-color: rgba(200, 162, 77, 0.18);
 }
 
 .titulo-app {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
   font-size: 1.15rem;
-  font-weight: 700;
+  font-weight: 800;
   color: #ffffff;
   text-decoration: none;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
+}
+
+.logo-marca {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--color-primario), #7a52e8);
+  color: var(--color-acento-claro);
+  box-shadow: var(--sombra-sm);
 }
 
 .rol-usuario {
@@ -166,6 +200,10 @@ input:focus, select:focus, textarea:focus {
 }
 
 button, .boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
   font: inherit;
   cursor: pointer;
   border: none;
@@ -174,7 +212,12 @@ button, .boton {
   font-weight: 600;
   background-color: var(--color-primario);
   color: #ffffff;
-  transition: background-color 0.15s ease;
+  text-decoration: none;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+button:active:not(:disabled), .boton:active {
+  transform: translateY(1px);
 }
 
 button:hover, .boton:hover {
@@ -234,6 +277,34 @@ button:disabled {
 }
 
 .error {
+  background-color: var(--color-error-fondo);
+  color: var(--color-error-texto);
+  border-color: var(--color-error-borde);
+}
+
+.alerta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radio-borde);
+  border: 1px solid transparent;
+  margin-bottom: 1rem;
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.alerta app-icon {
+  flex: none;
+}
+
+.alerta-exito {
+  background-color: var(--color-exito-fondo);
+  color: var(--color-exito-texto);
+  border-color: var(--color-exito-borde);
+}
+
+.alerta-error {
   background-color: var(--color-error-fondo);
   color: var(--color-error-texto);
   border-color: var(--color-error-borde);
@@ -304,9 +375,27 @@ tr:last-child td {
   box-shadow: var(--sombra);
 }
 
+.tarjeta-partido {
+  position: relative;
+}
+
 .tarjeta-partido.seleccionado {
   border-color: var(--color-primario);
   background-color: var(--color-primario-claro);
+}
+
+.tarjeta-partido .insignia-seleccionado {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background-color: var(--color-primario);
+  color: #ffffff;
 }
 
 .tarjeta-partido img {
@@ -340,7 +429,9 @@ tr:last-child td {
 }
 
 .enlaces-panel a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
   background-color: var(--color-superficie);
   border: 1px solid var(--color-borde);
   border-radius: var(--radio-borde);
@@ -349,10 +440,169 @@ tr:last-child td {
   text-decoration: none;
   color: var(--color-titulo);
   font-weight: 600;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .enlaces-panel a:hover {
   border-color: var(--color-primario);
   box-shadow: var(--sombra);
+  transform: translateY(-2px);
+}
+
+/* Pantallas de autenticacion (login, registro) */
+
+.auth-layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 860px) {
+  .auth-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.auth-marca {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.25rem;
+  padding: 3rem 3.5rem;
+  background: linear-gradient(160deg, var(--color-navbar) 0%, #2a2350 100%);
+  color: #ffffff;
+}
+
+@media (max-width: 860px) {
+  .auth-marca {
+    padding: 2.5rem 1.75rem;
+  }
+}
+
+.auth-marca .logo-marca {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+}
+
+.auth-marca h1 {
+  color: #ffffff;
+  font-size: 2rem;
+  margin: 0;
+}
+
+.auth-marca p {
+  color: #d6d2ef;
+  font-size: 1.02rem;
+  max-width: 30rem;
+  margin: 0;
+}
+
+.auth-marca .lista-caracteristicas {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.auth-marca .caracteristica {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: #e7e4f5;
+  font-size: 0.95rem;
+}
+
+.auth-marca .caracteristica app-icon {
+  color: var(--color-acento-claro);
+  flex: none;
+}
+
+.auth-formulario {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1.5rem;
+}
+
+.auth-formulario .container {
+  margin: 0;
+  width: 100%;
+}
+
+/* Insignia circular grande, para pantallas de estado (despedida, ganador...) */
+
+.insignia-circular {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  background-color: var(--color-primario-claro);
+  color: var(--color-primario);
+  margin: 0 auto 1rem;
+}
+
+.insignia-circular.insignia-oro {
+  background-color: #f8f0dc;
+  color: #a37c2a;
+}
+
+.tarjeta-centrada {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Barra de proporcion de votos, dentro de la tabla de resultados */
+
+.celda-barra {
+  min-width: 160px;
+}
+
+.celda-barra .texto-muted {
+  display: inline-block;
+  margin-top: 0.3rem;
+}
+
+.barra-resultado {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background-color: var(--color-superficie-alt);
+  overflow: hidden;
+}
+
+.barra-resultado > span {
+  position: absolute;
+  inset: 0;
+  width: var(--porcentaje, 0%);
+  background: linear-gradient(90deg, var(--color-primario), var(--color-acento-claro));
+  border-radius: inherit;
+  transition: width 0.4s ease;
+}
+
+.miniatura-partido {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid var(--color-borde);
+  background-color: var(--color-superficie-alt);
+  padding: 2px;
+}
+
+.enlaces-panel .icono-enlace {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 10px;
+  background-color: var(--color-primario-claro);
+  color: var(--color-primario);
 }

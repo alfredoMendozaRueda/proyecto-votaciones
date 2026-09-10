@@ -1,23 +1,41 @@
-<div class="container">
-  <h1>Iniciar sesión</h1>
+<div class="auth-layout">
+  <div class="auth-marca">
+    <span class="logo-marca"><app-icon nombre="boleta" [size]="26" [strokeWidth]="1.6" /></span>
+    <h1>e-Votaciones</h1>
+    <p>Gestiona elecciones, censo y votaciones de forma sencilla, segura y transparente.</p>
 
-  @if (error()) {
-    <p class="error">{{ error() }}</p>
-  }
+    <div class="lista-caracteristicas">
+      <span class="caracteristica"><app-icon nombre="votar" [size]="18" /> Vota en un par de clics</span>
+      <span class="caracteristica"><app-icon nombre="resultados" [size]="18" /> Resultados en tiempo real por localidad</span>
+      <span class="caracteristica"><app-icon nombre="candado" [size]="18" /> Contraseñas cifradas y acceso por rol</span>
+    </div>
+  </div>
 
-  <form class="tarjeta" (ngSubmit)="enviar()">
-    <label>
-      DNI
-      <input type="text" name="dni" [(ngModel)]="dni" required autocomplete="username" />
-    </label>
+  <div class="auth-formulario">
+    <div class="container">
+      <h1>Iniciar sesión</h1>
 
-    <label>
-      Contraseña
-      <input type="password" name="contrasena" [(ngModel)]="contrasena" required autocomplete="current-password" />
-    </label>
+      @if (error()) {
+        <app-alert tipo="error" [mensaje]="error()!" />
+      }
 
-    <button type="submit" [disabled]="enviando()">Entrar</button>
-  </form>
+      <form class="tarjeta" (ngSubmit)="enviar()">
+        <label>
+          DNI
+          <input type="text" name="dni" [(ngModel)]="dni" required autocomplete="username" />
+        </label>
 
-  <p class="texto-muted">¿No tienes cuenta? <a routerLink="/registro">Regístrate</a></p>
+        <label>
+          Contraseña
+          <input type="password" name="contrasena" [(ngModel)]="contrasena" required autocomplete="current-password" />
+        </label>
+
+        <button type="submit" [disabled]="enviando()">
+          <app-icon nombre="flecha" [size]="16" /> Entrar
+        </button>
+      </form>
+
+      <p class="texto-muted">¿No tienes cuenta? <a routerLink="/registro">Regístrate</a></p>
+    </div>
+  </div>
 </div>

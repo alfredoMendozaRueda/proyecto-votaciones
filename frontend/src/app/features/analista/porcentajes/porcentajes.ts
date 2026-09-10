@@ -5,10 +5,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ParticipacionService } from '../../../core/services/participacion.service';
 import { Porcentaje } from '../../../core/models/resultado.model';
 import { Mensaje } from '../../../core/models/mensaje.model';
+import { Icon } from '../../../shared/components/icon/icon';
+import { Alert } from '../../../shared/components/alert/alert';
 
 @Component({
   selector: 'app-porcentajes',
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, Icon, Alert],
   templateUrl: './porcentajes.html'
 })
 export class Porcentajes implements OnInit {

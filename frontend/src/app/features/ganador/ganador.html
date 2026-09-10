@@ -1,16 +1,23 @@
 <div class="container">
-  <h1>Presidente del Gobierno</h1>
+  <h1><app-icon nombre="ganador" [size]="26" [strokeWidth]="1.6" />Presidente del Gobierno</h1>
 
   @if (ganador(); as resultado) {
     @if (resultado.eleccionesTodaviaHabilitadas) {
-      <p class="tarjeta texto-muted">Las elecciones siguen habilitadas: el ganador se conocerá cuando se inhabiliten.</p>
+      <div class="tarjeta tarjeta-centrada">
+        <span class="insignia-circular"><app-icon nombre="elecciones" [size]="28" [strokeWidth]="1.6" /></span>
+        <p class="texto-muted">Las elecciones siguen habilitadas: el ganador se conocerá cuando se inhabiliten.</p>
+      </div>
     } @else if (resultado.presidenteGanador) {
-      <div class="tarjeta" style="text-align: center;">
+      <div class="tarjeta tarjeta-centrada">
+        <span class="insignia-circular insignia-oro"><app-icon nombre="ganador" [size]="30" [strokeWidth]="1.6" /></span>
         <p class="texto-muted">Candidato nº1 del partido más votado</p>
         <h2>{{ resultado.presidenteGanador }}</h2>
       </div>
     } @else {
-      <p class="tarjeta texto-muted">Todavía no hay votos suficientes para determinar un ganador.</p>
+      <div class="tarjeta tarjeta-centrada">
+        <span class="insignia-circular"><app-icon nombre="resultados" [size]="28" [strokeWidth]="1.6" /></span>
+        <p class="texto-muted">Todavía no hay votos suficientes para determinar un ganador.</p>
+      </div>
     }
   }
 </div>

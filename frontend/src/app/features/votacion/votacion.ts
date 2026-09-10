@@ -4,9 +4,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { VotacionService } from '../../core/services/votacion.service';
 import { Partido } from '../../core/models/partido.model';
 import { Mensaje } from '../../core/models/mensaje.model';
+import { Icon } from '../../shared/components/icon/icon';
+import { Alert } from '../../shared/components/alert/alert';
 
 @Component({
   selector: 'app-votacion',
+  imports: [Icon, Alert],
   templateUrl: './votacion.html'
 })
 export class Votacion implements OnInit {
