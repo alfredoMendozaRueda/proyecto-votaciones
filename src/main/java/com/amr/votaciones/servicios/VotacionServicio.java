@@ -1,5 +1,6 @@
 package com.amr.votaciones.servicios;
 
+import com.amr.votaciones.eventos.VotoRegistradoEvento;
 import com.amr.votaciones.excepciones.DniNoEnCensoExcepcion;
 import com.amr.votaciones.excepciones.EleccionNoDisponibleExcepcion;
 import com.amr.votaciones.excepciones.SinPartidosDisponiblesExcepcion;
@@ -8,11 +9,13 @@ import com.amr.votaciones.modelos.Censo;
 import com.amr.votaciones.modelos.Eleccion;
 import com.amr.votaciones.modelos.Partido;
 import com.amr.votaciones.modelos.Voto;
+import com.amr.votaciones.notificaciones.EventoElectoralPublicador;
 import com.amr.votaciones.repositorios.CensoRepository;
 import com.amr.votaciones.repositorios.EleccionRepository;
 import com.amr.votaciones.repositorios.PartidoRepository;
 import com.amr.votaciones.repositorios.UsuarioRepository;
 import com.amr.votaciones.repositorios.VotoRepository;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,17 +31,20 @@ public class VotacionServicio {
     private final CensoRepository censoRepository;
     private final UsuarioRepository usuarioRepository;
     private final VotoRepository votoRepository;
+    private final EventoElectoralPublicador eventoElectoralPublicador;
 
     public VotacionServicio(EleccionRepository eleccionRepository,
                              PartidoRepository partidoRepository,
                              CensoRepository censoRepository,
                              UsuarioRepository usuarioRepository,
-                             VotoRepository votoRepository) {
+                             VotoRepository votoRepository,
+                             EventoElectoralPublicador eventoElectoralPublicador) {
         this.eleccionRepository = eleccionRepository;
         this.partidoRepository = partidoRepository;
         this.censoRepository = censoRepository;
         this.usuarioRepository = usuarioRepository;
         this.votoRepository = votoRepository;
+        this.eventoElectoralPublicador = eventoElectoralPublicador;
     }
 
     public List<Partido> partidosParaVotar() throws EleccionNoDisponibleExcepcion, SinPartidosDisponiblesExcepcion {
@@ -71,5 +77,8 @@ public class VotacionServicio {
 
         votoRepository.registrar(new Voto(persona.getIdLocalidad(), siglasPartido));
         usuarioRepository.marcarComoVotado(dni);
+
+        eventoElectoralPublicador.publicar(
+                new VotoRegistradoEvento(persona.getIdLocalidad(), siglasPartido, Instant.now()));
     }
 }

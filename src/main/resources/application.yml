@@ -16,6 +16,12 @@ spring:
         format_sql: true
     show-sql: false
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USUARIO:guest}
+    password: ${RABBITMQ_CONTRASENA:guest}
+
 server:
   # La mayoria de plataformas de hosting (Render, Railway...) inyectan su
   # propio puerto en la variable PORT; si no existe, se usa SERVER_PORT o,

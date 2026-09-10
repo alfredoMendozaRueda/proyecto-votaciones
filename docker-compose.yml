@@ -1,0 +1,15 @@
+# Para desarrollo local: levanta un RabbitMQ con su panel de administracion,
+# sin tener que instalarlo a mano. El backend (mvn spring-boot:run) se sigue
+# ejecutando fuera de este compose, apuntando a localhost:5672.
+#
+# Uso: docker compose up -d
+# Panel de administracion: http://localhost:15672 (usuario/contraseña: guest/guest)
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest

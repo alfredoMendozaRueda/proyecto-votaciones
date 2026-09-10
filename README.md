@@ -167,6 +167,7 @@ bbdd_amr_elecciones
 * La contraseña se verifica a través de un `PasswordEncoder` (`Md5PasswordEncoder`) que envuelve `seguridad.EncriptadorContrasena` (implementación MD5 por compatibilidad con los datos existentes; ver aviso de seguridad en `EncriptadorMd5`).
 * Cada operación de negocio con reglas propias (registro, voto, alta de elección/candidato...) tiene su propia **excepción de dominio** en el paquete `excepciones`; un `@RestControllerAdvice` (`ManejadorErroresGlobal`) las traduce a una respuesta JSON `{"mensaje": "..."}` con el código HTTP adecuado (`404`, `409`, `422`), en vez de un `500` genérico o de repetir un try/catch en cada controlador.
 * Uso de **sentencias preparadas / JPQL parametrizado** para evitar **SQL Injection**.
+* **Mensajería con RabbitMQ**: cuando ocurre un evento electoral relevante (se registra un voto, se habilita o deshabilita una elección) se publica un mensaje a un *exchange* de tipo topic (`elecciones.eventos`), a través de la interfaz `notificaciones.EventoElectoralPublicador` (implementación `RabbitEventoElectoralPublicador`) — los servicios no dependen de RabbitMQ directamente, igual que con `EncriptadorContrasena`. Incluye un consumidor de referencia (`EventoElectoralLogListener`) suscrito a todos los eventos, a modo de auditoría y como prueba de que la infraestructura funciona de extremo a extremo; otros consumidores (email, un dashboard en tiempo real...) pueden añadir su propia cola al mismo exchange sin tocar el código que publica. Es un canal **best-effort**: si el broker no está disponible, la app arranca igual (`RabbitAdmin` con `ignoreDeclarationExceptions`) y un fallo al publicar solo se registra como aviso, nunca hace fallar la operación de negocio que lo originó.
 
 ### Frontend
 
@@ -179,9 +180,10 @@ bbdd_amr_elecciones
 
 ## Tecnologías utilizadas
 
-* **Backend**: Java 17 · Spring Boot 3 (Spring Web, Spring Data JPA/Hibernate, Spring Security) · Maven
+* **Backend**: Java 17 · Spring Boot 3 (Spring Web, Spring Data JPA/Hibernate, Spring Security, Spring AMQP) · Maven
 * **Frontend**: Angular · TypeScript · RxJS
 * MySQL / MariaDB (H2 en memoria para los tests y para previsualizar sin base de datos externa)
+* **RabbitMQ** para la mensajería de eventos electorales
 * JUnit 5 + Mockito + AssertJ + Spring Test / MockMvc (tests unitarios y de integración del backend)
 
 ---
@@ -194,17 +196,28 @@ bbdd_amr_elecciones
 * Maven 3.6+
 * Node.js 20+ y npm (solo para trabajar en el frontend o generar el jar con el front incluido)
 * Un servidor MySQL/MariaDB con la base de datos de `database/bbdd_amr_elecciones.sql` importada
+* Un broker RabbitMQ (opcional: si no está disponible, la app arranca igual y las notificaciones simplemente no se publican — ver más abajo)
 
-### Configuración de la base de datos
+### Configuración de la base de datos y RabbitMQ
 
-La conexión no lleva credenciales fijas en el código: se configura con variables de entorno, con valores por defecto pensados para desarrollo local:
+Ninguna credencial va fija en el código: todo se configura con variables de entorno, con valores por defecto pensados para desarrollo local:
 
 | Variable | Por defecto |
 |---|---|
 | `DB_URL` | `jdbc:mysql://localhost:3306/bbdd_amr_elecciones?useUnicode=true&characterEncoding=UTF-8` |
 | `DB_USUARIO` | `root` |
 | `DB_CONTRASENA` | (vacío) |
+| `RABBITMQ_HOST` | `localhost` |
+| `RABBITMQ_PORT` | `5672` |
+| `RABBITMQ_USUARIO` | `guest` |
+| `RABBITMQ_CONTRASENA` | `guest` |
 | `SERVER_PORT` | `8080` |
+
+Para levantar un RabbitMQ local rápidamente (con panel de administración en `http://localhost:15672`, usuario/contraseña `guest`/`guest`):
+
+```bash
+docker compose up -d
+```
 
 ### Desarrollo: dos servidores en paralelo
 
@@ -242,6 +255,8 @@ El repositorio incluye un `Dockerfile` multi-stage (compila Angular, compila el 
 2. En Render: **New +** → **Blueprint**, conecta tu cuenta de GitHub y selecciona este repositorio (Render detecta `render.yaml` automáticamente).
 3. Al desplegar, Render te pedirá rellenar `DB_URL`, `DB_USUARIO` y `DB_CONTRASENA` con los datos que te dio el proveedor de MySQL (el formato de `DB_URL` es el mismo que en local: `jdbc:mysql://<host>:<puerto>/<nombre_bd>?useUnicode=true&characterEncoding=UTF-8`).
 4. Render construye la imagen Docker y publica la app en una URL `https://<nombre>.onrender.com`.
+
+RabbitMQ es opcional: si no configuras `RABBITMQ_HOST` en Render, la app arranca igual y simplemente no llega a publicar las notificaciones (se registra un aviso en el log, nada más). Si quieres que funcionen, añade también `RABBITMQ_HOST`, `RABBITMQ_PORT`, `RABBITMQ_USUARIO` y `RABBITMQ_CONTRASENA` apuntando a un broker gratuito externo (por ejemplo CloudAMQP, que ofrece un plan gratuito pequeño pensado para esto).
 
 Ten en cuenta las limitaciones propias de un tier gratuito: el servicio "duerme" tras un rato de inactividad (la primera petición tras dormir tarda unos segundos en responder) y las bases de datos gratuitas de terceros suelen tener límites de almacenamiento pequeños — para un proyecto en producción real, conviene pasar a un plan de pago.
 

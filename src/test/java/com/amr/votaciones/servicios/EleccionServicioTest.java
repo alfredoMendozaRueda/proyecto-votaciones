@@ -8,8 +8,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.amr.votaciones.eventos.EleccionDeshabilitadaEvento;
+import com.amr.votaciones.eventos.EleccionHabilitadaEvento;
 import com.amr.votaciones.excepciones.EleccionYaExisteExcepcion;
 import com.amr.votaciones.modelos.Eleccion;
+import com.amr.votaciones.notificaciones.EventoElectoralPublicador;
 import com.amr.votaciones.repositorios.EleccionRepository;
 import com.amr.votaciones.repositorios.UsuarioRepository;
 import com.amr.votaciones.repositorios.VotoRepository;
@@ -32,12 +35,15 @@ class EleccionServicioTest {
     private UsuarioRepository usuarioRepository;
     @Mock
     private VotoRepository votoRepository;
+    @Mock
+    private EventoElectoralPublicador eventoElectoralPublicador;
 
     private EleccionServicio eleccionServicio;
 
     @BeforeEach
     void crearServicio() {
-        eleccionServicio = new EleccionServicio(eleccionRepository, usuarioRepository, votoRepository);
+        eleccionServicio = new EleccionServicio(eleccionRepository, usuarioRepository, votoRepository,
+                eventoElectoralPublicador);
     }
 
     @Test
@@ -79,6 +85,46 @@ class EleccionServicioTest {
         assertThat(eliminada).isFalse();
         verify(usuarioRepository, never()).reiniciarTodosLosVotos();
         verify(votoRepository, never()).borrarTodos();
+    }
+
+    @Test
+    void alHabilitarPublicaElEvento() {
+        when(eleccionRepository.habilitar(ID_ELECCION)).thenReturn(1);
+
+        boolean habilitada = eleccionServicio.habilitar(ID_ELECCION);
+
+        assertThat(habilitada).isTrue();
+        verify(eventoElectoralPublicador, times(1)).publicar(any(EleccionHabilitadaEvento.class));
+    }
+
+    @Test
+    void siNoSeHabilitaNoPublicaElEvento() {
+        when(eleccionRepository.habilitar(ID_ELECCION)).thenReturn(0);
+
+        boolean habilitada = eleccionServicio.habilitar(ID_ELECCION);
+
+        assertThat(habilitada).isFalse();
+        verify(eventoElectoralPublicador, never()).publicar(any());
+    }
+
+    @Test
+    void alDeshabilitarPublicaElEvento() {
+        when(eleccionRepository.deshabilitar(ID_ELECCION)).thenReturn(1);
+
+        boolean deshabilitada = eleccionServicio.deshabilitar(ID_ELECCION);
+
+        assertThat(deshabilitada).isTrue();
+        verify(eventoElectoralPublicador, times(1)).publicar(any(EleccionDeshabilitadaEvento.class));
+    }
+
+    @Test
+    void siNoSeDeshabilitaNoPublicaElEvento() {
+        when(eleccionRepository.deshabilitar(ID_ELECCION)).thenReturn(0);
+
+        boolean deshabilitada = eleccionServicio.deshabilitar(ID_ELECCION);
+
+        assertThat(deshabilitada).isFalse();
+        verify(eventoElectoralPublicador, never()).publicar(any());
     }
 
     @Test

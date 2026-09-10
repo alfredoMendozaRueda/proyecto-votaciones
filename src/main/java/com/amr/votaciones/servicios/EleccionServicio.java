@@ -1,10 +1,14 @@
 package com.amr.votaciones.servicios;
 
+import com.amr.votaciones.eventos.EleccionDeshabilitadaEvento;
+import com.amr.votaciones.eventos.EleccionHabilitadaEvento;
 import com.amr.votaciones.excepciones.EleccionYaExisteExcepcion;
 import com.amr.votaciones.modelos.Eleccion;
+import com.amr.votaciones.notificaciones.EventoElectoralPublicador;
 import com.amr.votaciones.repositorios.EleccionRepository;
 import com.amr.votaciones.repositorios.UsuarioRepository;
 import com.amr.votaciones.repositorios.VotoRepository;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
@@ -19,13 +23,16 @@ public class EleccionServicio {
     private final EleccionRepository eleccionRepository;
     private final UsuarioRepository usuarioRepository;
     private final VotoRepository votoRepository;
+    private final EventoElectoralPublicador eventoElectoralPublicador;
 
     public EleccionServicio(EleccionRepository eleccionRepository,
                              UsuarioRepository usuarioRepository,
-                             VotoRepository votoRepository) {
+                             VotoRepository votoRepository,
+                             EventoElectoralPublicador eventoElectoralPublicador) {
         this.eleccionRepository = eleccionRepository;
         this.usuarioRepository = usuarioRepository;
         this.votoRepository = votoRepository;
+        this.eventoElectoralPublicador = eventoElectoralPublicador;
     }
 
     @Transactional
@@ -39,12 +46,20 @@ public class EleccionServicio {
 
     @Transactional
     public boolean habilitar(String idElecciones) {
-        return eleccionRepository.habilitar(idElecciones) == 1;
+        boolean habilitada = eleccionRepository.habilitar(idElecciones) == 1;
+        if (habilitada) {
+            eventoElectoralPublicador.publicar(new EleccionHabilitadaEvento(idElecciones, Instant.now()));
+        }
+        return habilitada;
     }
 
     @Transactional
     public boolean deshabilitar(String idElecciones) {
-        return eleccionRepository.deshabilitar(idElecciones) == 1;
+        boolean deshabilitada = eleccionRepository.deshabilitar(idElecciones) == 1;
+        if (deshabilitada) {
+            eventoElectoralPublicador.publicar(new EleccionDeshabilitadaEvento(idElecciones, Instant.now()));
+        }
+        return deshabilitada;
     }
 
     /**

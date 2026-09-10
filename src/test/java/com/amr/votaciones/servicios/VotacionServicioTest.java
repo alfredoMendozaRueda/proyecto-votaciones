@@ -8,6 +8,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.amr.votaciones.eventos.VotoRegistradoEvento;
 import com.amr.votaciones.excepciones.DniNoEnCensoExcepcion;
 import com.amr.votaciones.excepciones.EleccionNoDisponibleExcepcion;
 import com.amr.votaciones.excepciones.SinPartidosDisponiblesExcepcion;
@@ -15,6 +16,7 @@ import com.amr.votaciones.excepciones.YaHaVotadoExcepcion;
 import com.amr.votaciones.modelos.Censo;
 import com.amr.votaciones.modelos.Eleccion;
 import com.amr.votaciones.modelos.Partido;
+import com.amr.votaciones.notificaciones.EventoElectoralPublicador;
 import com.amr.votaciones.repositorios.CensoRepository;
 import com.amr.votaciones.repositorios.EleccionRepository;
 import com.amr.votaciones.repositorios.PartidoRepository;
@@ -46,13 +48,15 @@ class VotacionServicioTest {
     private UsuarioRepository usuarioRepository;
     @Mock
     private VotoRepository votoRepository;
+    @Mock
+    private EventoElectoralPublicador eventoElectoralPublicador;
 
     private VotacionServicio votacionServicio;
 
     @BeforeEach
     void crearServicio() {
         votacionServicio = new VotacionServicio(eleccionRepository, partidoRepository, censoRepository,
-                usuarioRepository, votoRepository);
+                usuarioRepository, votoRepository, eventoElectoralPublicador);
     }
 
     @Test
@@ -102,6 +106,7 @@ class VotacionServicioTest {
 
         verify(votoRepository, times(1)).registrar(any());
         verify(usuarioRepository, times(1)).marcarComoVotado(DNI);
+        verify(eventoElectoralPublicador, times(1)).publicar(any(VotoRegistradoEvento.class));
     }
 
     @Test
@@ -112,6 +117,7 @@ class VotacionServicioTest {
                 .isInstanceOf(YaHaVotadoExcepcion.class);
 
         verify(votoRepository, never()).registrar(any());
+        verify(eventoElectoralPublicador, never()).publicar(any());
     }
 
     @Test
@@ -123,5 +129,6 @@ class VotacionServicioTest {
                 .isInstanceOf(DniNoEnCensoExcepcion.class);
 
         verify(votoRepository, never()).registrar(any());
+        verify(eventoElectoralPublicador, never()).publicar(any());
     }
 }
