@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<body>
+    <div th:fragment="barraSuperior" class="barra-superior">
+        <span class="titulo-app">Sistema de Votaciones</span>
+        <span sec:authorize="hasRole('ADMIN')" class="rol-usuario">admin</span>
+        <span sec:authorize="hasRole('ANALISTA')" class="rol-usuario">analista</span>
+        <span sec:authorize="hasRole('VOTANTE')" class="rol-usuario">votante</span>
+    </div>
+</body>
+</html>

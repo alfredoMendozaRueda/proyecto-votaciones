@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Inicio de sesión - Sistema de Votaciones</title>
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+    <div class="container">
+        <h1>Inicio de sesión</h1>
+        <div th:if="${param.error}" class="error">DNI o contraseña incorrectos.</div>
+        <form th:action="@{/login}" method="post" accept-charset="UTF-8">
+            <label for="dni">DNI</label>
+            <input type="text" id="dni" name="dni" maxlength="9" autocomplete="username" required>
+
+            <label for="contrasena">Contraseña</label>
+            <input type="password" id="contrasena" name="contrasena" autocomplete="current-password" required>
+
+            <input type="submit" value="Iniciar sesión">
+        </form>
+        <p>Si no tiene cuenta, regístrese <a th:href="@{/registro}">aquí</a></p>
+    </div>
+</body>
+</html>

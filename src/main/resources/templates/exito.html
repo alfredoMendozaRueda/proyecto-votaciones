@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Operación correcta - Sistema de Votaciones</title>
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+    <div th:replace="~{fragments/barra :: barraSuperior}"></div>
+    <div class="container">
+        <h1>¡Todo correcto!</h1>
+        <p class="success" th:text="${mensaje} ?: 'Operación realizada.'">Mensaje</p>
+
+        <form sec:authorize="hasRole('ADMIN')" th:action="@{/admin/panel}">
+            <input type="submit" value="Volver al panel">
+        </form>
+        <form sec:authorize="hasRole('ANALISTA')" th:action="@{/analista/panel}">
+            <input type="submit" value="Volver al panel">
+        </form>
+        <form sec:authorize="hasRole('VOTANTE')" th:action="@{/usuario/panel}">
+            <input type="submit" value="Volver al panel">
+        </form>
+    </div>
+</body>
+</html>

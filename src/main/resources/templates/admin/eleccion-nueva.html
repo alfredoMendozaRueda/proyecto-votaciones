@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Añadir elección - Sistema de Votaciones</title>
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+    <div th:replace="~{fragments/barra :: barraSuperior}"></div>
+    <div class="container">
+        <h1>Añadir elección</h1>
+        <form th:action="@{/admin/elecciones/nueva}" method="post">
+            <label for="idElecciones">ID de elección</label>
+            <input type="text" id="idElecciones" name="idElecciones" required>
+
+            <label for="descripcion">Descripción</label>
+            <input type="text" id="descripcion" name="descripcion" required>
+
+            <label for="fechaFin">Fecha en la que finalizará</label>
+            <input type="date" id="fechaFin" name="fechaFin" required>
+
+            <input type="submit" value="Crear nueva elección">
+        </form>
+        <hr class="separador">
+        <form th:action="@{/admin/panel}">
+            <input type="submit" value="Volver al panel">
+        </form>
+    </div>
+</body>
+</html>

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Panel de analista - Sistema de Votaciones</title>
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+    <div th:replace="~{fragments/barra :: barraSuperior}"></div>
+    <div class="container">
+        <h1>Panel de analista</h1>
+        <div class="acciones">
+            <form th:action="@{/analista/partidos/comprobar}"><input type="submit" value="Comprobar partidos"></form>
+            <form th:action="@{/admin/partidos}"><input type="submit" value="Dar de alta un nuevo partido"></form>
+            <form th:action="@{/analista/candidatos}"><input type="submit" value="Ver candidatos por localidad"></form>
+            <form th:action="@{/analista/participacion/recalcular}" method="post"><input type="submit" value="Obtener participación"></form>
+            <form th:action="@{/analista/participacion/porcentajes}"><input type="submit" value="Ver porcentaje de participación"></form>
+            <form th:action="@{/analista/cookie/crear}" method="post"><input type="submit" value="Crear cookie"></form>
+            <form th:action="@{/analista/cookie/ver}"><input type="submit" value="Ver cookie"></form>
+            <form th:action="@{/logout}" method="post"><input type="submit" value="Salir de la aplicación"></form>
+        </div>
+    </div>
+</body>
+</html>

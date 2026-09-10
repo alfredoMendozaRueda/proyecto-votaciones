@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${titulo} + ' - Sistema de Votaciones'">Resultados</title>
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+    <div th:replace="~{fragments/barra :: barraSuperior}"></div>
+    <div class="container-ancho">
+        <h1 th:text="${titulo}">Resultados</h1>
+        <div class="tabla-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Partido político</th>
+                        <th>Número de votos</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="resultado : ${resultados}">
+                        <td th:text="${resultado.siglas}">Siglas</td>
+                        <td th:text="${resultado.votos}">0</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <form sec:authorize="hasRole('ADMIN')" th:action="@{/admin/panel}">
+            <input type="submit" value="Volver al panel">
+        </form>
+        <form sec:authorize="hasRole('VOTANTE')" th:action="@{/usuario/panel}">
+            <input type="submit" value="Volver al panel">
+        </form>
+    </div>
+</body>
+</html>

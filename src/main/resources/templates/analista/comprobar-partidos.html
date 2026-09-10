@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Partidos disponibles - Sistema de Votaciones</title>
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+    <div th:replace="~{fragments/barra :: barraSuperior}"></div>
+    <div class="container">
+        <h1>Puedes votar a</h1>
+        <p>
+            <span th:each="partido, iter : ${partidos}">
+                <span th:text="${partido.siglas}">Siglas</span><span th:if="${!iter.last}">, </span>
+            </span>
+        </p>
+        <form th:action="@{/analista/panel}">
+            <input type="submit" value="Volver al panel">
+        </form>
+    </div>
+</body>
+</html>

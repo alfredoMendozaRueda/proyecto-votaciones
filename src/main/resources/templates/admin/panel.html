@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Panel de administración - Sistema de Votaciones</title>
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+    <div th:replace="~{fragments/barra :: barraSuperior}"></div>
+    <div class="container">
+        <h1>Panel de administración</h1>
+        <div class="acciones">
+            <form th:action="@{/admin/partidos}"><input type="submit" value="Gestión de partidos"></form>
+            <form th:action="@{/admin/candidatos}"><input type="submit" value="Gestión de candidatos"></form>
+            <form th:action="@{/admin/elecciones/nueva}"><input type="submit" value="Añadir elección"></form>
+            <form th:action="@{/admin/elecciones/gestionar}"><input type="submit" value="Habilitar/deshabilitar/eliminar elección"></form>
+            <form th:action="@{/votacion}"><input type="submit" value="Votar"></form>
+            <form th:action="@{/resultados}"><input type="submit" value="Ver resultados"></form>
+            <form th:action="@{/ganador}"><input type="submit" value="Ver presidente ganador"></form>
+            <form th:action="@{/admin/censo}"><input type="submit" value="Ver censo"></form>
+            <form th:action="@{/logout}" method="post"><input type="submit" value="Salir de la aplicación"></form>
+        </div>
+    </div>
+</body>
+</html>

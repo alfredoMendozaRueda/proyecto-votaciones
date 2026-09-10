@@ -200,11 +200,11 @@ CREATE TABLE `partidos` (
 --
 
 INSERT INTO `partidos` (`siglas`, `descripcion`, `imagen`) VALUES
-('INMA', 'Inma Moreno', '../../imagenes/inma.jpg'),
-('PODEMOS', 'podemos', '../../imagenes/PODEMOS.jpg'),
-('PP', 'Partido Popular', '../../imagenes/PP.jpg'),
-('PSOE', 'Partido Socialista Obrero EspaÃ±ol', '../../imagenes/PSOE.jpg'),
-('VOX', 'VOX', '../../imagenes/VOX.jpg');
+('INMA', 'Inma Moreno', '/imagenes/inma.jpg'),
+('PODEMOS', 'podemos', '/imagenes/PODEMOS.jpg'),
+('PP', 'Partido Popular', '/imagenes/PP.jpg'),
+('PSOE', 'Partido Socialista Obrero EspaÃ±ol', '/imagenes/PSOE.jpg'),
+('VOX', 'VOX', '/imagenes/VOX.jpg');
 
 -- --------------------------------------------------------
 

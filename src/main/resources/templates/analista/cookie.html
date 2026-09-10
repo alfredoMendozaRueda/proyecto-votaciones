@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cookie del ganador - Sistema de Votaciones</title>
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+    <div th:replace="~{fragments/barra :: barraSuperior}"></div>
+    <div class="container">
+        <h1 th:text="${partidoGanador} ?: 'Todavía no se ha creado la cookie'">Ganador</h1>
+        <form th:action="@{/analista/panel}">
+            <input type="submit" value="Volver al panel">
+        </form>
+    </div>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Candidatos - Sistema de Votaciones</title>
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+    <div th:replace="~{fragments/barra :: barraSuperior}"></div>
+    <div class="container-ancho">
+        <h1 th:text="'Candidatos en ' + ${nombreLocalidad}">Candidatos</h1>
+        <p th:if="${#lists.isEmpty(candidatos)}">No hay candidatos censados en esta localidad.</p>
+        <div class="tabla-responsive" th:unless="${#lists.isEmpty(candidatos)}">
+            <table>
+                <thead>
+                    <tr>
+                        <th>DNI</th>
+                        <th>Nombre completo</th>
+                        <th>Partido</th>
+                        <th>Orden</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="candidato : ${candidatos}">
+                        <td th:text="${candidato.dni}">DNI</td>
+                        <td th:text="${candidato.nombreCompleto}">Nombre</td>
+                        <td th:text="${candidato.siglasPartido}">Partido</td>
+                        <td th:text="${candidato.orden}">Orden</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <form th:action="@{/analista/panel}">
+            <input type="submit" value="Volver al panel">
+        </form>
+    </div>
+</body>
+</html>

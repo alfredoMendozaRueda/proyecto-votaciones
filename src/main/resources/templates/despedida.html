@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hasta pronto - Sistema de Votaciones</title>
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+    <div class="container">
+        <h1 th:if="${not #strings.isEmpty(nombre)}" th:text="'Hasta la próxima, ' + ${nombre}">Hasta la próxima</h1>
+        <h1 th:unless="${not #strings.isEmpty(nombre)}">Hasta la próxima</h1>
+        <p><a th:href="@{/login}">Volver al inicio de sesión</a></p>
+    </div>
+</body>
+</html>
