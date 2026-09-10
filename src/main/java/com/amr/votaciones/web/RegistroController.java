@@ -4,16 +4,17 @@ import com.amr.votaciones.excepciones.DniNoEnCensoExcepcion;
 import com.amr.votaciones.excepciones.MenorDeEdadExcepcion;
 import com.amr.votaciones.excepciones.UsuarioYaRegistradoExcepcion;
 import com.amr.votaciones.servicios.RegistroServicio;
-import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.GetMapping;
+import com.amr.votaciones.web.dto.MensajeResponse;
+import com.amr.votaciones.web.dto.RegistroRequest;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Alta de una cuenta de votante para una persona ya censada.
  */
-@Controller
+@RestController
 public class RegistroController {
 
     private final RegistroServicio registroServicio;
@@ -22,17 +23,10 @@ public class RegistroController {
         this.registroServicio = registroServicio;
     }
 
-    @GetMapping("/registro")
-    public String formulario() {
-        return "registro";
-    }
-
-    @PostMapping("/registro")
-    public String registrar(@RequestParam String dni, @RequestParam String contrasena,
-                             RedirectAttributes redirectAttributes)
+    @PostMapping("/api/registro")
+    public ResponseEntity<MensajeResponse> registrar(@RequestBody RegistroRequest peticion)
             throws DniNoEnCensoExcepcion, UsuarioYaRegistradoExcepcion, MenorDeEdadExcepcion {
-        registroServicio.registrarVotante(dni, contrasena);
-        redirectAttributes.addFlashAttribute("mensaje", "Usuario registrado con éxito");
-        return "redirect:/exito";
+        registroServicio.registrarVotante(peticion.dni(), peticion.contrasena());
+        return ResponseEntity.ok(new MensajeResponse("Usuario registrado con éxito"));
     }
 }

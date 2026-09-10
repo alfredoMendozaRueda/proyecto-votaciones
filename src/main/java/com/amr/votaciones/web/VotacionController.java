@@ -5,18 +5,20 @@ import com.amr.votaciones.excepciones.EleccionNoDisponibleExcepcion;
 import com.amr.votaciones.excepciones.SinPartidosDisponiblesExcepcion;
 import com.amr.votaciones.excepciones.YaHaVotadoExcepcion;
 import com.amr.votaciones.servicios.VotacionServicio;
+import com.amr.votaciones.web.dto.MensajeResponse;
+import com.amr.votaciones.web.dto.PartidoResponse;
+import com.amr.votaciones.web.dto.VotarRequest;
 import java.security.Principal;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
+import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Pagina de votacion, compartida por los roles ADMIN y VOTANTE.
+ * Voto del usuario autenticado, compartido por los roles ADMIN y VOTANTE.
  */
-@Controller
+@RestController
 public class VotacionController {
 
     private final VotacionServicio votacionServicio;
@@ -25,17 +27,15 @@ public class VotacionController {
         this.votacionServicio = votacionServicio;
     }
 
-    @GetMapping("/votacion")
-    public String formulario(Model model) throws EleccionNoDisponibleExcepcion, SinPartidosDisponiblesExcepcion {
-        model.addAttribute("partidos", votacionServicio.partidosParaVotar());
-        return "votacion";
+    @GetMapping("/api/votacion/partidos")
+    public List<PartidoResponse> partidosParaVotar() throws EleccionNoDisponibleExcepcion, SinPartidosDisponiblesExcepcion {
+        return votacionServicio.partidosParaVotar().stream().map(PartidoResponse::de).toList();
     }
 
-    @PostMapping("/votacion")
-    public String votar(@RequestParam String siglasPartido, Principal principal,
-                         RedirectAttributes redirectAttributes) throws YaHaVotadoExcepcion, DniNoEnCensoExcepcion {
-        votacionServicio.votar(principal.getName(), siglasPartido);
-        redirectAttributes.addFlashAttribute("mensaje", "Voto registrado con éxito");
-        return "redirect:/exito";
+    @PostMapping("/api/votacion")
+    public MensajeResponse votar(@RequestBody VotarRequest peticion, Principal principal)
+            throws YaHaVotadoExcepcion, DniNoEnCensoExcepcion {
+        votacionServicio.votar(principal.getName(), peticion.siglasPartido());
+        return new MensajeResponse("Voto registrado con éxito");
     }
 }
