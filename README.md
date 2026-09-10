@@ -161,7 +161,7 @@ bbdd_amr_elecciones
 ### Backend
 
 * **Arquitectura en capas**: los **controladores REST** (`web`, `@RestController`) son finos y delegan en la capa de **servicios** (`servicios`, anotada `@Service`/`@Transactional`), que a su vez depende de **interfaces de repositorio Spring Data JPA** (`repositorios`, `extends JpaRepository`). Los controladores solo conocen las interfaces de servicio, nunca JPA/SQL directamente.
-* **API JSON**: cada pantalla del front tiene su propio endpoint bajo `/api/**`; las peticiones y respuestas se modelan con **records** de Java (`web/dto`).
+* **API JSON**: cada pantalla del front tiene su propio endpoint bajo `/api/**`; las peticiones y respuestas se modelan con **records** de Java (`web/dto`). Documentada automáticamente con **springdoc-openapi**: Swagger UI en `/swagger-ui.html`, especificación OpenAPI en `/v3/api-docs` (la autenticación es por cookie de sesión, no Bearer token — para probar un endpoint protegido desde Swagger UI hay que iniciar sesión antes en la propia app, mismo origen).
 * **Persistencia con Spring Data JPA**: las entidades (`modelos`) están anotadas con JPA; los recuentos de resultados (global, por localidad, por comunidad) y el porcentaje de participación se calculan con una única consulta SQL agregada por caso (nativa u JPQL), evitando los bucles N+1 de la versión original basada en JDBC manual.
 * **Spring Security para SPA**: sin `formLogin` ni vistas de error propias del backend. El login es un `POST /api/auth/login` en JSON que autentica manualmente contra un `AuthenticationManager` y persiste la sesión en una cookie `JSESSIONID`; `GET /api/auth/me` permite a Angular recuperar la sesión activa al recargar la página. Control de acceso declarativo por rol (`ROLE_ADMIN`, `ROLE_ANALISTA`, `ROLE_VOTANTE`) en `SecurityConfig`. Protección CSRF activa mediante cookie `XSRF-TOKEN` legible por JavaScript (patrón *double submit cookie* que el `HttpClient` de Angular rellena automáticamente en la cabecera `X-XSRF-TOKEN`); los errores de autenticación/autorización devuelven `401`/`403` sin cuerpo en vez de redirigir a una página de login.
 * La contraseña se verifica a través de un `PasswordEncoder` (`Md5PasswordEncoder`) que envuelve `seguridad.EncriptadorContrasena` (implementación MD5 por compatibilidad con los datos existentes; ver aviso de seguridad en `EncriptadorMd5`).
@@ -181,7 +181,7 @@ bbdd_amr_elecciones
 
 ## Tecnologías utilizadas
 
-* **Backend**: Java 17 · Spring Boot 3 (Spring Web, Spring Data JPA/Hibernate, Spring Security, Spring AMQP) · Maven
+* **Backend**: Java 17 · Spring Boot 3 (Spring Web, Spring Data JPA/Hibernate, Spring Security, Spring AMQP) · Maven · springdoc-openapi (Swagger UI)
 * **Frontend**: Angular · TypeScript · RxJS · Bootstrap 5 · ESLint + Prettier · Karma + Jasmine
 * MySQL / MariaDB (H2 en memoria para los tests y para previsualizar sin base de datos externa)
 * **RabbitMQ** para la mensajería de eventos electorales
