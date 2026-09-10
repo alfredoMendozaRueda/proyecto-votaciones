@@ -1,4 +1,4 @@
-<div class="container-ancho">
+<div class="container py-4 animar-entrada">
   <h1><app-icon nombre="partidos" [size]="26" [strokeWidth]="1.6" />Partidos políticos</h1>
 
   @if (error()) {
@@ -8,22 +8,22 @@
     <app-alert tipo="exito" [mensaje]="mensajeExito()!" />
   }
 
-  <form class="tarjeta" (ngSubmit)="crear()">
-    <label>
-      Siglas
-      <input type="text" name="siglas" [(ngModel)]="siglas" required />
-    </label>
-    <label>
-      Descripción
-      <input type="text" name="descripcion" [(ngModel)]="descripcion" required />
-    </label>
-    <label>
-      Nombre del archivo de imagen
-      <input type="text" name="imagen" [(ngModel)]="imagen" placeholder="PARTIDO.jpg" required />
-    </label>
-    <button type="submit" [disabled]="enviando()">
+  <form class="card card-body shadow-sm d-flex flex-column gap-3" (ngSubmit)="crear()">
+    <div>
+      <label class="form-label" for="siglas">Siglas</label>
+      <input class="form-control" id="siglas" type="text" name="siglas" [(ngModel)]="siglas" required />
+    </div>
+    <div>
+      <label class="form-label" for="descripcion">Descripción</label>
+      <input class="form-control" id="descripcion" type="text" name="descripcion" [(ngModel)]="descripcion" required />
+    </div>
+    <div>
+      <label class="form-label" for="imagen">Nombre del archivo de imagen</label>
+      <input class="form-control" id="imagen" type="text" name="imagen" [(ngModel)]="imagen" placeholder="PARTIDO.jpg" required />
+    </div>
+    <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2" [disabled]="enviando()">
       @if (enviando()) {
-        <span class="spinner"></span>
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       } @else {
         <app-icon nombre="partidos" [size]="16" />
       }
@@ -31,36 +31,36 @@
     </button>
   </form>
 
-  <hr class="separador" />
+  <hr class="my-4" />
 
-  <div class="tabla-responsive">
-    <table>
-      <thead>
+  <div class="table-responsive card shadow-sm">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
         <tr>
           <th>Logo</th>
           <th>Siglas</th>
           <th>Descripción</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody [class.placeholder-glow]="cargando()">
         @if (cargando()) {
           @for (fila of [1, 2, 3]; track fila) {
-            <tr class="skeleton-fila">
-              <td><span class="skeleton" style="display: block; width: 36px; height: 36px;"></span></td>
-              <td><span class="skeleton skeleton-linea" style="width: 4rem;"></span></td>
-              <td><span class="skeleton skeleton-linea" style="width: 10rem;"></span></td>
+            <tr>
+              <td><span class="placeholder rounded" style="display: block; width: 36px; height: 36px;"></span></td>
+              <td><span class="placeholder col-8"></span></td>
+              <td><span class="placeholder col-10"></span></td>
             </tr>
           }
         } @else {
           @for (partido of partidos(); track partido.siglas) {
             <tr>
-              <td><img class="miniatura-partido" [src]="partido.imagen" [alt]="partido.descripcion" /></td>
+              <td><img class="miniatura-partido rounded border" [src]="partido.imagen" [alt]="partido.descripcion" /></td>
               <td>{{ partido.siglas }}</td>
               <td>{{ partido.descripcion }}</td>
             </tr>
           } @empty {
             <tr>
-              <td colspan="3" class="texto-muted">Todavía no hay partidos registrados.</td>
+              <td colspan="3" class="text-secondary">Todavía no hay partidos registrados.</td>
             </tr>
           }
         }

@@ -1,4 +1,4 @@
-<div class="container">
+<div class="container py-4 animar-entrada">
   <h1><app-icon nombre="candidatos" [size]="26" [strokeWidth]="1.6" />Registrar candidato</h1>
 
   @if (error()) {
@@ -8,31 +8,31 @@
     <app-alert tipo="exito" [mensaje]="mensajeExito()!" />
   }
 
-  <form class="tarjeta" (ngSubmit)="crear()">
-    <label>
-      DNI
-      <input type="text" name="dni" [(ngModel)]="dni" required />
-    </label>
-    <label>
-      Nombre completo
-      <input type="text" name="nombreCompleto" [(ngModel)]="nombreCompleto" required />
-    </label>
-    <label>
-      Partido
-      <select name="siglasPartido" [(ngModel)]="siglasPartido" required>
+  <form class="card card-body shadow-sm d-flex flex-column gap-3" (ngSubmit)="crear()">
+    <div>
+      <label class="form-label" for="dni">DNI</label>
+      <input class="form-control" id="dni" type="text" name="dni" [(ngModel)]="dni" required />
+    </div>
+    <div>
+      <label class="form-label" for="nombreCompleto">Nombre completo</label>
+      <input class="form-control" id="nombreCompleto" type="text" name="nombreCompleto" [(ngModel)]="nombreCompleto" required />
+    </div>
+    <div>
+      <label class="form-label" for="siglasPartido">Partido</label>
+      <select class="form-select" id="siglasPartido" name="siglasPartido" [(ngModel)]="siglasPartido" required>
         <option value="" disabled selected>Selecciona un partido</option>
         @for (partido of partidos(); track partido.siglas) {
           <option [value]="partido.siglas">{{ partido.siglas }} · {{ partido.descripcion }}</option>
         }
       </select>
-    </label>
-    <label>
-      Orden en la candidatura
-      <input type="number" name="orden" [(ngModel)]="orden" min="1" required />
-    </label>
-    <button type="submit" [disabled]="enviando()">
+    </div>
+    <div>
+      <label class="form-label" for="orden">Orden en la candidatura</label>
+      <input class="form-control" id="orden" type="number" name="orden" [(ngModel)]="orden" min="1" required />
+    </div>
+    <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2" [disabled]="enviando()">
       @if (enviando()) {
-        <span class="spinner"></span>
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       } @else {
         <app-icon nombre="candidatos" [size]="16" />
       }

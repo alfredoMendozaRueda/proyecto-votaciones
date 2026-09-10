@@ -1,4 +1,4 @@
-<div class="container-ancho">
+<div class="container py-4 animar-entrada">
   <h1><app-icon nombre="elecciones" [size]="26" [strokeWidth]="1.6" />Elecciones</h1>
 
   @if (error()) {
@@ -9,22 +9,22 @@
   }
 
   <h2>Nueva elección</h2>
-  <form class="tarjeta" (ngSubmit)="crear()">
-    <label>
-      Identificador
-      <input type="text" name="idElecciones" [(ngModel)]="idElecciones" required />
-    </label>
-    <label>
-      Descripción
-      <input type="text" name="descripcion" [(ngModel)]="descripcion" required />
-    </label>
-    <label>
-      Fecha de fin
-      <input type="date" name="fechaFin" [(ngModel)]="fechaFin" required />
-    </label>
-    <button type="submit" [disabled]="enviando()">
+  <form class="card card-body shadow-sm d-flex flex-column gap-3" (ngSubmit)="crear()">
+    <div>
+      <label class="form-label" for="idElecciones">Identificador</label>
+      <input class="form-control" id="idElecciones" type="text" name="idElecciones" [(ngModel)]="idElecciones" required />
+    </div>
+    <div>
+      <label class="form-label" for="descripcion">Descripción</label>
+      <input class="form-control" id="descripcion" type="text" name="descripcion" [(ngModel)]="descripcion" required />
+    </div>
+    <div>
+      <label class="form-label" for="fechaFin">Fecha de fin</label>
+      <input class="form-control" id="fechaFin" type="date" name="fechaFin" [(ngModel)]="fechaFin" required />
+    </div>
+    <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2" [disabled]="enviando()">
       @if (enviando()) {
-        <span class="spinner"></span>
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       } @else {
         <app-icon nombre="elecciones" [size]="16" />
       }
@@ -32,34 +32,34 @@
     </button>
   </form>
 
-  <hr class="separador" />
+  <hr class="my-4" />
 
   <h2>Gestionar elección existente</h2>
-  <div class="tarjeta">
-    <label>
-      Identificador de la elección
-      <input type="text" name="idGestion" [(ngModel)]="idGestion" required />
-    </label>
-    <div class="acciones">
-      <button type="button" [disabled]="!!procesando()" (click)="habilitar()">
+  <div class="card card-body shadow-sm d-flex flex-column gap-3">
+    <div>
+      <label class="form-label" for="idGestion">Identificador de la elección</label>
+      <input class="form-control" id="idGestion" type="text" name="idGestion" [(ngModel)]="idGestion" required />
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-2" [disabled]="!!procesando()" (click)="habilitar()">
         @if (procesando() === 'habilitar') {
-          <span class="spinner"></span>
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
         } @else {
           <app-icon nombre="exito" [size]="16" />
         }
         Habilitar
       </button>
-      <button type="button" class="boton-secundario" [disabled]="!!procesando()" (click)="deshabilitar()">
+      <button type="button" class="btn btn-outline-primary d-inline-flex align-items-center gap-2" [disabled]="!!procesando()" (click)="deshabilitar()">
         @if (procesando() === 'deshabilitar') {
-          <span class="spinner"></span>
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
         } @else {
           <app-icon nombre="error" [size]="16" />
         }
         Deshabilitar
       </button>
-      <button type="button" class="boton-peligro" [disabled]="!!procesando()" (click)="eliminar()">
+      <button type="button" class="btn btn-danger d-inline-flex align-items-center gap-2" [disabled]="!!procesando()" (click)="eliminar()">
         @if (procesando() === 'eliminar') {
-          <span class="spinner"></span>
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
         } @else {
           <app-icon nombre="papelera" [size]="16" />
         }

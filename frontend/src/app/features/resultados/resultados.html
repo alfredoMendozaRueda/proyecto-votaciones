@@ -1,47 +1,47 @@
-<div class="container-ancho">
+<div class="container py-4 animar-entrada">
   <h1><app-icon nombre="resultados" [size]="26" [strokeWidth]="1.6" />Resultados electorales</h1>
 
   @if (error()) {
     <app-alert tipo="error" [mensaje]="error()!" />
   }
 
-  <form class="tarjeta" (ngSubmit)="consultar()">
-    <label>
-      Ámbito
-      <select name="ambito" [(ngModel)]="ambito">
+  <form class="card card-body shadow-sm d-flex flex-column gap-3" (ngSubmit)="consultar()">
+    <div>
+      <label class="form-label" for="ambito">Ámbito</label>
+      <select class="form-select" id="ambito" name="ambito" [(ngModel)]="ambito">
         <option value="todo">Total nacional</option>
         <option value="localidad">Por localidad</option>
         <option value="comunidad">Por comunidad autónoma</option>
       </select>
-    </label>
+    </div>
 
     @if (ambito === 'localidad') {
-      <label>
-        Localidad
-        <select name="localidad" [(ngModel)]="localidad" required>
+      <div>
+        <label class="form-label" for="localidad">Localidad</label>
+        <select class="form-select" id="localidad" name="localidad" [(ngModel)]="localidad" required>
           <option value="" disabled selected>Selecciona una localidad</option>
           @for (nombre of localidades(); track nombre) {
             <option [value]="nombre">{{ nombre }}</option>
           }
         </select>
-      </label>
+      </div>
     }
 
     @if (ambito === 'comunidad') {
-      <label>
-        Comunidad autónoma
-        <select name="comunidad" [(ngModel)]="comunidad" required>
+      <div>
+        <label class="form-label" for="comunidad">Comunidad autónoma</label>
+        <select class="form-select" id="comunidad" name="comunidad" [(ngModel)]="comunidad" required>
           <option value="" disabled selected>Selecciona una comunidad</option>
           @for (nombre of comunidades(); track nombre) {
             <option [value]="nombre">{{ nombre }}</option>
           }
         </select>
-      </label>
+      </div>
     }
 
-    <button type="submit" [disabled]="consultando()">
+    <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2" [disabled]="consultando()">
       @if (consultando()) {
-        <span class="spinner"></span>
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       } @else {
         <app-icon nombre="flecha" [size]="16" />
       }
@@ -49,12 +49,12 @@
     </button>
   </form>
 
-  <hr class="separador" />
+  <hr class="my-4" />
 
   @if (consultando()) {
-    <div class="tabla-responsive">
-      <table>
-        <thead>
+    <div class="table-responsive card shadow-sm">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
           <tr>
             <th>Siglas</th>
             <th>Partido</th>
@@ -62,22 +62,22 @@
             <th>Proporción</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody class="placeholder-glow">
           @for (fila of [1, 2, 3]; track fila) {
-            <tr class="skeleton-fila">
-              <td><span class="skeleton skeleton-linea" style="width: 3rem;"></span></td>
-              <td><span class="skeleton skeleton-linea" style="width: 8rem;"></span></td>
-              <td><span class="skeleton skeleton-linea" style="width: 2rem;"></span></td>
-              <td><span class="skeleton skeleton-linea" style="width: 100%;"></span></td>
+            <tr>
+              <td><span class="placeholder col-8"></span></td>
+              <td><span class="placeholder col-8"></span></td>
+              <td><span class="placeholder col-6"></span></td>
+              <td><span class="placeholder col-12"></span></td>
             </tr>
           }
         </tbody>
       </table>
     </div>
   } @else if (resultados()) {
-    <div class="tabla-responsive">
-      <table>
-        <thead>
+    <div class="table-responsive card shadow-sm">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
           <tr>
             <th>Siglas</th>
             <th>Partido</th>
@@ -91,24 +91,25 @@
               <td>{{ resultado.siglas }}</td>
               <td>{{ resultado.descripcion }}</td>
               <td>{{ resultado.votos }}</td>
-              <td class="celda-barra">
-                <div class="barra-resultado" [style.--porcentaje.%]="porcentaje(resultado.votos)">
-                  <span></span>
+              <td style="min-width: 160px;">
+                <div class="progress barra-resultado" role="progressbar" [attr.aria-valuenow]="porcentaje(resultado.votos)" aria-valuemin="0" aria-valuemax="100">
+                  <div class="progress-bar" [style.width.%]="porcentaje(resultado.votos)"></div>
                 </div>
+                <span class="text-secondary small d-inline-block mt-1">{{ porcentaje(resultado.votos) | number: '1.0-2' }}%</span>
               </td>
             </tr>
           } @empty {
             <tr>
-              <td colspan="4" class="texto-muted">Todavía no hay votos registrados.</td>
+              <td colspan="4" class="text-secondary">Todavía no hay votos registrados.</td>
             </tr>
           }
         </tbody>
       </table>
     </div>
-    <p class="texto-muted">Total de votos: {{ totalVotos() }}</p>
+    <p class="text-secondary mt-2">Total de votos: {{ totalVotos() }}</p>
   }
 
-  <p class="texto-muted">
-    <a routerLink="/ganador"><app-icon nombre="ganador" [size]="15" /> Ver presidente ganador</a>
+  <p class="text-secondary mt-3">
+    <a routerLink="/ganador" class="d-inline-flex align-items-center gap-1"><app-icon nombre="ganador" [size]="15" /> Ver presidente ganador</a>
   </p>
 </div>

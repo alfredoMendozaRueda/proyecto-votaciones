@@ -10,10 +10,15 @@ import { Icon } from '../icon/icon';
   selector: 'app-alert',
   imports: [Icon],
   template: `
-    <p class="alerta" [class.alerta-error]="tipo === 'error'" [class.alerta-exito]="tipo === 'exito'">
+    <div
+      class="alert d-flex align-items-center gap-2 animar-entrada"
+      [class.alert-danger]="tipo === 'error'"
+      [class.alert-success]="tipo === 'exito'"
+      role="alert"
+    >
       <app-icon [nombre]="tipo === 'error' ? 'error' : 'exito'" [size]="18" />
       <span>{{ mensaje }}</span>
-    </p>
+    </div>
   `
 })
 export class Alert {

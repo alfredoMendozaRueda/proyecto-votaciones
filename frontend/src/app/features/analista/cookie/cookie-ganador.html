@@ -1,4 +1,4 @@
-<div class="container">
+<div class="container py-4 animar-entrada">
   <h1><app-icon nombre="cookie" [size]="26" [strokeWidth]="1.6" />Cookie del partido ganador</h1>
 
   @if (error()) {
@@ -8,35 +8,35 @@
     <app-alert tipo="exito" [mensaje]="mensajeExito()!" />
   }
 
-  <div class="tarjeta tarjeta-centrada">
+  <div class="card card-body shadow-sm text-center d-flex flex-column align-items-center gap-2">
     <span class="insignia-circular"><app-icon nombre="cookie" [size]="26" [strokeWidth]="1.6" /></span>
-    <p>
+    <p class="mb-0">
       @if (consultando()) {
-        <span class="skeleton skeleton-linea" style="width: 10rem; display: inline-block;"></span>
+        <span class="placeholder col-6 d-inline-block" style="width: 10rem;"></span>
       } @else if (partidoGanador()) {
         Cookie actual: <strong>{{ partidoGanador() }}</strong>
       } @else {
-        <span class="texto-muted">No hay ninguna cookie guardada.</span>
+        <span class="text-secondary">No hay ninguna cookie guardada.</span>
       }
     </p>
-    <div class="acciones">
-      <button type="button" (click)="crear()" [disabled]="creando()">
+    <div class="d-flex gap-2 flex-wrap justify-content-center my-2">
+      <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-2" (click)="crear()" [disabled]="creando()">
         @if (creando()) {
-          <span class="spinner"></span>
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
         } @else {
           <app-icon nombre="cookie" [size]="16" />
         }
         Crear cookie con el ganador
       </button>
-      <button type="button" class="boton-secundario" (click)="consultar()" [disabled]="consultando()">
+      <button type="button" class="btn btn-outline-primary d-inline-flex align-items-center gap-2" (click)="consultar()" [disabled]="consultando()">
         @if (consultando()) {
-          <span class="spinner"></span>
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
         } @else {
           <app-icon nombre="refrescar" [size]="16" />
         }
         Actualizar
       </button>
     </div>
-    <p class="texto-muted">Solo puede crearse cuando las elecciones están inhabilitadas.</p>
+    <p class="text-secondary mb-0">Solo puede crearse cuando las elecciones están inhabilitadas.</p>
   </div>
 </div>

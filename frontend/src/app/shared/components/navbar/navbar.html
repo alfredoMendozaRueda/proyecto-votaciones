@@ -1,65 +1,113 @@
-<nav class="barra-superior">
-  <a class="titulo-app" [routerLink]="usuario()?.rol === 'admin' ? '/admin/panel' : usuario()?.rol === 'analista' ? '/analista/panel' : '/usuario/panel'">
-    <span class="logo-marca"><app-icon nombre="boleta" [size]="18" /></span>
-    e-Votaciones
-  </a>
+<nav class="navbar navbar-expand-lg navbar-dark navbar-marca">
+  <div class="container-fluid px-3 px-lg-4">
+    <a class="navbar-brand d-inline-flex align-items-center gap-2 fw-bold" [routerLink]="usuario()?.rol === 'admin' ? '/admin/panel' : usuario()?.rol === 'analista' ? '/analista/panel' : '/usuario/panel'">
+      <span class="logo-marca"><app-icon nombre="boleta" [size]="18" /></span>
+      e-Votaciones
+    </a>
 
-  <div class="enlaces">
-    @if (usuario()?.rol === 'admin') {
-      <a routerLink="/admin/panel" routerLinkActive="enlace-activo" [routerLinkActiveOptions]="{ exact: true }">
-        <app-icon nombre="inicio" [size]="16" /> Panel
-      </a>
-      <a routerLink="/admin/partidos" routerLinkActive="enlace-activo">
-        <app-icon nombre="partidos" [size]="16" /> Partidos
-      </a>
-      <a routerLink="/admin/candidatos" routerLinkActive="enlace-activo">
-        <app-icon nombre="candidatos" [size]="16" /> Candidatos
-      </a>
-      <a routerLink="/admin/elecciones" routerLinkActive="enlace-activo">
-        <app-icon nombre="elecciones" [size]="16" /> Elecciones
-      </a>
-      <a routerLink="/admin/censo" routerLinkActive="enlace-activo">
-        <app-icon nombre="censo" [size]="16" /> Censo
-      </a>
-      <a routerLink="/votacion" routerLinkActive="enlace-activo">
-        <app-icon nombre="votar" [size]="16" /> Votar
-      </a>
-      <a routerLink="/resultados" routerLinkActive="enlace-activo">
-        <app-icon nombre="resultados" [size]="16" /> Resultados
-      </a>
-    }
-    @if (usuario()?.rol === 'analista') {
-      <a routerLink="/analista/panel" routerLinkActive="enlace-activo" [routerLinkActiveOptions]="{ exact: true }">
-        <app-icon nombre="inicio" [size]="16" /> Panel
-      </a>
-      <a routerLink="/analista/partidos/comprobar" routerLinkActive="enlace-activo">
-        <app-icon nombre="comprobar" [size]="16" /> Comprobar partidos
-      </a>
-      <a routerLink="/analista/candidatos" routerLinkActive="enlace-activo">
-        <app-icon nombre="candidatos" [size]="16" /> Candidatos por localidad
-      </a>
-      <a routerLink="/analista/porcentajes" routerLinkActive="enlace-activo">
-        <app-icon nombre="porcentajes" [size]="16" /> Participación
-      </a>
-      <a routerLink="/analista/cookie" routerLinkActive="enlace-activo">
-        <app-icon nombre="cookie" [size]="16" /> Cookie ganador
-      </a>
-    }
-    @if (usuario()?.rol === 'votante') {
-      <a routerLink="/usuario/panel" routerLinkActive="enlace-activo" [routerLinkActiveOptions]="{ exact: true }">
-        <app-icon nombre="inicio" [size]="16" /> Panel
-      </a>
-      <a routerLink="/votacion" routerLinkActive="enlace-activo">
-        <app-icon nombre="votar" [size]="16" /> Votar
-      </a>
-      <a routerLink="/resultados" routerLinkActive="enlace-activo">
-        <app-icon nombre="resultados" [size]="16" /> Resultados
-      </a>
-    }
-
-    <span class="rol-usuario">{{ usuario()?.dni }} · {{ usuario()?.rol }}</span>
-    <button type="button" class="boton-salir" (click)="cerrarSesion()">
-      <app-icon nombre="salir" [size]="15" /> Cerrar sesión
+    <button
+      class="navbar-toggler"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#navbarPrincipal"
+      aria-controls="navbarPrincipal"
+      aria-expanded="false"
+      aria-label="Abrir menú"
+    >
+      <span class="navbar-toggler-icon"></span>
     </button>
+
+    <div class="collapse navbar-collapse" id="navbarPrincipal">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0 gap-lg-1">
+        @if (usuario()?.rol === 'admin') {
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/admin/panel" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+              <app-icon nombre="inicio" [size]="16" /> Panel
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/admin/partidos" routerLinkActive="active">
+              <app-icon nombre="partidos" [size]="16" /> Partidos
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/admin/candidatos" routerLinkActive="active">
+              <app-icon nombre="candidatos" [size]="16" /> Candidatos
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/admin/elecciones" routerLinkActive="active">
+              <app-icon nombre="elecciones" [size]="16" /> Elecciones
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/admin/censo" routerLinkActive="active">
+              <app-icon nombre="censo" [size]="16" /> Censo
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/votacion" routerLinkActive="active">
+              <app-icon nombre="votar" [size]="16" /> Votar
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/resultados" routerLinkActive="active">
+              <app-icon nombre="resultados" [size]="16" /> Resultados
+            </a>
+          </li>
+        }
+        @if (usuario()?.rol === 'analista') {
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/analista/panel" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+              <app-icon nombre="inicio" [size]="16" /> Panel
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/analista/partidos/comprobar" routerLinkActive="active">
+              <app-icon nombre="comprobar" [size]="16" /> Comprobar partidos
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/analista/candidatos" routerLinkActive="active">
+              <app-icon nombre="candidatos" [size]="16" /> Candidatos por localidad
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/analista/porcentajes" routerLinkActive="active">
+              <app-icon nombre="porcentajes" [size]="16" /> Participación
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/analista/cookie" routerLinkActive="active">
+              <app-icon nombre="cookie" [size]="16" /> Cookie ganador
+            </a>
+          </li>
+        }
+        @if (usuario()?.rol === 'votante') {
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/usuario/panel" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+              <app-icon nombre="inicio" [size]="16" /> Panel
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/votacion" routerLinkActive="active">
+              <app-icon nombre="votar" [size]="16" /> Votar
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link d-inline-flex align-items-center gap-1" routerLink="/resultados" routerLinkActive="active">
+              <app-icon nombre="resultados" [size]="16" /> Resultados
+            </a>
+          </li>
+        }
+      </ul>
+
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge rounded-pill text-bg-light border border-warning-subtle text-uppercase">{{ usuario()?.dni }} · {{ usuario()?.rol }}</span>
+        <button type="button" class="btn btn-sm btn-outline-light d-inline-flex align-items-center gap-1" (click)="cerrarSesion()">
+          <app-icon nombre="salir" [size]="15" /> Cerrar sesión
+        </button>
+      </div>
+    </div>
   </div>
 </nav>

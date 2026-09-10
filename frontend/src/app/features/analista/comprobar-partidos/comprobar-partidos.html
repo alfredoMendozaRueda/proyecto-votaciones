@@ -1,4 +1,4 @@
-<div class="container-ancho">
+<div class="container py-4 animar-entrada">
   <h1><app-icon nombre="comprobar" [size]="26" [strokeWidth]="1.6" />Comprobar partidos políticos</h1>
 
   @if (error()) {
@@ -6,14 +6,14 @@
   }
 
   @if (cargando()) {
-    <div class="spinner-pagina">
-      <span class="spinner"></span> Comprobando partidos...
+    <div class="d-flex align-items-center justify-content-center gap-3 text-secondary py-5">
+      <span class="spinner-border" aria-hidden="true"></span> Comprobando partidos...
     </div>
   } @else if (partidos()) {
     <app-alert tipo="exito" mensaje="Hay suficientes partidos políticos dados de alta." />
-    <div class="tabla-responsive">
-      <table>
-        <thead>
+    <div class="table-responsive card shadow-sm">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
           <tr>
             <th>Siglas</th>
             <th>Descripción</th>

@@ -1,18 +1,18 @@
-<div class="auth-layout">
-  <div class="auth-marca">
+<div class="row g-0 min-vh-100">
+  <div class="col-lg-6 auth-marca d-flex flex-column justify-content-center gap-4 p-5">
     <span class="logo-marca"><app-icon nombre="boleta" [size]="26" [strokeWidth]="1.6" /></span>
-    <h1>e-Votaciones</h1>
-    <p>Crea tu cuenta de votante en segundos y participa en el proceso electoral.</p>
+    <h1 class="text-white">e-Votaciones</h1>
+    <p class="fs-5">Crea tu cuenta de votante en segundos y participa en el proceso electoral.</p>
 
-    <div class="lista-caracteristicas">
-      <span class="caracteristica"><app-icon nombre="usuario" [size]="18" /> Solo necesitas figurar en el censo</span>
-      <span class="caracteristica"><app-icon nombre="candado" [size]="18" /> Tu contraseña se guarda cifrada</span>
-      <span class="caracteristica"><app-icon nombre="votar" [size]="18" /> Listo para votar en cuanto te registras</span>
+    <div class="d-flex flex-column gap-3 mt-2">
+      <span class="caracteristica d-flex align-items-center gap-2"><app-icon nombre="usuario" [size]="18" class="text-primary" /> Solo necesitas figurar en el censo</span>
+      <span class="caracteristica d-flex align-items-center gap-2"><app-icon nombre="candado" [size]="18" class="text-primary" /> Tu contraseña se guarda cifrada</span>
+      <span class="caracteristica d-flex align-items-center gap-2"><app-icon nombre="votar" [size]="18" class="text-primary" /> Listo para votar en cuanto te registras</span>
     </div>
   </div>
 
-  <div class="auth-formulario">
-    <div class="container">
+  <div class="col-lg-6 d-flex align-items-center justify-content-center p-4">
+    <div class="w-100 animar-entrada" style="max-width: 420px;">
       <h1>Crear cuenta de votante</h1>
 
       @if (error()) {
@@ -22,20 +22,20 @@
         <app-alert tipo="exito" [mensaje]="mensajeExito()!" />
       }
 
-      <form class="tarjeta" (ngSubmit)="enviar()">
-        <label>
-          DNI
-          <input type="text" name="dni" [(ngModel)]="dni" required autocomplete="username" />
-        </label>
+      <form class="card card-body shadow-sm d-flex flex-column gap-3" (ngSubmit)="enviar()">
+        <div>
+          <label class="form-label" for="dni">DNI</label>
+          <input class="form-control" id="dni" type="text" name="dni" [(ngModel)]="dni" required autocomplete="username" />
+        </div>
 
-        <label>
-          Contraseña
-          <input type="password" name="contrasena" [(ngModel)]="contrasena" required autocomplete="new-password" />
-        </label>
+        <div>
+          <label class="form-label" for="contrasena">Contraseña</label>
+          <input class="form-control" id="contrasena" type="password" name="contrasena" [(ngModel)]="contrasena" required autocomplete="new-password" />
+        </div>
 
-        <button type="submit" [disabled]="enviando()">
+        <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2" [disabled]="enviando()">
           @if (enviando()) {
-            <span class="spinner"></span>
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
           } @else {
             <app-icon nombre="usuario" [size]="16" />
           }
@@ -43,7 +43,7 @@
         </button>
       </form>
 
-      <p class="texto-muted">Debes figurar en el censo electoral y ser mayor de edad. ¿Ya tienes cuenta? <a routerLink="/login">Inicia sesión</a></p>
+      <p class="text-secondary mt-3">Debes figurar en el censo electoral y ser mayor de edad. ¿Ya tienes cuenta? <a routerLink="/login">Inicia sesión</a></p>
     </div>
   </div>
 </div>

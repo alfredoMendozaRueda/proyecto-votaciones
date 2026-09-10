@@ -1,4 +1,4 @@
-<div class="container-ancho">
+<div class="container py-4 animar-entrada">
   <h1><app-icon nombre="votar" [size]="26" [strokeWidth]="1.6" />Votación</h1>
 
   @if (error()) {
@@ -9,39 +9,43 @@
   }
 
   @if (cargando()) {
-    <div class="rejilla-partidos">
+    <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-3 my-2">
       @for (fila of [1, 2, 3, 4]; track fila) {
-        <div class="tarjeta-partido">
-          <span class="skeleton" style="width: 100%; height: 90px;"></span>
-          <span class="skeleton skeleton-linea" style="width: 60%;"></span>
-          <span class="skeleton skeleton-linea" style="width: 85%;"></span>
+        <div class="col">
+          <div class="card h-100 text-center p-3 placeholder-glow" aria-hidden="true">
+            <span class="placeholder col-12 mb-2" style="height: 90px;"></span>
+            <span class="placeholder col-6 mx-auto mb-1"></span>
+            <span class="placeholder col-8 mx-auto"></span>
+          </div>
         </div>
       }
     </div>
   } @else if (partidos().length > 0) {
-    <p class="texto-muted">Selecciona un partido y confirma tu voto. No podrás cambiarlo después.</p>
+    <p class="text-secondary">Selecciona un partido y confirma tu voto. No podrás cambiarlo después.</p>
 
-    <div class="rejilla-partidos">
+    <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-3 my-2">
       @for (partido of partidos(); track partido.siglas) {
-        <div
-          class="tarjeta-partido"
-          [class.seleccionado]="seleccionado() === partido.siglas"
-          (click)="seleccionar(partido.siglas)"
-        >
-          @if (seleccionado() === partido.siglas) {
-            <span class="insignia-seleccionado"><app-icon nombre="exito" [size]="16" [strokeWidth]="2" /></span>
-          }
-          <img [src]="partido.imagen" [alt]="partido.descripcion" />
-          <span class="siglas">{{ partido.siglas }}</span>
-          <span class="descripcion">{{ partido.descripcion }}</span>
+        <div class="col">
+          <div
+            class="card tarjeta-partido position-relative h-100 text-center p-3"
+            [class.seleccionado]="seleccionado() === partido.siglas"
+            (click)="seleccionar(partido.siglas)"
+          >
+            @if (seleccionado() === partido.siglas) {
+              <span class="insignia-seleccionado badge rounded-circle bg-primary p-2"><app-icon nombre="exito" [size]="14" [strokeWidth]="2.2" /></span>
+            }
+            <img [src]="partido.imagen" [alt]="partido.descripcion" class="mb-2" />
+            <span class="fw-bold">{{ partido.siglas }}</span>
+            <span class="text-secondary small">{{ partido.descripcion }}</span>
+          </div>
         </div>
       }
     </div>
 
-    <div class="acciones">
-      <button type="button" [disabled]="!seleccionado() || votando()" (click)="votar()">
+    <div class="d-flex gap-2 flex-wrap my-3">
+      <button type="button" class="btn btn-primary d-inline-flex align-items-center gap-2" [disabled]="!seleccionado() || votando()" (click)="votar()">
         @if (votando()) {
-          <span class="spinner"></span>
+          <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
         } @else {
           <app-icon nombre="votar" [size]="16" />
         }

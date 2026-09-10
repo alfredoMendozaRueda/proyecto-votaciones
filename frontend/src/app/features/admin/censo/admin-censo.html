@@ -1,47 +1,47 @@
-<div class="container-ancho">
+<div class="container py-4 animar-entrada">
   <h1><app-icon nombre="censo" [size]="26" [strokeWidth]="1.6" />Censo electoral</h1>
 
   @if (error()) {
     <app-alert tipo="error" [mensaje]="error()!" />
   }
 
-  <form class="tarjeta" (ngSubmit)="consultar()">
-    <label>
-      Ámbito
-      <select name="ambito" [(ngModel)]="ambito">
+  <form class="card card-body shadow-sm d-flex flex-column gap-3" (ngSubmit)="consultar()">
+    <div>
+      <label class="form-label" for="ambito">Ámbito</label>
+      <select class="form-select" id="ambito" name="ambito" [(ngModel)]="ambito">
         <option value="todo">Censo completo</option>
         <option value="localidad">Por localidad</option>
         <option value="comunidad">Por comunidad autónoma</option>
       </select>
-    </label>
+    </div>
 
     @if (ambito === 'localidad') {
-      <label>
-        Localidad
-        <select name="localidad" [(ngModel)]="localidad" required>
+      <div>
+        <label class="form-label" for="localidad">Localidad</label>
+        <select class="form-select" id="localidad" name="localidad" [(ngModel)]="localidad" required>
           <option value="" disabled selected>Selecciona una localidad</option>
           @for (nombre of localidades(); track nombre) {
             <option [value]="nombre">{{ nombre }}</option>
           }
         </select>
-      </label>
+      </div>
     }
 
     @if (ambito === 'comunidad') {
-      <label>
-        Comunidad autónoma
-        <select name="comunidad" [(ngModel)]="comunidad" required>
+      <div>
+        <label class="form-label" for="comunidad">Comunidad autónoma</label>
+        <select class="form-select" id="comunidad" name="comunidad" [(ngModel)]="comunidad" required>
           <option value="" disabled selected>Selecciona una comunidad</option>
           @for (nombre of comunidades(); track nombre) {
             <option [value]="nombre">{{ nombre }}</option>
           }
         </select>
-      </label>
+      </div>
     }
 
-    <button type="submit" [disabled]="consultando()">
+    <button type="submit" class="btn btn-primary d-inline-flex align-items-center justify-content-center gap-2" [disabled]="consultando()">
       @if (consultando()) {
-        <span class="spinner"></span>
+        <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       } @else {
         <app-icon nombre="flecha" [size]="16" />
       }
@@ -50,10 +50,10 @@
   </form>
 
   @if (consultando()) {
-    <hr class="separador" />
-    <div class="tabla-responsive">
-      <table>
-        <thead>
+    <hr class="my-4" />
+    <div class="table-responsive card shadow-sm">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
           <tr>
             <th>DNI</th>
             <th>Nombre completo</th>
@@ -62,24 +62,24 @@
             <th>Localidad</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody class="placeholder-glow">
           @for (fila of [1, 2, 3, 4]; track fila) {
-            <tr class="skeleton-fila">
-              <td><span class="skeleton skeleton-linea" style="width: 5rem;"></span></td>
-              <td><span class="skeleton skeleton-linea" style="width: 8rem;"></span></td>
-              <td><span class="skeleton skeleton-linea" style="width: 4rem;"></span></td>
-              <td><span class="skeleton skeleton-linea" style="width: 9rem;"></span></td>
-              <td><span class="skeleton skeleton-linea" style="width: 3rem;"></span></td>
+            <tr>
+              <td><span class="placeholder col-8"></span></td>
+              <td><span class="placeholder col-9"></span></td>
+              <td><span class="placeholder col-7"></span></td>
+              <td><span class="placeholder col-10"></span></td>
+              <td><span class="placeholder col-6"></span></td>
             </tr>
           }
         </tbody>
       </table>
     </div>
   } @else if (consultado()) {
-    <hr class="separador" />
-    <div class="tabla-responsive">
-      <table>
-        <thead>
+    <hr class="my-4" />
+    <div class="table-responsive card shadow-sm">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
           <tr>
             <th>DNI</th>
             <th>Nombre completo</th>
@@ -99,7 +99,7 @@
             </tr>
           } @empty {
             <tr>
-              <td colspan="5" class="texto-muted">No hay personas censadas en este ámbito.</td>
+              <td colspan="5" class="text-secondary">No hay personas censadas en este ámbito.</td>
             </tr>
           }
         </tbody>

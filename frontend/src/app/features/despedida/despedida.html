@@ -1,9 +1,9 @@
-<div class="container">
-  <div class="tarjeta tarjeta-centrada">
+<div class="container py-5 animar-entrada" style="max-width: 480px;">
+  <div class="card card-body shadow-sm text-center d-flex flex-column align-items-center gap-2">
     <span class="insignia-circular"><app-icon nombre="salir" [size]="28" [strokeWidth]="1.6" /></span>
-    <h1>Hasta pronto{{ dni() ? ', ' + dni() : '' }}</h1>
-    <p class="texto-muted">Has cerrado sesión correctamente.</p>
-    <a class="boton" routerLink="/login">
+    <h1 class="justify-content-center">Hasta pronto{{ dni() ? ', ' + dni() : '' }}</h1>
+    <p class="text-secondary">Has cerrado sesión correctamente.</p>
+    <a class="btn btn-primary d-inline-flex align-items-center gap-2" routerLink="/login">
       <app-icon nombre="flecha" [size]="16" /> Volver a iniciar sesión
     </a>
   </div>

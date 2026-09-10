@@ -1,4 +1,5 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
@@ -14,7 +15,7 @@ type Ambito = 'todo' | 'localidad' | 'comunidad';
 
 @Component({
   selector: 'app-resultados',
-  imports: [FormsModule, RouterLink, Icon, Alert],
+  imports: [FormsModule, RouterLink, DecimalPipe, Icon, Alert],
   templateUrl: './resultados.html'
 })
 export class Resultados implements OnInit {
