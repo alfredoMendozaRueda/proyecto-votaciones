@@ -15,6 +15,7 @@ function escuchar(canal, callback) {
 }
 
 contextBridge.exposeInMainWorld('asistente', {
+  plataforma: 'electron',
   ajustes: {
     obtener: () => invocar('ajustes:obtener'),
     guardar: (cambios) => invocar('ajustes:guardar', cambios),

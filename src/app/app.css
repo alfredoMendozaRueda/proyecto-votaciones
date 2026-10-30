@@ -616,6 +616,7 @@ textarea.campo {
 
 .buscador {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1253,4 +1254,165 @@ body.demo .escena[data-posicion='derecha'] {
   left: auto;
   right: 0;
   transform-origin: bottom right;
+}
+
+.pasos code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--negro);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Versión web y móvil ---------- */
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+:root[data-plataforma='web'] body {
+  background:
+    radial-gradient(70% 45% at 25% 100%, rgba(143, 26, 32, 0.35), transparent 70%),
+    var(--negro);
+}
+
+/* En pantallas anchas la web se comporta como en Windows: abajo a la izquierda. */
+:root[data-plataforma='web'] .escena {
+  inset: auto auto 0 0;
+  width: 454px;
+  height: 730px;
+  transform-origin: bottom left;
+}
+
+/* Sin ratón no hay hover: las acciones rápidas de cada fila se hacen al abrir el correo. */
+@media (hover: none) {
+  .fila__acciones {
+    display: none !important;
+  }
+}
+
+/* Móvil: el zorro abajo a lo ancho y el diálogo ocupando el resto. */
+@media (max-width: 600px) {
+  :root:not([data-plataforma='electron']) .escena,
+  :root:not([data-plataforma='electron']) body.demo .escena {
+    --alto-zorro: clamp(170px, 30dvh, 280px);
+    inset: 0;
+    width: auto;
+    height: auto;
+    transform: none !important;
+  }
+
+  :root:not([data-plataforma='electron']) body.demo::after {
+    display: none;
+  }
+
+  :root:not([data-plataforma='electron']) .zorro {
+    left: 0;
+    right: 0;
+    width: auto;
+    bottom: env(safe-area-inset-bottom, 0px);
+    height: var(--alto-zorro);
+  }
+
+  :root:not([data-plataforma='electron']) .dialogo {
+    left: max(10px, env(safe-area-inset-left, 0px));
+    right: max(10px, env(safe-area-inset-right, 0px));
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    bottom: calc(var(--alto-zorro) + env(safe-area-inset-bottom, 0px) - 28px);
+    width: auto;
+    height: auto;
+    max-height: none;
+    transform-origin: 50% 100%;
+  }
+
+  :root:not([data-plataforma='electron']) .dialogo::after {
+    left: calc(50% - 9px);
+    right: auto;
+  }
+
+  /* Con el teclado abierto el zorro se aparta y el diálogo llega abajo. */
+  :root:not([data-plataforma='electron']) .escena.teclado .zorro {
+    height: 0;
+  }
+
+  :root:not([data-plataforma='electron']) .escena.teclado .dialogo {
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+
+  :root:not([data-plataforma='electron']) .escena.teclado .dialogo::after {
+    display: none;
+  }
+
+  /* Objetivos táctiles de al menos 44 px y texto de 16 px en los campos
+     (por debajo, el iPhone hace zoom al escribir). */
+  :root:not([data-plataforma='electron']) .icono-boton {
+    width: 44px;
+    height: 44px;
+  }
+
+  :root:not([data-plataforma='electron']) .pestanas button {
+    padding: 8px 14px;
+  }
+
+  :root:not([data-plataforma='electron']) .filtros button,
+  :root:not([data-plataforma='electron']) .sugerencias button {
+    padding: 8px 13px;
+  }
+
+  :root:not([data-plataforma='electron']) .boton {
+    min-height: 42px;
+  }
+
+  :root:not([data-plataforma='electron']) .boton-enviar {
+    width: 42px;
+    height: 42px;
+  }
+
+  :root:not([data-plataforma='electron']) .estrella {
+    width: 40px;
+  }
+
+  :root:not([data-plataforma='electron']) .fila {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  :root:not([data-plataforma='electron']) .campo,
+  :root:not([data-plataforma='electron']) .compositor textarea,
+  :root:not([data-plataforma='electron']) .buscador input {
+    font-size: 16px;
+  }
+
+  :root:not([data-plataforma='electron']) .buscador {
+    height: 44px;
+  }
+
+  :root:not([data-plataforma='electron']) .correo__barra .boton--primario {
+    padding-inline: 12px;
+  }
+}
+
+@media (max-width: 600px) {
+  :root:not([data-plataforma='electron']) .solo-escritorio {
+    display: none;
+  }
+}
+
+@media (max-width: 400px) {
+  :root:not([data-plataforma='electron']) .texto-boton {
+    display: none;
+  }
+
+  :root:not([data-plataforma='electron']) #correo-redactar {
+    flex: 0 0 44px;
+    justify-content: center;
+    padding: 0;
+  }
+}
+
+@media (max-width: 380px) {
+  :root:not([data-plataforma='electron']) .marca__nombre {
+    display: none;
+  }
 }

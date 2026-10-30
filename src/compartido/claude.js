@@ -1,5 +1,4 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { leerSecreto } from './almacen.js';
 
 const MAX_VUELTAS = 8;
 
@@ -80,21 +79,26 @@ export function mensajeDeError(error) {
   return error?.message || 'Ha ocurrido un error inesperado.';
 }
 
+// Conversación con Claude, compartida por Electron (proceso principal) y la
+// versión web. Quien la crea decide de dónde sale la clave (obtenerClave) y
+// pasa opciones del cliente (en el navegador, dangerouslyAllowBrowser).
 export class ConversacionClaude {
-  constructor({ obtenerAjustes, gmail, emitir }) {
+  constructor({ obtenerClave, obtenerAjustes, gmail, emitir, opcionesCliente = {} }) {
+    this.obtenerClave = obtenerClave;
     this.obtenerAjustes = obtenerAjustes;
     this.gmail = gmail;
     this.emitir = emitir;
+    this.opcionesCliente = opcionesCliente;
     // Solo se añade al final (nunca se editan turnos anteriores): así los
     // bloques de razonamiento que devuelve el modelo siguen siendo válidos.
     this.historial = [];
     this.controlador = null;
   }
 
-  #cliente() {
-    const apiKey = leerSecreto('claveClaude');
+  async #cliente() {
+    const apiKey = await this.obtenerClave();
     if (!apiKey) throw new Error('Añade tu clave de Claude en Ajustes para poder hablar conmigo.');
-    return new Anthropic({ apiKey });
+    return new Anthropic({ apiKey, ...this.opcionesCliente });
   }
 
   #parametros({ sistema, mensajes, conHerramientas, maxTokens = 64000 }) {
@@ -130,12 +134,20 @@ export class ConversacionClaude {
 
   async enviar(texto) {
     if (this.controlador) throw new Error('Espera a que termine la respuesta anterior.');
-    const cliente = this.#cliente();
-    const estadoCorreo = this.gmail.estado();
+    // Se reserva el turno antes de cualquier espera para que no empiecen dos a la vez.
+    this.controlador = new AbortController();
+    let cliente;
+    let estadoCorreo;
+    try {
+      cliente = await this.#cliente();
+      estadoCorreo = await this.gmail.estado();
+    } catch (error) {
+      this.controlador = null;
+      throw error;
+    }
     const sistema = promptSistema(this.obtenerAjustes(), estadoCorreo);
     const inicio = this.historial.length;
     this.historial.push({ role: 'user', content: texto });
-    this.controlador = new AbortController();
     let reintentosJson = 0;
 
     try {
@@ -226,7 +238,7 @@ export class ConversacionClaude {
 
   // Borrador de respuesta a un correo, fuera de la conversación.
   async redactarRespuesta(correo, indicaciones = '') {
-    const cliente = this.#cliente();
+    const cliente = await this.#cliente();
     const flujo = cliente.beta.messages.stream(
       this.#parametros({
         maxTokens: 16000,
@@ -255,7 +267,7 @@ export class ConversacionClaude {
   }
 
   // Comprueba la clave con una llamada que no consume tokens.
-  static async probarClave(apiKey, modelo) {
-    await new Anthropic({ apiKey }).models.retrieve(modelo);
+  static async probarClave(apiKey, modelo, opcionesCliente = {}) {
+    await new Anthropic({ apiKey, ...opcionesCliente }).models.retrieve(modelo);
   }
 }

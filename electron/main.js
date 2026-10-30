@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { obtenerAjustes, guardarAjustes, guardarSecreto, borrarSecreto, leerSecreto } from './almacen.js';
 import { Gmail } from './gmail.js';
-import { ConversacionClaude, mensajeDeError } from './claude.js';
+import { ConversacionClaude, mensajeDeError } from '../src/compartido/claude.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const URL_DESARROLLO = process.env.KITSUNE_DEV_URL;
@@ -19,6 +19,7 @@ let temporizadorCorreo = null;
 
 const gmail = new Gmail(obtenerAjustes);
 const claude = new ConversacionClaude({
+  obtenerClave: async () => leerSecreto('claveClaude'),
   obtenerAjustes,
   gmail,
   emitir: (evento) => ventana?.webContents.send('claude:evento', evento),

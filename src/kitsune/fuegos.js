@@ -65,7 +65,10 @@ export class FuegosFatuos {
       return {
         sprite: crearSprite(),
         estela: Array.from({ length: ESTELA }, crearSprite),
-        historial: [],
+        // Anillo de posiciones pasadas para la estela, sin crear vectores nuevos.
+        historial: Array.from({ length: PASOS_HISTORIAL }, () => new THREE.Vector3()),
+        cabeza: 0,
+        llenos: 0,
         fase: (i / cantidad) * Math.PI * 2,
         altura: (i - (cantidad - 1) / 2) * 0.22,
       };
@@ -90,13 +93,13 @@ export class FuegosFatuos {
 
     this.llamas.forEach((llama, i) => {
       const a = this.angulo + llama.fase;
-      const pos = new THREE.Vector3(
+      llama.cabeza = (llama.cabeza + 1) % PASOS_HISTORIAL;
+      llama.llenos = Math.min(llama.llenos + 1, PASOS_HISTORIAL);
+      const pos = llama.historial[llama.cabeza].set(
         Math.cos(a) * radio,
         centroY + llama.altura + 0.26 * Math.sin(a * 2 + llama.fase * 1.3),
         Math.sin(a) * radio * 0.6,
       );
-      llama.historial.unshift(pos);
-      if (llama.historial.length > PASOS_HISTORIAL) llama.historial.pop();
 
       const parpadeoX = 1 + 0.07 * Math.sin(t * 17 + i * 3.1);
       const parpadeoY = 1 + 0.1 * Math.sin(t * 13 + i * 1.7);
@@ -106,7 +109,8 @@ export class FuegosFatuos {
       llama.sprite.material.opacity = opacidadBase;
 
       llama.estela.forEach((s, k) => {
-        const punto = llama.historial[Math.min(llama.historial.length - 1, (k + 1) * 4)];
+        const atras = Math.min(llama.llenos - 1, (k + 1) * 4);
+        const punto = llama.historial[(llama.cabeza - atras + PASOS_HISTORIAL) % PASOS_HISTORIAL];
         const f = 1 - (k + 1) / (ESTELA + 2);
         s.position.copy(punto);
         s.scale.set(tam * 0.8 * f, tam * 1.2 * f, 1);

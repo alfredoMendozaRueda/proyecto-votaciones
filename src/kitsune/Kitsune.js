@@ -6,6 +6,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { construirZorro } from './anatomia.js';
 import { crearMaterialesPelaje } from './pelaje.js';
 import { colorearOjo } from './ojo.js';
+import { GestorCalidad, indiceNivel } from './rendimiento.js';
 import {
   clamp01,
   lerp,
@@ -23,6 +24,7 @@ export const ESTADOS = ['reposo', 'escuchar', 'hablar', 'pensar', 'dormir'];
 export const ACCIONES = ['aparecer', 'saludar', 'alegria', 'desaparecer'];
 
 const NUM_COLAS = 9;
+const DESVIO_ZETA = new THREE.Vector3(0.35, 0.45, 0.2);
 
 const REPOSO = {
   orejas: 0,
@@ -152,8 +154,13 @@ export class Kitsune {
     this.contenedor = contenedor;
     this._oyentes = {};
 
+    const tactil = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    this._ligero = tactil || (navigator.deviceMemory ?? 8) <= 4;
+    // En móvil la pantalla ya es muy densa: por encima de 1.5 no se nota y cuesta mucho.
+    this._densidadBase = Math.min(window.devicePixelRatio || 1, this._ligero ? 1.5 : 2);
+
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(this._densidadBase);
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
@@ -180,6 +187,7 @@ export class Kitsune {
     clave.position.set(2.5, 5, 5);
     clave.castShadow = true;
     clave.shadow.mapSize.set(1024, 1024);
+    this._luzClave = clave;
     Object.assign(clave.shadow.camera, { left: -2.5, right: 2.5, top: 3, bottom: -1, near: 1, far: 15 });
     clave.shadow.normalBias = 0.02;
     const relleno = new THREE.DirectionalLight('#9fb4ff', 0.35);
@@ -193,6 +201,11 @@ export class Kitsune {
     this.fuegos = new FuegosFatuos(this.escena);
     this.setPaleta(this.opciones.paleta);
 
+    this.gestorCalidad = new GestorCalidad({
+      inicial: this._ligero ? indiceNivel('media') : 0,
+      aplicar: (nivel) => this._aplicarNivel(nivel),
+    });
+
     this.estado = 'reposo';
     this.p = { ...REPOSO };
     this.visible = this.opciones.visible;
@@ -204,6 +217,12 @@ export class Kitsune {
     this.tic = { espera: 4, t: -1, lado: 1 };
     this.mirada = { x: 0, y: 0, objetivoX: 0, objetivoY: 0, ultimoMovimiento: -10 };
     this.zetas = { espera: 0.6, activas: [] };
+    // Objetos reutilizados en cada fotograma (sin basura para el recolector).
+    this._pc = {};
+    this._o = {};
+    this._micro = { parpadeo: 1, tic: 0 };
+    this._vTmp = new THREE.Vector3();
+    this._despliegue = new Array(NUM_COLAS).fill(0);
 
     this._raycaster = new THREE.Raycaster();
     this._puntero = new THREE.Vector2();
@@ -216,9 +235,21 @@ export class Kitsune {
     this._observador.observe(contenedor);
     this._ajustarTamano();
 
-    this._reloj = new THREE.Clock();
+    // Si el lienzo no se ve (pestaña oculta, fuera de pantalla), no se dibuja.
+    this._enPantalla = true;
+    this._visor = new IntersectionObserver(([entrada]) => {
+      this._enPantalla = entrada.isIntersecting;
+    });
+    this._visor.observe(contenedor);
+
+    this._ultimoPintado = 0;
+    this._pendientePintar = true;
     this._bucle = this._bucle.bind(this);
     this._frame = requestAnimationFrame(this._bucle);
+  }
+
+  get calidad() {
+    return { nivel: this.gestorCalidad.nivel.nombre, automatica: this.gestorCalidad.automatico, fps: this._fpsObjetivo() };
   }
 
   // ---------- API pública ----------
@@ -279,9 +310,28 @@ export class Kitsune {
     this.opciones[clave] = valor;
   }
 
+  // 'auto' deja que el gestor ajuste la calidad; 'alta', 'media' o 'baja' la fijan.
+  setCalidad(nivel) {
+    this.gestorCalidad.fijar(nivel);
+  }
+
+  _aplicarNivel(nivel) {
+    this.renderer.setPixelRatio(this._densidadBase * nivel.resolucion);
+    this._ajustarTamano();
+    this._aplicarFraccionPelo(nivel.pelo);
+    const luz = this._luzClave;
+    const conSombras = nivel.sombras > 0;
+    if (conSombras && luz.shadow.mapSize.x !== nivel.sombras) {
+      luz.shadow.map?.dispose();
+      luz.shadow.map = null;
+      luz.shadow.mapSize.set(nivel.sombras, nivel.sombras);
+    }
+    luz.castShadow = conSombras;
+    this._pendientePintar = true;
+  }
+
   // Menos capas de pelo = menos trabajo para la tarjeta gráfica.
-  setCalidadPelo(nivel) {
-    const fraccion = { baja: 0.45, media: 0.75, alta: 1 }[nivel] ?? 0.75;
+  _aplicarFraccionPelo(fraccion) {
     for (const materiales of [this.mat.cuerpo, this.mat.colas]) {
       const capas = Math.max(3, Math.round(materiales.capas * fraccion));
       materiales.uniforms.uCapas.value = capas;
@@ -299,6 +349,7 @@ export class Kitsune {
   destruir() {
     cancelAnimationFrame(this._frame);
     this._observador.disconnect();
+    this._visor.disconnect();
     window.removeEventListener('pointermove', this._alMoverPuntero);
     this.renderer.dispose();
     this.renderer.domElement.remove();
@@ -363,6 +414,7 @@ export class Kitsune {
     this.zetas3d = Array.from({ length: 3 }, () => {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
       s.visible = false;
+      s.userData = { vida: 0, origen: new THREE.Vector3() };
       this.escena.add(s);
       return s;
     });
@@ -384,11 +436,33 @@ export class Kitsune {
     this.camara.updateProjectionMatrix();
   }
 
-  _bucle() {
+  // Ritmo según lo que esté haciendo: a tope cuando hay acción o conversación,
+  // más tranquilo en reposo y dormido, y nada si no se ve.
+  _fpsObjetivo() {
+    if (!this._enPantalla || document.hidden) return 0;
+    if (!this.visible && !this.accion) return this._pendientePintar ? 30 : 0;
+    if (this.accion || this.estado === 'hablar' || this.estado === 'pensar' || this.estado === 'escuchar') return 60;
+    if (this.estado === 'dormir') return 20;
+    if (this.opciones.movimientoReducido) return 30;
+    return this.t - this.mirada.ultimoMovimiento < 1.5 ? 60 : 30;
+  }
+
+  _bucle(ahora) {
     this._frame = requestAnimationFrame(this._bucle);
-    const dt = Math.min(this._reloj.getDelta(), 1 / 20);
-    this.actualizar(dt);
+    const fps = this._fpsObjetivo();
+    if (fps === 0) {
+      this._ultimoPintado = 0;
+      return;
+    }
+    const objetivo = 1000 / fps;
+    const transcurrido = this._ultimoPintado ? ahora - this._ultimoPintado : objetivo;
+    if (transcurrido < objetivo - 3) return;
+    // Solo mide fotogramas consecutivos (las pausas reinician _ultimoPintado).
+    if (this._ultimoPintado) this.gestorCalidad.registrar(transcurrido / objetivo, transcurrido);
+    this._ultimoPintado = ahora;
+    this.actualizar(Math.min(transcurrido / 1000, 1 / 20));
     this.renderer.render(this.escena, this.camara);
+    if (!this.visible && !this.accion) this._pendientePintar = false;
   }
 
   actualizar(dt) {
@@ -471,12 +545,10 @@ export class Kitsune {
     derecha.antebrazo.rotation.x = 0.85 * o.pata + o.ondaPata * 0.35;
 
     // Colas
-    const pc = {
-      ...p,
-      abanico: p.abanico + o.abanico,
-      ondaAmp: p.ondaAmp * reducido,
-      remolino: p.remolino * reducido,
-    };
+    const pc = Object.assign(this._pc, p);
+    pc.abanico = p.abanico + o.abanico;
+    pc.ondaAmp = p.ondaAmp * reducido;
+    pc.remolino = p.remolino * reducido;
     this.colas.forEach((cola, i) => {
       const despliegue = o.despliegue ? o.despliegue[i] : this.visible ? 1 : 0;
       cola.actualizar(this.relojOnda, t, pc, despliegue);
@@ -508,9 +580,14 @@ export class Kitsune {
     this._actualizarZetas(dt);
   }
 
+  _rellenarDespliegue(calcular) {
+    for (let i = 0; i < NUM_COLAS; i++) this._despliegue[i] = calcular(i);
+    return this._despliegue;
+  }
+
   // Devuelve los ajustes que la acción en curso suma (o impone) sobre el estado.
   _superposicionAccion(dt, reducido) {
-    const o = {
+    const o = Object.assign(this._o, {
       escala: null,
       saltoY: 0,
       sx: 1,
@@ -530,7 +607,7 @@ export class Kitsune {
       radioFuego: null,
       fuegoVis: null,
       velFuego: 1,
-    };
+    });
     const a = this.accion;
     if (!a) return o;
 
@@ -539,7 +616,7 @@ export class Kitsune {
 
     if (a.nombre === 'aparecer') {
       o.escala = u < 0.38 ? 0 : easeOutBack(tramo(u, 0.38, 0.95), 2.0);
-      o.despliegue = this.colas.map((_, i) => {
+      o.despliegue = this._rellenarDespliegue((i) => {
         const inicio = 0.6 + Math.abs(i - 4) * 0.07;
         return easeOutCubic(tramo(u, inicio, inicio + 0.5));
       });
@@ -550,7 +627,7 @@ export class Kitsune {
       o.orejas = u < 0.9 ? -1 * (1 - tramo(u, 0.55, 0.9)) : 0.8 * campana(tramo(u, 0.9, 1.4));
       o.apertura = tramo(u, 0.85, 1.0);
     } else if (a.nombre === 'desaparecer') {
-      o.despliegue = this.colas.map((_, i) => {
+      o.despliegue = this._rellenarDespliegue((i) => {
         const inicio = (4 - Math.abs(i - 4)) * 0.05;
         return 1 - easeInCubic(tramo(u, inicio, inicio + 0.35));
       });
@@ -620,7 +697,9 @@ export class Kitsune {
   }
 
   _microgestos(dt, o) {
-    const r = { parpadeo: 1, tic: 0 };
+    const r = this._micro;
+    r.parpadeo = 1;
+    r.tic = 0;
     const dormido = this.p.apertura < 0.25;
 
     const b = this.parpadeo;
@@ -680,7 +759,7 @@ export class Kitsune {
   _alMoverPuntero(evento) {
     const rect = this.renderer.domElement.getBoundingClientRect();
     if (!rect.width) return;
-    const cabeza = new THREE.Vector3();
+    const cabeza = this._vTmp;
     this.cabeza.getWorldPosition(cabeza);
     cabeza.y += 0.2 * this.raiz.scale.y;
     cabeza.project(this.camara);
@@ -718,10 +797,9 @@ export class Kitsune {
       if (z.espera <= 0) {
         const libre = this.zetas3d.find((s) => !s.visible);
         if (libre) {
-          const origen = new THREE.Vector3();
-          this.cabeza.getWorldPosition(origen);
           libre.visible = true;
-          libre.userData = { vida: 0, origen: origen.add(new THREE.Vector3(0.35, 0.45, 0.2)) };
+          libre.userData.vida = 0;
+          this.cabeza.getWorldPosition(libre.userData.origen).add(DESVIO_ZETA);
         }
         z.espera = 1.4;
       }
@@ -734,7 +812,9 @@ export class Kitsune {
         s.visible = false;
         continue;
       }
-      s.position.copy(s.userData.origen).add(new THREE.Vector3(0.25 * Math.sin(v * 5), 0.9 * v, 0));
+      s.position.copy(s.userData.origen);
+      s.position.x += 0.25 * Math.sin(v * 5);
+      s.position.y += 0.9 * v;
       s.scale.setScalar(0.16 + 0.22 * v);
       s.material.opacity = campana(v) * 0.9;
     }

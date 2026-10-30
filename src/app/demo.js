@@ -181,7 +181,7 @@ export function crearDemo() {
     paleta: 'carmesi',
     tamano: 'mediano',
     posicion: 'izquierda',
-    calidadPelo: 'media',
+    calidadPelo: 'auto',
     fuegos: true,
     seguirCursor: true,
     iniciarConWindows: true,
@@ -203,6 +203,7 @@ export function crearDemo() {
 
   const api = {
     demo: true,
+    plataforma: 'demo',
     ajustes: {
       obtener: async () => ({ ...ajustes }),
       guardar: async (cambios) => {

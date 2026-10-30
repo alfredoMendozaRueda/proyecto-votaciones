@@ -1,9 +1,10 @@
-# Kitsune · asistente de escritorio
+# Kitsune · asistente personal
 
-Asistente personal para Windows protagonizado por un kitsune 3D de nueve colas.
-Con `Ctrl + Alt + K` aparece abajo a la izquierda de la pantalla y, encima de
+Asistente personal protagonizado por un kitsune 3D de nueve colas. En Windows,
+con `Ctrl + Alt + K` aparece abajo a la izquierda de la pantalla y, encima de
 él, un diálogo en rojo y negro para hablar con Claude y llevar el correo de
-Gmail sin salir de ahí.
+Gmail sin salir de ahí. En el móvil es una app web instalable (PWA): tocas el
+icono y el zorro aparece abajo con el diálogo encima, a pantalla completa.
 
 Esta rama es un proyecto independiente del sistema de votaciones: no comparte
 historial ni código con `main`.
@@ -38,8 +39,9 @@ Para generar el instalador de Windows (`out/Kitsune Setup x.y.z.exe`):
 npm run dist
 ```
 
-`npm run dev` abre la interfaz en el navegador en **modo de ejemplo** (correos
-y respuestas inventados), útil para trabajar en el diseño sin cuentas reales.
+`npm run dev` sirve la versión web en `http://localhost:5173/`; con
+`http://localhost:5173/?demo` se abre en **modo de ejemplo** (correos y
+respuestas inventados), útil para trabajar en el diseño sin cuentas reales.
 La vista del personaje y sus animaciones está en `personaje.html`.
 
 ### Conectar Claude
@@ -65,6 +67,59 @@ Google exige que cada instalación use su propio cliente OAuth:
 Kitsune pide el permiso `gmail.modify` (leer, marcar, archivar, mover a la
 papelera y enviar; nunca borrar para siempre). El token se guarda cifrado.
 
+## En el móvil (app web instalable)
+
+La misma interfaz funciona como PWA en Android e iPhone. Se publica sola en
+GitHub Pages con cada push a esta rama (`.github/workflows/web.yml`). La
+primera vez hay que activarlo en el repositorio:
+
+1. Settings → Pages → Source: **GitHub Actions**.
+2. Settings → Environments → `github-pages` → en "Deployment branches and
+   tags" añade la rama `kitsune-asistente` (por defecto solo deja publicar
+   desde la rama principal).
+
+La app queda en `https://<usuario>.github.io/<repositorio>/`. Para instalarla:
+
+- **Android (Chrome)**: menú ⋮ → "Instalar aplicación".
+- **iPhone (Safari)**: Compartir → "Añadir a pantalla de inicio".
+
+Para probarla en local: `npm run build && npx vite preview --host` y abre la
+dirección desde el móvil (en la misma red). Con `?demo` al final de la
+dirección se abre el modo de ejemplo.
+
+### Claude y Gmail en la versión web
+
+- **Claude**: la clave se pega en Ajustes igual que en escritorio. El navegador
+  llama a la API directamente y la clave se guarda cifrada (AES-GCM) con una
+  llave no exportable del propio navegador.
+- **Gmail**: crea en Google Cloud un ID de cliente OAuth de tipo
+  **Aplicación web** y añade como "Orígenes autorizados de JavaScript" la
+  dirección donde está publicada la app (Ajustes la muestra). No hace falta
+  secreto: solo se pega el ID.
+
+Diferencias con la versión de escritorio:
+
+- Google da a las aplicaciones web sesiones de una hora; después Kitsune pide
+  "Reconectar" con un toque (sin volver a dar permisos).
+- Los avisos de correo nuevo llegan como notificaciones mientras la app está
+  abierta o en segundo plano reciente; con la app cerrada el sistema no la
+  despierta (haría falta un servidor propio).
+- No hay atajo global, bandeja del sistema ni inicio automático.
+- La app abre sin conexión, pero hablar con Claude o ver el correo necesita red.
+
+## Rendimiento
+
+El zorro ajusta solo su coste:
+
+- **Calidad automática**: mide cuánto tarda cada fotograma y baja (o sube) la
+  resolución, las capas de pelo y las sombras hasta ir fluido. Se puede fijar
+  a mano en Ajustes → Calidad gráfica. En móviles empieza un nivel por debajo.
+- **Fotogramas según lo que pasa**: 60 fps mientras habla, piensa o actúa;
+  30 en reposo; 20 dormido; 0 cuando está oculto o la pestaña no se ve.
+- **Sin basura en cada fotograma**: vectores reutilizados y estelas de los
+  fuegos en búferes circulares, para que el recolector de memoria no
+  provoque tirones.
+
 ## Seguridad
 
 - El renderer no tiene acceso a Node: solo habla con el proceso principal a
@@ -80,13 +135,16 @@ papelera y enviar; nunca borrar para siempre). El token se guarda cifrado.
 
 ## Estructura
 
-| Carpeta         | Qué contiene                                                                   |
-| --------------- | ------------------------------------------------------------------------------ |
-| `electron/`     | Proceso principal: ventana, atajo, bandeja, Claude, Gmail, ajustes cifrados.  |
-| `src/app/`      | Interfaz: diálogo, chat, correo, ajustes y modo de ejemplo.                   |
-| `src/kitsune/`  | El personaje 3D.                                                               |
-| `src/preview/`  | Página de pruebas del personaje (`personaje.html`).                            |
-| `test/`         | Pruebas de las utilidades de correo (`npm test`).                              |
+| Carpeta             | Qué contiene                                                                   |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `electron/`         | Proceso principal: ventana, atajo, bandeja, OAuth de Gmail, ajustes cifrados.  |
+| `src/compartido/`   | Lógica común a escritorio y web: Claude, cliente de Gmail, MIME y ajustes.     |
+| `src/app/`          | Interfaz: diálogo, chat, correo, ajustes y modo de ejemplo.                    |
+| `src/app/web/`      | Versión web: almacenamiento cifrado, Google Identity y service worker.         |
+| `public/`           | Manifiesto e iconos de la PWA.                                                 |
+| `src/kitsune/`      | El personaje 3D.                                                               |
+| `src/preview/`      | Página de pruebas del personaje (`personaje.html`).                            |
+| `test/`             | Pruebas de las utilidades de correo (`npm test`).                              |
 
 ### El personaje
 
@@ -107,6 +165,7 @@ reales y un entorno de estudio para los reflejos).
 | `fuegos.js`    | Kitsunebi: fuegos fatuos que orbitan con estela.                               |
 | `paletas.js`   | Pelajes reales: zorro rojo (Carmesí), plateado (Sombra) y ártico (Nieve).      |
 | `easing.js`    | Curvas de animación y suavizado interrumpible.                                 |
+| `rendimiento.js` | Niveles de calidad y el gestor que los ajusta según los fotogramas.          |
 
 | Estado     | Cuándo                                          |
 | ---------- | ----------------------------------------------- |

@@ -3,16 +3,16 @@ import assert from 'node:assert/strict';
 import {
   analizarDireccion,
   asuntoRespuesta,
-  base64UrlABuffer,
-  bufferABase64Url,
+  base64UrlABytes,
+  bytesABase64Url,
   construirMensaje,
   decodificarPalabras,
   extraerCuerpo,
   htmlATexto,
   validarDestinatarios,
-} from '../electron/mime.js';
+} from '../src/compartido/mime.js';
 
-const b64url = (texto, codificacion = 'utf8') => bufferABase64Url(Buffer.from(texto, codificacion));
+const b64url = (texto, codificacion = 'utf8') => bytesABase64Url(new Uint8Array(Buffer.from(texto, codificacion)));
 
 test('extrae el HTML de un multipart/alternative y lista los adjuntos', () => {
   const payload = {
@@ -71,7 +71,7 @@ test('construye un mensaje UTF-8 válido y no permite inyectar cabeceras', () =>
     cuerpo: 'Línea 1\nLínea 2',
     enRespuestaA: '<abc@mail.gmail.com>',
   });
-  const texto = base64UrlABuffer(raw).toString('utf8');
+  const texto = new TextDecoder().decode(base64UrlABytes(raw));
   const [cabeceras, cuerpo] = texto.split('\r\n\r\n');
   assert.ok(!/^Bcc:/m.test(cabeceras), 'no debe aparecer una cabecera Bcc inyectada');
   assert.match(cabeceras, /^To: ana@ejemplo\.es Bcc: espia@ejemplo\.es$/m);

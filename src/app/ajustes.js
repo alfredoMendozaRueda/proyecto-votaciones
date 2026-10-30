@@ -66,6 +66,10 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
 
   async function pintar(seccion = null) {
     ajustes = await api.ajustes.obtener();
+    // La versión web no tiene ventana propia, atajo global ni inicio con Windows.
+    const escritorio = api.plataforma !== 'web';
+    const tactil = matchMedia('(pointer: coarse)').matches;
+    const dondeSeGuarda = escritorio ? 'en este equipo' : 'en este navegador';
     const [estadoClaude, estadoCorreo] = await Promise.all([api.claude.estado(), api.correo.estado()]);
 
     contenedor.innerHTML = `
@@ -90,39 +94,47 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
                 .join('')}
             </div>
           </div>
-          <div class="ajuste"><span class="ajuste__etiqueta">Tamaño</span>${segmentado('tamano', [['pequeno', 'Pequeño'], ['mediano', 'Mediano'], ['grande', 'Grande']])}</div>
-          <div class="ajuste"><span class="ajuste__etiqueta">Posición</span>${segmentado('posicion', [['izquierda', 'Abajo a la izquierda'], ['derecha', 'Abajo a la derecha']])}</div>
+          ${
+            escritorio
+              ? `<div class="ajuste solo-escritorio"><span class="ajuste__etiqueta">Tamaño</span>${segmentado('tamano', [['pequeno', 'Pequeño'], ['mediano', 'Mediano'], ['grande', 'Grande']])}</div>
+          <div class="ajuste solo-escritorio"><span class="ajuste__etiqueta">Posición</span>${segmentado('posicion', [['izquierda', 'Abajo a la izquierda'], ['derecha', 'Abajo a la derecha']])}</div>`
+              : ''
+          }
           <div class="ajuste">
-            <span class="ajuste__etiqueta">Calidad del pelo</span>
-            ${segmentado('calidadPelo', [['baja', 'Baja'], ['media', 'Media'], ['alta', 'Alta']])}
-            <p class="ajuste__ayuda">Bájala si el ordenador va justo o la batería dura poco.</p>
+            <span class="ajuste__etiqueta">Calidad gráfica</span>
+            ${segmentado('calidadPelo', [['auto', 'Automática'], ['alta', 'Alta'], ['media', 'Media'], ['baja', 'Baja']])}
+            <p class="ajuste__ayuda">En automática se ajusta sola para ir fluida. Bájala para ahorrar batería.</p>
           </div>
           ${interruptor('fuegos', 'Fuegos fatuos alrededor')}
-          ${interruptor('seguirCursor', 'Seguir el cursor con la mirada')}
+          ${tactil ? '' : interruptor('seguirCursor', 'Seguir el cursor con la mirada')}
         </section>
 
         <section class="grupo" id="seccion-comportamiento" aria-label="Comportamiento">
           <h3>Comportamiento</h3>
-          <div class="ajuste ajuste--fila">
+          ${
+            escritorio
+              ? `<div class="ajuste ajuste--fila solo-escritorio">
             <div>
               <div class="ajuste__etiqueta">Atajo para mostrar u ocultar</div>
               <p class="ajuste__ayuda" id="atajo-ayuda">Funciona aunque estés en otra aplicación.</p>
             </div>
             <div class="atajo" id="atajo"><span id="atajo-teclas">${teclasDe(ajustes.atajo)}</span><button type="button" class="boton" id="atajo-cambiar">Cambiar</button></div>
           </div>
-          <p class="mensaje-ajuste" id="mensaje-atajo" role="status"></p>
-          ${interruptor('iniciarConWindows', 'Abrir al iniciar Windows')}
+          <p class="mensaje-ajuste solo-escritorio" id="mensaje-atajo" role="status"></p>
+          <div class="solo-escritorio">${interruptor('iniciarConWindows', 'Abrir al iniciar Windows')}</div>`
+              : ''
+          }
           <div class="ajuste ajuste--fila">
             <label class="ajuste__etiqueta" for="ajuste-dormir">Dormirse sin actividad</label>
             <div style="width:150px">${selector('dormirTrasMin', 'ajuste-dormir', [[0, 'Nunca'], [2, 'A los 2 min'], [5, 'A los 5 min'], [10, 'A los 10 min'], [30, 'A los 30 min']])}</div>
           </div>
-          ${interruptor('voz', 'Leer las respuestas en voz alta', 'Usa las voces en español de Windows.')}
+          ${interruptor('voz', 'Leer las respuestas en voz alta', escritorio ? 'Usa las voces en español de Windows.' : 'Usa las voces en español del dispositivo.')}
         </section>
 
         <section class="grupo" id="seccion-claude" aria-label="Claude">
           <h3>Claude</h3>
           <div class="estado-cuenta ${estadoClaude.configurado ? 'ok' : ''}"><span class="punto"></span>${
-            estadoClaude.configurado ? 'Clave guardada y cifrada en este equipo' : 'Sin clave: añádela para poder chatear'
+            estadoClaude.configurado ? `Clave guardada y cifrada ${dondeSeGuarda}` : 'Sin clave: añádela para poder chatear'
           }</div>
           <div class="ajuste">
             <label class="ajuste__etiqueta" for="clave-claude">${estadoClaude.configurado ? 'Cambiar la clave de API' : 'Clave de API'}</label>
@@ -154,13 +166,20 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
               : `
             <ol class="pasos">
               <li>En Google Cloud Console, crea un proyecto y activa la API de Gmail.</li>
-              <li>Crea un ID de cliente OAuth de tipo <strong>App de escritorio</strong>.</li>
-              <li>Pega aquí el ID y el secreto, y pulsa Conectar.</li>
+              ${
+                escritorio
+                  ? '<li>Crea un ID de cliente OAuth de tipo <strong>App de escritorio</strong>.</li><li>Pega aquí el ID y el secreto, y pulsa Conectar.</li>'
+                  : `<li>Crea un ID de cliente OAuth de tipo <strong>Aplicación web</strong> con este origen autorizado: <code>${escapar(location.origin)}</code></li><li>Pega aquí el ID y pulsa Conectar.</li>`
+              }
             </ol>
             <div class="ajuste"><label class="ajuste__etiqueta" for="google-id">ID de cliente</label>
               <input class="campo" id="google-id" type="text" value="${escapar(ajustes.googleClientId)}" placeholder="…apps.googleusercontent.com" spellcheck="false"></div>
-            <div class="ajuste"><label class="ajuste__etiqueta" for="google-secreto">Secreto del cliente</label>
-              <input class="campo" id="google-secreto" type="password" placeholder="GOCSPX-…" autocomplete="off" spellcheck="false"></div>
+            ${
+              escritorio
+                ? `<div class="ajuste"><label class="ajuste__etiqueta" for="google-secreto">Secreto del cliente</label>
+              <input class="campo" id="google-secreto" type="password" placeholder="GOCSPX-…" autocomplete="off" spellcheck="false"></div>`
+                : ''
+            }
             <div><button type="button" class="boton boton--primario" id="conectar-correo">${icono('sobre', 15)} Conectar con Google</button></div>`
           }
           <p class="mensaje-ajuste" id="mensaje-correo" role="status"></p>
@@ -206,7 +225,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
     const zonaAtajo = contenedor.querySelector('#atajo');
     const botonAtajo = contenedor.querySelector('#atajo-cambiar');
     let capturando = null;
-    botonAtajo.addEventListener('click', () => {
+    botonAtajo?.addEventListener('click', () => {
       if (capturando) return terminarCaptura();
       zonaAtajo.classList.add('capturando');
       botonAtajo.textContent = 'Cancelar';
@@ -253,8 +272,10 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
 
     contenedor.querySelector('#google-id')?.addEventListener('change', (e) => guardar({ googleClientId: e.target.value.trim() }));
     contenedor.querySelector('#conectar-correo')?.addEventListener('click', async () => {
-      const secreto = contenedor.querySelector('#google-secreto').value.trim();
+      const secreto = contenedor.querySelector('#google-secreto')?.value.trim();
       try {
+        const id = contenedor.querySelector('#google-id').value.trim();
+        if (id !== ajustes.googleClientId) await guardar({ googleClientId: id });
         if (secreto) await api.correo.guardarSecretoCliente(secreto);
         mostrarMensaje('mensaje-correo', 'Inicia sesión en la ventana del navegador que se ha abierto…', true);
         await api.correo.conectar();

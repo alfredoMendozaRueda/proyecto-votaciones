@@ -2,18 +2,8 @@ import { shell } from 'electron';
 import { createServer } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
 import { leerSecreto, guardarSecreto, borrarSecreto } from './almacen.js';
-import {
-  analizarDireccion,
-  asuntoRespuesta,
-  construirMensaje,
-  decodificarEntidades,
-  extraerCuerpo,
-  htmlATexto,
-  obtenerCabecera,
-  validarDestinatarios,
-} from './mime.js';
+import { ClienteGmail } from '../src/compartido/gmail.js';
 
-const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const AUTORIZAR = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN = 'https://oauth2.googleapis.com/token';
 // gmail.modify: leer, marcar, archivar, mover a la papelera y enviar; nunca borrar para siempre.
@@ -21,12 +11,20 @@ const PERMISOS = 'https://www.googleapis.com/auth/gmail.modify';
 
 const base64Url = (buffer) => buffer.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
+// Gmail en la app de escritorio: OAuth con el navegador del sistema y un
+// token de actualización guardado cifrado. Las llamadas a la API son las
+// mismas que en la web (ClienteGmail).
 export class Gmail {
   constructor(obtenerAjustes) {
     this.obtenerAjustes = obtenerAjustes;
     this.acceso = null;
     this.caduca = 0;
-    this.vistos = null;
+    this.cliente = new ClienteGmail({
+      token: () => this.#tokenAcceso(),
+      invalidar: () => {
+        this.acceso = null;
+      },
+    });
   }
 
   get conectado() {
@@ -45,9 +43,9 @@ export class Gmail {
     if (secreto) guardarSecreto('googleSecreto', secreto.trim());
   }
 
-  // OAuth para apps de escritorio: el navegador del sistema abre la pantalla
-  // de Google y vuelve a un servidor local efímero (127.0.0.1). PKCE evita
-  // que otro programa pueda canjear el código interceptado.
+  // El navegador del sistema abre la pantalla de Google y vuelve a un
+  // servidor local efímero (127.0.0.1). PKCE evita que otro programa pueda
+  // canjear el código interceptado.
   async conectar() {
     const clientId = this.obtenerAjustes().googleClientId;
     const secreto = leerSecreto('googleSecreto');
@@ -58,6 +56,7 @@ export class Gmail {
     const estado = base64Url(randomBytes(16));
 
     const { codigo, redireccion } = await new Promise((resolver, rechazar) => {
+      let puerto;
       const servidor = createServer((peticion, respuesta) => {
         const url = new URL(peticion.url, 'http://127.0.0.1');
         if (url.pathname !== '/') {
@@ -76,7 +75,6 @@ export class Gmail {
         if (ok) resolver({ codigo: url.searchParams.get('code'), redireccion: `http://127.0.0.1:${puerto}` });
         else rechazar(new Error(url.searchParams.get('error') || 'Google no devolvió un código válido.'));
       });
-      let puerto;
       const limite = setTimeout(() => {
         servidor.close();
         rechazar(new Error('Se agotó el tiempo para iniciar sesión en Google.'));
@@ -108,9 +106,9 @@ export class Gmail {
     if (!tokens.refresh_token) throw new Error('Google no devolvió un token de actualización.');
     guardarSecreto('googleRefresco', tokens.refresh_token);
     this.#recordarAcceso(tokens);
-    const perfil = await this.#api('/profile');
+    const perfil = await this.cliente.perfil();
     guardarSecreto('googleEmail', perfil.emailAddress);
-    this.vistos = null;
+    this.cliente.olvidarVistos();
     return this.estado();
   }
 
@@ -122,7 +120,7 @@ export class Gmail {
     borrarSecreto('googleRefresco');
     borrarSecreto('googleEmail');
     this.acceso = null;
-    this.vistos = null;
+    this.cliente.olvidarVistos();
     return this.estado();
   }
 
@@ -154,118 +152,23 @@ export class Gmail {
     return this.acceso;
   }
 
-  async #api(ruta, opciones = {}, reintento = true) {
-    const respuesta = await fetch(`${API}${ruta}`, {
-      ...opciones,
-      headers: {
-        Authorization: `Bearer ${await this.#tokenAcceso()}`,
-        ...(opciones.body ? { 'Content-Type': 'application/json' } : {}),
-      },
-    });
-    if (respuesta.status === 401 && reintento) {
-      this.acceso = null;
-      return this.#api(ruta, opciones, false);
-    }
-    const datos = respuesta.status === 204 ? {} : await respuesta.json().catch(() => ({}));
-    if (!respuesta.ok) throw new Error(datos.error?.message || `Gmail respondió ${respuesta.status}.`);
-    return datos;
+  listar(opciones) {
+    return this.cliente.listar(opciones);
   }
 
-  #resumen(mensaje) {
-    const etiquetas = mensaje.labelIds ?? [];
-    return {
-      id: mensaje.id,
-      hiloId: mensaje.threadId,
-      de: analizarDireccion(obtenerCabecera(mensaje.payload, 'From')),
-      asunto: obtenerCabecera(mensaje.payload, 'Subject') || '(sin asunto)',
-      fecha: Number(mensaje.internalDate),
-      extracto: decodificarEntidades(mensaje.snippet ?? ''),
-      noLeido: etiquetas.includes('UNREAD'),
-      destacado: etiquetas.includes('STARRED'),
-    };
+  leer(id) {
+    return this.cliente.leer(id);
   }
 
-  async listar({ filtro = 'recibidos', consulta = '', pagina = null, maximo = 25 } = {}) {
-    const q = [
-      { recibidos: 'in:inbox', 'no-leidos': 'in:inbox is:unread', destacados: 'is:starred', todos: '' }[filtro] ?? 'in:inbox',
-      consulta,
-    ]
-      .filter(Boolean)
-      .join(' ');
-    const parametros = new URLSearchParams({ q, maxResults: String(Math.min(maximo, 50)) });
-    if (pagina) parametros.set('pageToken', pagina);
-    const lista = await this.#api(`/messages?${parametros}`);
-    const ids = (lista.messages ?? []).map((m) => m.id);
-
-    // Metadatos en paralelo, de 8 en 8, para no saturar la cuota.
-    const mensajes = [];
-    for (let i = 0; i < ids.length; i += 8) {
-      const lote = await Promise.all(
-        ids.slice(i, i + 8).map((id) =>
-          this.#api(`/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`),
-        ),
-      );
-      mensajes.push(...lote.map((m) => this.#resumen(m)));
-    }
-    return { mensajes, siguiente: lista.nextPageToken ?? null };
+  modificar(id, cambios) {
+    return this.cliente.modificar(id, cambios);
   }
 
-  async leer(id) {
-    if (!/^[0-9a-zA-Z]+$/.test(id)) throw new Error('Identificador de correo no válido.');
-    const mensaje = await this.#api(`/messages/${id}?format=full`);
-    const cuerpo = extraerCuerpo(mensaje.payload);
-    return {
-      ...this.#resumen(mensaje),
-      para: obtenerCabecera(mensaje.payload, 'To'),
-      cc: obtenerCabecera(mensaje.payload, 'Cc'),
-      idMensaje: obtenerCabecera(mensaje.payload, 'Message-ID'),
-      referencias: obtenerCabecera(mensaje.payload, 'References'),
-      html: cuerpo.html,
-      texto: cuerpo.texto || htmlATexto(cuerpo.html),
-      adjuntos: cuerpo.adjuntos,
-    };
+  enviar(datos) {
+    return this.cliente.enviar(datos);
   }
 
-  async modificar(id, { leido, destacado, archivar, papelera } = {}) {
-    if (!/^[0-9a-zA-Z]+$/.test(id)) throw new Error('Identificador de correo no válido.');
-    if (papelera) return this.#api(`/messages/${id}/trash`, { method: 'POST' });
-    const agregar = [];
-    const quitar = [];
-    if (leido === true) quitar.push('UNREAD');
-    if (leido === false) agregar.push('UNREAD');
-    if (destacado === true) agregar.push('STARRED');
-    if (destacado === false) quitar.push('STARRED');
-    if (archivar) quitar.push('INBOX');
-    return this.#api(`/messages/${id}/modify`, {
-      method: 'POST',
-      body: JSON.stringify({ addLabelIds: agregar, removeLabelIds: quitar }),
-    });
-  }
-
-  async enviar({ para, asunto, cuerpo, responderA = null }) {
-    if (!validarDestinatarios(para)) throw new Error('Revisa las direcciones de "Para".');
-    let original = null;
-    if (responderA) original = await this.leer(responderA);
-    const raw = construirMensaje({
-      para,
-      asunto: original ? asuntoRespuesta(original.asunto) : asunto,
-      cuerpo,
-      enRespuestaA: original?.idMensaje || null,
-      referencias: original?.referencias || null,
-    });
-    return this.#api('/messages/send', {
-      method: 'POST',
-      body: JSON.stringify(original ? { raw, threadId: original.hiloId } : { raw }),
-    });
-  }
-
-  // Devuelve los correos sin leer que no se habían visto en la comprobación anterior.
-  async nuevos() {
-    const { mensajes } = await this.listar({ filtro: 'no-leidos', consulta: 'newer_than:2d', maximo: 20 });
-    const primeraVez = this.vistos === null;
-    this.vistos ??= new Set();
-    const nuevos = mensajes.filter((m) => !this.vistos.has(m.id));
-    nuevos.forEach((m) => this.vistos.add(m.id));
-    return primeraVez ? [] : nuevos;
+  nuevos() {
+    return this.cliente.nuevos();
   }
 }

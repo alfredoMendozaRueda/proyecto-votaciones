@@ -1,13 +1,30 @@
 // Utilidades puras para los mensajes de la API de Gmail: descodificar cuerpos
-// y cabeceras, y construir correos RFC 2822 para enviar. Sin dependencias de
-// Electron, para poder probarlas con node:test.
+// y cabeceras, y construir correos RFC 2822 para enviar. Funcionan igual en
+// Node (Electron, tests) y en el navegador (versión web): solo usan
+// Uint8Array, atob/btoa y TextEncoder/TextDecoder.
 
-export function base64UrlABuffer(datos = '') {
-  return Buffer.from(datos.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+function base64ABytes(base64) {
+  const binario = atob(base64);
+  const bytes = new Uint8Array(binario.length);
+  for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+  return bytes;
 }
 
-export function bufferABase64Url(buffer) {
-  return Buffer.from(buffer).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function bytesABase64(bytes) {
+  let binario = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binario += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binario);
+}
+
+const utf8 = (texto) => new TextEncoder().encode(texto);
+
+export function base64UrlABytes(datos = '') {
+  const base64 = datos.replace(/-/g, '+').replace(/_/g, '/');
+  return base64ABytes(base64 + '='.repeat((4 - (base64.length % 4)) % 4));
+}
+
+export function bytesABase64Url(bytes) {
+  return bytesABase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function cabecera(partes, nombre) {
@@ -38,10 +55,10 @@ export function decodificarPalabras(valor = '') {
   return valor.replace(/=\?([^?]+)\?([bqBQ])\?([^?]*)\?=(\s+(?==\?))?/g, (_, charset, modo, texto) => {
     const bytes =
       modo.toUpperCase() === 'B'
-        ? Buffer.from(texto, 'base64')
-        : Buffer.from(
+        ? base64ABytes(texto)
+        : Uint8Array.from(
             texto.replace(/_/g, ' ').replace(/=([0-9A-Fa-f]{2})/g, (_m, h) => String.fromCharCode(parseInt(h, 16))),
-            'latin1',
+            (c) => c.charCodeAt(0),
           );
     return decodificarTexto(bytes, charset.toLowerCase());
   });
@@ -62,7 +79,7 @@ export function extraerCuerpo(payload) {
       return;
     }
     if (!parte.body?.data) return;
-    const contenido = decodificarTexto(base64UrlABuffer(parte.body.data), charsetDe(parte));
+    const contenido = decodificarTexto(base64UrlABytes(parte.body.data), charsetDe(parte));
     if (tipo === 'text/html' && !resultado.html) resultado.html = contenido;
     else if (tipo === 'text/plain' && !resultado.texto) resultado.texto = contenido;
   };
@@ -114,7 +131,7 @@ function limpiarCabecera(valor = '') {
 
 function codificarCabecera(valor) {
   const limpio = limpiarCabecera(valor);
-  return /^[\x20-\x7e]*$/.test(limpio) ? limpio : `=?UTF-8?B?${Buffer.from(limpio, 'utf8').toString('base64')}?=`;
+  return /^[\x20-\x7e]*$/.test(limpio) ? limpio : `=?UTF-8?B?${bytesABase64(utf8(limpio))}?=`;
 }
 
 function trocear(texto, ancho = 76) {
@@ -134,8 +151,8 @@ export function construirMensaje({ de, para, asunto, cuerpo, enRespuestaA, refer
     'Content-Transfer-Encoding: base64',
   ].filter(Boolean);
   const cuerpoCrlf = String(cuerpo ?? '').replace(/\r?\n/g, '\r\n');
-  const mensaje = `${cabeceras.join('\r\n')}\r\n\r\n${trocear(Buffer.from(cuerpoCrlf, 'utf8').toString('base64'))}`;
-  return bufferABase64Url(Buffer.from(mensaje, 'utf8'));
+  const mensaje = `${cabeceras.join('\r\n')}\r\n\r\n${trocear(bytesABase64(utf8(cuerpoCrlf)))}`;
+  return bytesABase64Url(utf8(mensaje));
 }
 
 export function validarDestinatarios(para = '') {

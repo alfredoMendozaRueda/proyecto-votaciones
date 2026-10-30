@@ -79,6 +79,27 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
     contenedor.querySelector('#correo-ir-ajustes').addEventListener('click', () => abrirAjustes('correo'));
   }
 
+  // En la versión web Google cierra la sesión cada hora; volver a entrar
+  // necesita un toque del usuario (abre una ventana de Google).
+  function reconectar() {
+    contenedor.innerHTML = `
+      <div class="tarjeta-aviso">
+        <h2>Vuelve a entrar en Gmail</h2>
+        <p>Por seguridad, Google cierra la sesión de las apps web cada hora. Toca para seguir con tu correo.</p>
+        <button type="button" class="boton boton--primario" id="correo-reconectar">${icono('sobre', 16)} Reconectar</button>
+        <p class="mensaje-ajuste" id="correo-reconectar-error" role="status"></p>
+      </div>`;
+    contenedor.querySelector('#correo-reconectar').addEventListener('click', async () => {
+      try {
+        await api.correo.conectar();
+        bandeja();
+        await cargar();
+      } catch (e) {
+        contenedor.querySelector('#correo-reconectar-error').textContent = e.message;
+      }
+    });
+  }
+
   // ---------- Bandeja ----------
 
   function bandeja() {
@@ -86,7 +107,7 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
       <div class="correo__barra">
         <label class="buscador">${icono('buscar', 16)}<input type="search" id="correo-buscar" placeholder="Buscar en el correo" aria-label="Buscar en el correo"></label>
         <button type="button" class="icono-boton" id="correo-actualizar" aria-label="Actualizar" title="Actualizar">${icono('actualizar')}</button>
-        <button type="button" class="boton boton--primario" id="correo-redactar">${icono('redactar', 15)} Redactar</button>
+        <button type="button" class="boton boton--primario" id="correo-redactar" aria-label="Redactar">${icono('redactar', 15)}<span class="texto-boton">Redactar</span></button>
       </div>
       <div class="filtros" role="group" aria-label="Filtrar correos">
         ${FILTROS.map(([valor, nombre]) => `<button type="button" data-filtro="${valor}" aria-pressed="${valor === estado.filtro}">${nombre}</button>`).join('')}
@@ -164,7 +185,8 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
       pintarLista();
       contarNoLeidos();
     } catch (e) {
-      if (lista) lista.innerHTML = `<li class="lista-vacia">${escapar(e.message)}</li>`;
+      if (e.reconectar) reconectar();
+      else if (lista) lista.innerHTML = `<li class="lista-vacia">${escapar(e.message)}</li>`;
     }
   }
 
@@ -207,7 +229,8 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
     try {
       correo = await api.correo.leer(id);
     } catch (e) {
-      contenedor.innerHTML = `<div class="tarjeta-aviso"><h2>No se pudo abrir</h2><p>${escapar(e.message)}</p></div>`;
+      if (e.reconectar) reconectar();
+      else contenedor.innerHTML = `<div class="tarjeta-aviso"><h2>No se pudo abrir</h2><p>${escapar(e.message)}</p></div>`;
       return;
     }
     estado.actual = correo;
@@ -407,10 +430,14 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
   }
 
   async function iniciar() {
-    const { conectado } = await api.correo.estado();
-    if (!conectado) {
+    const cuenta = await api.correo.estado();
+    if (!cuenta.conectado) {
       sinCuenta();
       alNoLeidos(0);
+      return;
+    }
+    if (cuenta.necesitaReconectar) {
+      reconectar();
       return;
     }
     bandeja();

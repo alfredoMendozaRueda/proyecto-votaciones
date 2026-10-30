@@ -1,12 +1,16 @@
 import { Kitsune } from '../kitsune/Kitsune.js';
 import { crearDemo } from './demo.js';
+import { crearBackendWeb } from './web/backend.js';
 import { crearChat } from './chat.js';
 import { crearCorreo } from './correo.js';
 import { crearAjustes } from './ajustes.js';
 import { icono } from './iconos.js';
 
-// En Electron existe window.asistente (preload); en un navegador, el modo de ejemplo.
-const api = window.asistente ?? crearDemo();
+// Electron trae window.asistente (preload). En el navegador se usa la versión
+// web real, salvo en el modo de ejemplo (?demo o la página de demostración).
+const modoEjemplo = window.KITSUNE_DEMO === true || new URLSearchParams(location.search).has('demo');
+const api = window.asistente ?? (modoEjemplo ? crearDemo() : crearBackendWeb());
+document.documentElement.dataset.plataforma = api.plataforma;
 
 // El proceso principal puede pedir "mostrar" antes de que todo esté listo.
 const pendientes = [];
@@ -34,6 +38,9 @@ let vistaActual = 'chat';
 let noLeidos = 0;
 let ultimaActividad = Date.now();
 let ratonDentro = false;
+// En pantallas táctiles no se enfoca el chat solo: abriría el teclado sin pedirlo.
+const tactil = matchMedia('(pointer: coarse)').matches;
+const enfocarChat = () => !tactil && chat.enfocar();
 
 function aplicarAjustes(a) {
   escena.dataset.tamano = a.tamano;
@@ -41,7 +48,7 @@ function aplicarAjustes(a) {
   kitsune.setPaleta(a.paleta);
   kitsune.setOpcion('seguirCursor', a.seguirCursor);
   kitsune.setOpcion('fuegos', a.fuegos);
-  kitsune.setCalidadPelo(a.calidadPelo);
+  kitsune.setCalidad(a.calidadPelo);
 }
 
 function mostrarVista(nombre, seccionAjustes = null) {
@@ -50,13 +57,13 @@ function mostrarVista(nombre, seccionAjustes = null) {
   for (const [clave, pestana] of Object.entries(pestanas)) pestana.setAttribute('aria-selected', String(clave === nombre));
   document.getElementById('boton-ajustes').setAttribute('aria-pressed', String(nombre === 'ajustes'));
   if (nombre === 'ajustes') panelAjustes.abrir(seccionAjustes);
-  if (nombre === 'chat') chat.enfocar();
+  if (nombre === 'chat') enfocarChat();
 }
 
 function abrirDialogo() {
   dialogo.classList.remove('cerrandose');
   dialogo.hidden = false;
-  if (vistaActual === 'chat') chat.enfocar();
+  if (vistaActual === 'chat') enfocarChat();
 }
 
 function cerrarDialogo() {
@@ -201,7 +208,8 @@ async function iniciar() {
     actividad();
     if (e.key === 'Escape') {
       if (!dialogo.hidden) cerrarDialogo();
-      else manejarAlternar('ocultar');
+      // En la web no hay atajo global para volver a llamarlo: el zorro se queda.
+      else if (api.plataforma !== 'web') manejarAlternar('ocultar');
     }
   });
 
@@ -223,19 +231,53 @@ async function iniciar() {
     }
   }, 10_000);
 
+  if (api.plataforma !== 'electron') vigilarTeclado();
   if (api.demo) prepararDemo();
+  if (api.plataforma === 'web') prepararWeb();
+}
+
+// En pantallas anchas la "ventana" de 454×730 se reduce si no cabe; en móvil
+// manda la disposición a pantalla completa del CSS.
+function ajustarEscala(barra = 0) {
+  const escalar = () => {
+    const escala = Math.min(1, window.innerWidth / 460, (window.innerHeight - barra) / 735);
+    escena.style.transform = window.innerWidth > 600 && escala < 1 ? `scale(${escala})` : '';
+  };
+  escalar();
+  window.addEventListener('resize', escalar);
+}
+
+// En el móvil, mientras se escribe el zorro se aparta para dejar sitio al teclado.
+function vigilarTeclado() {
+  const esCampo = (el) => el?.matches?.('textarea, input:not([type=checkbox]):not([type=radio]), select');
+  document.addEventListener('focusin', (e) => {
+    if (esCampo(e.target) && window.innerWidth <= 600) escena.classList.add('teclado');
+  });
+  document.addEventListener('focusout', () => {
+    setTimeout(() => {
+      if (!esCampo(document.activeElement)) escena.classList.remove('teclado');
+    }, 120);
+  });
+}
+
+// Versión web: no hay atajo global; el zorro aparece al abrir la app.
+function prepararWeb() {
+  ajustarEscala();
+  manejarAlternar('mostrar');
+  // Abierta desde el aviso de correo nuevo.
+  if (new URLSearchParams(location.search).has('correo')) mostrarVista('correo');
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data?.tipo === 'abrir-correo') mostrarVista('correo');
+    });
+  }
 }
 
 // Solo en el navegador: escritorio simulado y el atajo funcionando dentro de la página.
 function prepararDemo() {
   document.body.classList.add('demo');
-  // La "ventana" mide 454×730: en pantallas pequeñas se reduce para que quepa.
-  const escalar = () => {
-    const escala = Math.min(1, window.innerWidth / 460, (window.innerHeight - 48) / 735);
-    escena.style.transform = escala < 1 ? `scale(${escala})` : '';
-  };
-  escalar();
-  window.addEventListener('resize', escalar);
+  ajustarEscala(48);
   window.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.altKey && e.code === 'KeyK') {
       e.preventDefault();
