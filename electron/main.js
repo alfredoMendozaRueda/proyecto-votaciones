@@ -1,9 +1,10 @@
 import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, Notification, screen, shell, Tray } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { obtenerAjustes, guardarAjustes, guardarSecreto, borrarSecreto, leerSecreto } from './almacen.js';
+import { obtenerAjustes, guardarAjustes, guardarSecreto, borrarSecreto, leerSecreto, leerDatos, guardarDatos } from './almacen.js';
 import { Gmail } from './gmail.js';
 import { ConversacionClaude, mensajeDeError } from '../src/compartido/claude.js';
+import { Recordatorios } from '../src/compartido/recordatorios.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const URL_DESARROLLO = process.env.KITSUNE_DEV_URL;
@@ -18,12 +19,29 @@ let atajoActual = null;
 let temporizadorCorreo = null;
 
 const gmail = new Gmail(obtenerAjustes);
+const recordatorios = new Recordatorios({
+  leer: () => leerDatos('recordatorios'),
+  guardar: (lista) => guardarDatos('recordatorios', lista),
+  avisar: avisarRecordatorio,
+});
 const claude = new ConversacionClaude({
   obtenerClave: async () => leerSecreto('claveClaude'),
   obtenerAjustes,
   gmail,
+  recordatorios,
   emitir: (evento) => ventana?.webContents.send('claude:evento', evento),
 });
+
+// A su hora: notificación del sistema y el zorro aparece con el aviso.
+function avisarRecordatorio(recordatorio) {
+  if (Notification.isSupported()) {
+    const notificacion = new Notification({ title: 'Kitsune te recuerda', body: recordatorio.texto });
+    notificacion.on('click', mostrar);
+    notificacion.show();
+  }
+  if (ventana && !ventana.isVisible()) mostrar();
+  ventana?.webContents.send('recordatorio:aviso', recordatorio);
+}
 
 function medidas(ajustes) {
   const [anchoZorro, altoZorro] = ZORRO[ajustes.tamano];
@@ -202,6 +220,7 @@ function registrarCanales() {
   });
   manejar('claude:cancelar', () => claude.cancelar());
   manejar('claude:reiniciar', () => claude.reiniciar());
+  manejar('claude:mensajes', () => claude.mensajesVisibles());
   manejar('claude:redactar', async (id, indicaciones) => claude.redactarRespuesta(await gmail.leer(id), String(indicaciones ?? '')));
 
   manejar('correo:estado', () => gmail.estado());
@@ -216,6 +235,9 @@ function registrarCanales() {
   manejar('correo:leer', (id) => gmail.leer(id));
   manejar('correo:modificar', (id, cambios) => gmail.modificar(id, cambios));
   manejar('correo:enviar', (datos) => gmail.enviar(datos));
+
+  manejar('recordatorios:listar', () => recordatorios.listar());
+  manejar('recordatorios:borrar', (id) => recordatorios.borrar(String(id ?? '')));
 
   manejar('enlace:abrir', (url) => abrirEnlaceSeguro(url));
 
@@ -238,6 +260,7 @@ if (!app.requestSingleInstanceLock()) {
     crearBandeja();
     if (!registrarAtajo(obtenerAjustes().atajo)) registrarAtajo('Control+Alt+K');
     programarCorreo();
+    recordatorios.programar();
   });
   // Vive en la bandeja del sistema: cerrar la ventana no cierra la app.
   app.on('window-all-closed', () => {});

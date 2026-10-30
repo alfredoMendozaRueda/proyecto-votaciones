@@ -12,6 +12,7 @@ export const AJUSTES_POR_DEFECTO = {
   iniciarConWindows: false,
   dormirTrasMin: 5,
   voz: false,
+  pulsoDiario: true,
   modelo: 'claude-opus-5-5',
   personalidad: '',
   correoCadaMin: 5,

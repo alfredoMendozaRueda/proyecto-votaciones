@@ -1,16 +1,46 @@
 import { icono } from './iconos.js';
 import { markdownAHtml } from './markdown.js';
+import { cuandoLegible } from './fechas.js';
 
-const SUGERENCIAS = ['¿Tengo correos sin leer?', 'Resume lo más urgente de hoy', 'Ayúdame a responder a Lucía'];
+const PEDIR_PULSO = 'Prepárame el pulso de hoy';
+const CLAVE_PULSO = 'kitsune.pulso';
+
+const ETIQUETAS_HERRAMIENTA = {
+  buscar_correos: 'Revisando tu correo…',
+  leer_correo: 'Leyendo el correo…',
+  crear_recordatorio: 'Apuntando el recordatorio…',
+  ver_recordatorios: 'Mirando tus recordatorios…',
+  borrar_recordatorio: 'Borrando el recordatorio…',
+};
+
+const leerPulso = () => {
+  try {
+    return localStorage.getItem(CLAVE_PULSO);
+  } catch {
+    return null;
+  }
+};
+const marcarPulso = () => {
+  try {
+    localStorage.setItem(CLAVE_PULSO, new Date().toDateString());
+  } catch {
+    // Sin almacenamiento: la tarjeta volverá a salir, nada más.
+  }
+};
 
 // Vista de chat. alEstado(nombre, datos) avisa al zorro: 'escuchar', 'pensar',
-// 'hablar', 'reposo' o 'fin' (con el texto de la respuesta, para la voz).
-export function crearChat({ contenedor, api, alEstado, abrirAjustes }) {
+// 'hablar' (con el trozo de texto que llega), 'reposo' o 'fin' (con la respuesta, para la voz).
+export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjustes }) {
+  // El dictado del navegador no funciona dentro de Electron (necesita los servicios de Google).
+  const Reconocimiento = api.plataforma === 'electron' ? null : window.SpeechRecognition || window.webkitSpeechRecognition;
+  const sugerencias = ['¿Tengo correos sin leer?', PEDIR_PULSO, api.demo ? 'Ayúdame a responder a Lucía' : 'Recuérdame mirar el correo en una hora'];
+
   contenedor.innerHTML = `
     <div class="chat__mensajes desplazable" id="chat-mensajes" role="log" aria-live="polite" aria-relevant="additions"></div>
     <form class="compositor" id="chat-formulario">
       <button type="button" class="icono-boton" id="chat-nueva" aria-label="Nueva conversación" title="Nueva conversación">${icono('nueva')}</button>
       <textarea id="chat-entrada" rows="1" placeholder="Escribe a Kitsune…" aria-label="Mensaje para Kitsune"></textarea>
+      ${Reconocimiento ? `<button type="button" class="icono-boton boton-micro" id="chat-micro" aria-label="Dictar" aria-pressed="false" title="Dictar">${icono('microfono')}</button>` : ''}
       <button type="submit" class="boton-enviar" id="chat-enviar" aria-label="Enviar">${icono('enviar', 17)}</button>
     </form>`;
 
@@ -18,6 +48,8 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes }) {
   const formulario = contenedor.querySelector('#chat-formulario');
   const entrada = contenedor.querySelector('#chat-entrada');
   const botonEnviar = contenedor.querySelector('#chat-enviar');
+  const botonMicro = contenedor.querySelector('#chat-micro');
+  let restaurado = false;
 
   let ocupado = false;
   let burbuja = null;
@@ -32,13 +64,57 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes }) {
   };
 
   function vacio() {
+    const pulso = obtenerAjustes().pulsoDiario && leerPulso() !== new Date().toDateString();
     mensajes.innerHTML = `
       <div class="chat__vacio">
+        ${
+          pulso
+            ? `<div class="pulso">
+          <span class="pulso__latido" aria-hidden="true">${icono('pulso', 18)}</span>
+          <div class="pulso__texto"><p class="pulso__titulo">Tu pulso de hoy</p><p>Lo urgente del correo y tus recordatorios, en un vistazo.</p></div>
+          <button type="button" class="boton boton--primario" id="chat-pulso">Prepárame el día</button>
+        </div>`
+            : ''
+        }
         <p class="chat__saludo">Hola, soy Kitsune.</p>
-        <p>Pregúntame lo que quieras o pídeme que revise tu correo.</p>
-        <div class="sugerencias">${SUGERENCIAS.map((s) => `<button type="button">${s}</button>`).join('')}</div>
+        <p>Pregúntame lo que quieras, pídeme que revise tu correo o que te recuerde algo.</p>
+        <div class="sugerencias">${sugerencias.map((s) => `<button type="button">${s}</button>`).join('')}</div>
       </div>`;
+    mensajes.querySelector('#chat-pulso')?.addEventListener('click', () => preguntar(PEDIR_PULSO));
     mensajes.querySelectorAll('.sugerencias button').forEach((b) => b.addEventListener('click', () => preguntar(b.textContent)));
+  }
+
+  // Nota en el chat al apuntar un recordatorio (con deshacer) o cuando llega su hora.
+  function notaRecordatorio(r, aviso = false) {
+    const div = añadir(`nota-recordatorio${aviso ? ' nota-recordatorio--aviso' : ''}`, `
+      <span class="nota-recordatorio__icono">${icono('campana', 16)}</span>
+      <div class="nota-recordatorio__cuerpo"><span class="nota-recordatorio__cuando"></span><span class="nota-recordatorio__texto"></span></div>
+      ${aviso ? '' : '<button type="button" class="boton">Deshacer</button>'}`);
+    div.querySelector('.nota-recordatorio__cuando').textContent = aviso ? 'Es la hora' : `Recordatorio · ${cuandoLegible(r.cuando)}`;
+    div.querySelector('.nota-recordatorio__texto').textContent = r.texto;
+    const deshacer = div.querySelector('button');
+    deshacer?.addEventListener('click', async () => {
+      deshacer.disabled = true;
+      try {
+        await api.recordatorios.borrar(r.id);
+        div.classList.add('nota-recordatorio--borrada');
+        deshacer.textContent = 'Borrado';
+      } catch {
+        deshacer.disabled = false;
+      }
+    });
+  }
+
+  // Al volver a abrir la app, la conversación sigue donde estaba.
+  async function restaurar() {
+    restaurado = true;
+    const anteriores = (await api.claude.mensajes?.().catch(() => [])) ?? [];
+    if (!anteriores.length || mensajes.querySelector('.burbuja')) return false;
+    for (const m of anteriores) {
+      if (m.rol === 'usuario') añadir('burbuja--usuario', m.texto, true);
+      else añadir('burbuja--kitsune', markdownAHtml(m.texto));
+    }
+    return true;
   }
 
   function sinClave() {
@@ -127,8 +203,11 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes }) {
         alEstado('pensar');
         break;
       case 'herramienta':
-        ponerEstado('Revisando tu correo…');
+        ponerEstado(ETIQUETAS_HERRAMIENTA[e.nombre] ?? 'Un momento…');
         alEstado('pensar');
+        break;
+      case 'recordatorio':
+        notaRecordatorio(e.recordatorio);
         break;
       case 'texto':
         quitarEstado();
@@ -138,7 +217,7 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes }) {
           pintadoPendiente = true;
           requestAnimationFrame(pintar);
         }
-        alEstado('hablar');
+        alEstado('hablar', e.delta);
         break;
       case 'nuevo-bloque':
         cerrarBloque();
@@ -180,6 +259,7 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes }) {
   async function preguntar(contenido) {
     const limpio = contenido.trim();
     if (!limpio || ocupado) return;
+    if (limpio === PEDIR_PULSO) marcarPulso();
     añadir('burbuja--usuario', limpio, true);
     entrada.value = '';
     ajustarAltura();
@@ -223,11 +303,60 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes }) {
     entrada.focus();
   });
 
+  // ---------- Dictado ----------
+
+  let dictado = null;
+  function dictar() {
+    if (dictado) {
+      dictado.stop();
+      return;
+    }
+    const previo = entrada.value.trim();
+    let final = false;
+    dictado = new Reconocimiento();
+    dictado.lang = 'es-ES';
+    dictado.interimResults = true;
+    dictado.onresult = (e) => {
+      const oido = [...e.results].map((r) => r[0].transcript).join('');
+      final = e.results[e.results.length - 1].isFinal;
+      entrada.value = previo ? `${previo} ${oido}` : oido;
+      ajustarAltura();
+      actualizarBoton();
+    };
+    dictado.onerror = (e) => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') error('No tengo permiso para usar el micrófono. Actívalo en los ajustes del navegador.');
+      else if (e.error === 'network') error('El dictado necesita conexión a internet.');
+    };
+    dictado.onend = () => {
+      dictado = null;
+      botonMicro.classList.remove('escuchando');
+      botonMicro.setAttribute('aria-pressed', 'false');
+      botonMicro.setAttribute('aria-label', 'Dictar');
+      // Como un asistente de voz: al terminar de hablar, se envía.
+      if (final && entrada.value.trim()) preguntar(entrada.value);
+      else alEstado(entrada.value.trim() ? 'escuchar' : 'reposo');
+    };
+    try {
+      dictado.start();
+    } catch {
+      dictado = null;
+      return;
+    }
+    botonMicro.classList.add('escuchando');
+    botonMicro.setAttribute('aria-pressed', 'true');
+    botonMicro.setAttribute('aria-label', 'Dejar de dictar');
+    alEstado('escuchar');
+  }
+  botonMicro?.addEventListener('click', () => {
+    if (!ocupado && !entrada.disabled) dictar();
+  });
+
   async function comprobarClave() {
     const { configurado } = await api.claude.estado();
     if (!configurado) sinClave();
-    else if (!mensajes.querySelector('.burbuja')) vacio();
+    else if (!mensajes.querySelector('.burbuja') && !(!restaurado && (await restaurar()))) vacio();
     entrada.disabled = !configurado;
+    if (botonMicro) botonMicro.disabled = !configurado;
     actualizarBoton();
   }
 
@@ -236,5 +365,16 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes }) {
     enfocar: () => entrada.focus(),
     preguntar,
     comprobarClave,
+    // Texto compartido desde otra app: se deja escrito para que el usuario lo envíe.
+    rellenar(texto) {
+      entrada.value = texto;
+      ajustarAltura();
+      actualizarBoton();
+      alEstado('escuchar');
+    },
+    avisoRecordatorio: (r) => {
+      mensajes.querySelector('.chat__vacio')?.remove();
+      notaRecordatorio(r, true);
+    },
   };
 }

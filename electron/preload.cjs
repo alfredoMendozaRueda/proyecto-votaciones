@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('asistente', {
     enviar: (texto) => invocar('claude:enviar', texto),
     cancelar: () => invocar('claude:cancelar'),
     reiniciar: () => invocar('claude:reiniciar'),
+    mensajes: () => invocar('claude:mensajes'),
     redactarRespuesta: (id, indicaciones) => invocar('claude:redactar', id, indicaciones),
     alEvento: (callback) => escuchar('claude:evento', callback),
   },
@@ -39,6 +40,11 @@ contextBridge.exposeInMainWorld('asistente', {
     modificar: (id, cambios) => invocar('correo:modificar', id, cambios),
     enviar: (datos) => invocar('correo:enviar', datos),
     alNuevo: (callback) => escuchar('correo:nuevo', callback),
+  },
+  recordatorios: {
+    listar: () => invocar('recordatorios:listar'),
+    borrar: (id) => invocar('recordatorios:borrar', id),
+    alAviso: (callback) => escuchar('recordatorio:aviso', callback),
   },
   ventana: {
     alAlternar: (callback) => escuchar('ventana:alternar', callback),

@@ -41,6 +41,8 @@ let ratonDentro = false;
 // En pantallas táctiles no se enfoca el chat solo: abriría el teclado sin pedirlo.
 const tactil = matchMedia('(pointer: coarse)').matches;
 const enfocarChat = () => !tactil && chat.enfocar();
+// Un toque de vibración en móviles Android (iPhone no la permite en la web).
+const vibrar = (patron) => tactil && navigator.vibrate?.(patron);
 
 function aplicarAjustes(a) {
   escena.dataset.tamano = a.tamano;
@@ -97,6 +99,8 @@ function hablarEnVoz(texto) {
   const frase = new SpeechSynthesisUtterance(limpio);
   frase.lang = 'es-ES';
   frase.voice = speechSynthesis.getVoices().find((v) => v.lang?.startsWith('es')) ?? null;
+  // Cada palabra pronunciada mueve la boca del zorro.
+  frase.onboundary = (e) => kitsune.pulsoHabla(e.charLength || 5);
   return new Promise((resolver) => {
     frase.onend = resolver;
     frase.onerror = resolver;
@@ -108,6 +112,7 @@ function hablarEnVoz(texto) {
 // El chat avisa de lo que está pasando y el zorro lo representa.
 async function alEstadoChat(estado, texto) {
   actividad();
+  if (estado === 'hablar' && texto) kitsune.pulsoHabla(texto.length);
   if (estado === 'fin') {
     if (ajustes.voz && texto) {
       kitsune.setEstado('hablar');
@@ -134,6 +139,7 @@ async function iniciar() {
     api,
     alEstado: alEstadoChat,
     abrirAjustes: (seccion) => mostrarVista('ajustes', seccion),
+    obtenerAjustes: () => ajustes,
   });
   correo = crearCorreo({
     contenedor: vistas.correo,
@@ -160,8 +166,14 @@ async function iniciar() {
   );
   document.getElementById('boton-cerrar').addEventListener('click', cerrarDialogo);
 
+  kitsune.on('caricia', () => {
+    actividad();
+    vibrar(12);
+  });
+
   kitsune.on('toque', () => {
     actividad();
+    vibrar(8);
     if (dialogo.hidden) {
       abrirDialogo();
       kitsune.reproducir('saludar');
@@ -175,7 +187,19 @@ async function iniciar() {
     mostrarVista('ajustes');
   });
 
+  // Llega la hora de un recordatorio: el zorro avisa y lo deja escrito en el chat.
+  api.recordatorios?.alAviso((r) => {
+    actividad();
+    abrirDialogo();
+    mostrarVista('chat');
+    chat.avisoRecordatorio(r);
+    vibrar([30, 60, 30]);
+    // Si acaba de aparecer (Electron lo muestra para avisar), primero termina de aparecer.
+    setTimeout(() => kitsune.reproducir('alegria'), kitsune.accion?.nombre === 'aparecer' ? 1700 : 0);
+  });
+
   api.correo.alNuevo(() => {
+    vibrar(20);
     if (ajustes.avisarCorreo) {
       if (kitsune.estado === 'dormir') kitsune.setEstado('reposo');
       kitsune.reproducir('alegria');
@@ -264,13 +288,29 @@ function vigilarTeclado() {
 function prepararWeb() {
   ajustarEscala();
   manejarAlternar('mostrar');
-  // Abierta desde el aviso de correo nuevo.
-  if (new URLSearchParams(location.search).has('correo')) mostrarVista('correo');
+  atenderParametros();
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
     navigator.serviceWorker.addEventListener('message', (e) => {
       if (e.data?.tipo === 'abrir-correo') mostrarVista('correo');
     });
+  }
+}
+
+// Llegadas desde fuera: el aviso de correo (?correo), los atajos del icono
+// (?pulso) o "Compartir" desde otra app (?texto, ?enlace, ?titulo).
+function atenderParametros() {
+  const parametros = new URLSearchParams(location.search);
+  const compartido = ['titulo', 'texto', 'enlace'].map((c) => parametros.get(c)?.trim()).filter(Boolean);
+  if (parametros.has('correo')) mostrarVista('correo');
+  else if (parametros.has('pulso')) chat.preguntar('Prepárame el pulso de hoy');
+  else if (compartido.length) {
+    mostrarVista('chat');
+    chat.rellenar(`Resúmeme esto:\n${[...new Set(compartido)].join('\n')}`.slice(0, 4000));
+  }
+  // Que recargar no repita la acción.
+  if ([...parametros.keys()].some((c) => ['correo', 'pulso', 'chat', 'titulo', 'texto', 'enlace'].includes(c))) {
+    history.replaceState(null, '', location.pathname);
   }
 }
 

@@ -1,5 +1,6 @@
 import { normalizarAjustes, aplicarCambios } from '../../compartido/ajustes.js';
 import { ClienteGmail } from '../../compartido/gmail.js';
+import { Recordatorios } from '../../compartido/recordatorios.js';
 import { leerSecreto, guardarSecreto, borrarSecreto } from './secretos.js';
 
 // Versión web (PWA): el mismo contrato que window.asistente en Electron,
@@ -8,6 +9,7 @@ import { leerSecreto, guardarSecreto, borrarSecreto } from './secretos.js';
 
 const CLAVE_AJUSTES = 'kitsune.ajustes';
 const CLAVE_EMAIL = 'kitsune.correo.email';
+const CLAVE_RECORDATORIOS = 'kitsune.recordatorios';
 const PERMISOS = 'https://www.googleapis.com/auth/gmail.modify';
 const OPCIONES_CLAUDE = { dangerouslyAllowBrowser: true };
 
@@ -52,7 +54,7 @@ function errorReconectar() {
 
 export function crearBackendWeb() {
   let ajustes = normalizarAjustes(leerLocal(CLAVE_AJUSTES) ?? {});
-  const oyentes = { claude: [], nuevo: [] };
+  const oyentes = { claude: [], nuevo: [], recordatorio: [] };
   const emitir = (lista, dato) => oyentes[lista].forEach((f) => f(dato));
   const escuchar = (lista, f) => {
     oyentes[lista].push(f);
@@ -147,14 +149,54 @@ export function crearBackendWeb() {
     }
   }
 
+  // ---------- Recordatorios ----------
+
+  async function notificar(titulo, cuerpo, etiqueta) {
+    if (document.visibilityState === 'visible' || !('Notification' in window) || Notification.permission !== 'granted') return;
+    const registro = await navigator.serviceWorker?.getRegistration();
+    registro?.showNotification(titulo, { body: cuerpo, icon: 'iconos/icono-192.png', tag: etiqueta });
+  }
+
+  // Sin servidor propio solo suenan con la app abierta (o en segundo plano
+  // reciente); los vencidos con la app cerrada se avisan al abrirla.
+  const recordatorios = new Recordatorios({
+    leer: () => leerLocal(CLAVE_RECORDATORIOS) ?? [],
+    guardar: (lista) => guardarLocal(CLAVE_RECORDATORIOS, lista),
+    avisar: (r) => {
+      emitir('recordatorio', r);
+      notificar('Kitsune te recuerda', r.texto, `kitsune-${r.id}`);
+    },
+  });
+  recordatorios.programar();
+
   // ---------- Claude ----------
+
+  // La conversación se guarda cifrada para que sobreviva a que el móvil
+  // cierre la app. Incluye lo que Claude leyó del correo, por eso va cifrada.
+  async function conversacionGuardada() {
+    try {
+      return JSON.parse((await leerSecreto('conversacion')) ?? 'null');
+    } catch {
+      return null;
+    }
+  }
 
   let conversacion = null;
   async function obtenerConversacion() {
     if (!conversacion) {
       // El SDK se carga solo cuando hace falta: la app abre antes.
-      const { ConversacionClaude } = await import('../../compartido/claude.js');
+      const { ConversacionClaude, recortarHistorial, mensajesVisibles } = await import('../../compartido/claude.js');
+      const guardada = await conversacionGuardada();
       conversacion = new ConversacionClaude({
+        recordatorios,
+        alCambiarHistorial: (historial) => {
+          if (!historial.length) {
+            borrarSecreto('conversacion');
+            return;
+          }
+          const recortado = recortarHistorial(historial);
+          guardarSecreto('conversacion', JSON.stringify({ historial: recortado, visibles: mensajesVisibles(recortado) })).catch(() => {});
+        },
         obtenerClave: () => leerSecreto('claveClaude'),
         obtenerAjustes: () => ajustes,
         // Las herramientas de correo solo se ofrecen con una sesión de Gmail vigente.
@@ -169,6 +211,7 @@ export function crearBackendWeb() {
         emitir: (evento) => emitir('claude', evento),
         opcionesCliente: OPCIONES_CLAUDE,
       });
+      if (guardada?.historial) conversacion.restaurar(guardada.historial);
     }
     return conversacion;
   }
@@ -205,7 +248,12 @@ export function crearBackendWeb() {
       },
       enviar: async (texto) => (await obtenerConversacion()).enviar(String(texto).trim().slice(0, 20000)),
       cancelar: async () => conversacion?.cancelar(),
-      reiniciar: async () => conversacion?.reiniciar(),
+      async reiniciar() {
+        conversacion?.reiniciar();
+        await borrarSecreto('conversacion');
+      },
+      // Sin cargar el SDK: lo guardado ya trae lo que se ve en el chat.
+      mensajes: async () => (conversacion ? conversacion.mensajesVisibles() : ((await conversacionGuardada())?.visibles ?? [])),
       redactarRespuesta: async (id, indicaciones) => (await obtenerConversacion()).redactarRespuesta(await gmail.leer(id), indicaciones ?? ''),
       alEvento: (f) => escuchar('claude', f),
     },
@@ -219,6 +267,11 @@ export function crearBackendWeb() {
       modificar: (id, cambios) => gmail.modificar(id, cambios),
       enviar: (datos) => gmail.enviar(datos),
       alNuevo: (f) => escuchar('nuevo', f),
+    },
+    recordatorios: {
+      listar: () => recordatorios.listar(),
+      borrar: (id) => recordatorios.borrar(id),
+      alAviso: (f) => escuchar('recordatorio', f),
     },
     ventana: {
       alAlternar: () => () => {},

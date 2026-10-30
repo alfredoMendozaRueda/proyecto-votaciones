@@ -547,7 +547,7 @@ textarea.campo {
 @keyframes entrar {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(6px) scale(0.97);
   }
 }
 
@@ -1217,11 +1217,270 @@ kbd {
   margin-top: 3px;
 }
 
+/* ---------- Movimiento de la interfaz ---------- */
+
+/* Las burbujas crecen desde su esquina, como si salieran de quien habla. */
+.burbuja {
+  animation-duration: 0.28s;
+  animation-timing-function: cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.burbuja--usuario {
+  transform-origin: 100% 100%;
+}
+
+.burbuja--kitsune {
+  transform-origin: 0 100%;
+}
+
+/* Cambio de pestaña: la vista nueva entra con un fundido corto. */
+.vista:not([hidden]) {
+  animation: cambiar-vista 0.22s ease-out both;
+}
+
+@keyframes cambiar-vista {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* Las sugerencias aparecen una detrás de otra. */
+.chat__vacio > * {
+  animation: entrar 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+
+.chat__vacio > :nth-child(2) {
+  animation-delay: 0.05s;
+}
+
+.chat__vacio > :nth-child(3) {
+  animation-delay: 0.1s;
+}
+
+.chat__vacio > :nth-child(4) {
+  animation-delay: 0.15s;
+}
+
+.sugerencias button {
+  transition: border-color 0.15s ease, transform 0.12s ease, background-color 0.15s ease;
+}
+
+.sugerencias button:active {
+  transform: scale(0.96);
+}
+
+/* ---------- Pulso del día ---------- */
+
+.pulso {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radio-sm);
+  border: 1px solid var(--linea);
+  background:
+    radial-gradient(140% 120% at 0% 0%, rgba(227, 52, 44, 0.16), transparent 60%),
+    var(--carbon-2);
+}
+
+.pulso .boton {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin-top: 6px;
+}
+
+.pulso__titulo {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--texto) !important;
+}
+
+.pulso__texto p {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* El latido: un anillo que se expande y se apaga, como un pulso. */
+.pulso__latido {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--rojo-velo);
+  color: var(--rojo-vivo);
+}
+
+.pulso__latido::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--rojo);
+  animation: latido 1.8s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+
+@keyframes latido {
+  0% {
+    opacity: 0.8;
+    transform: scale(0.9);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+/* ---------- Dictado ---------- */
+
+.boton-micro {
+  position: relative;
+  flex: none;
+}
+
+.boton-micro.escuchando {
+  background: var(--rojo);
+  color: #fff;
+}
+
+.boton-micro.escuchando::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid var(--rojo);
+  animation: latido 1.2s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+  pointer-events: none;
+}
+
+/* ---------- Recordatorios ---------- */
+
+.nota-recordatorio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: stretch;
+  padding: 9px 12px;
+  border-radius: var(--radio-sm);
+  border: 1px dashed var(--linea);
+  background: var(--carbon-2);
+  animation: entrar 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.nota-recordatorio__icono {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--rojo-velo);
+  color: var(--rojo-vivo);
+}
+
+.nota-recordatorio--aviso {
+  border-style: solid;
+  border-color: var(--rojo-hondo);
+}
+
+.nota-recordatorio--aviso .nota-recordatorio__icono {
+  animation: campanilla 0.9s ease-in-out 2;
+}
+
+@keyframes campanilla {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  20% {
+    transform: rotate(16deg);
+  }
+  40% {
+    transform: rotate(-12deg);
+  }
+  60% {
+    transform: rotate(8deg);
+  }
+  80% {
+    transform: rotate(-4deg);
+  }
+}
+
+.nota-recordatorio__cuerpo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.nota-recordatorio__cuando {
+  font-size: 12px;
+  color: var(--texto-3);
+}
+
+.nota-recordatorio--aviso .nota-recordatorio__cuando {
+  color: var(--rojo-vivo);
+  font-weight: 700;
+}
+
+.nota-recordatorio__texto {
+  overflow-wrap: anywhere;
+}
+
+.nota-recordatorio--borrada .nota-recordatorio__texto {
+  text-decoration: line-through;
+  color: var(--texto-3);
+}
+
+.recordatorios {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recordatorios li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 8px;
+  padding: 8px 6px 8px 12px;
+  border-radius: var(--radio-sm);
+  background: var(--carbon-2);
+}
+
+.recordatorios time {
+  grid-row: 2;
+  font-size: 12px;
+  color: var(--texto-3);
+}
+
+.recordatorios .icono-boton {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+}
+
+.recordatorios .recordatorios__vacio {
+  display: block;
+  color: var(--texto-3);
+  background: none;
+  padding-left: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
 }

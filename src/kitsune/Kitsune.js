@@ -21,7 +21,9 @@ import {
 } from './easing.js';
 
 export const ESTADOS = ['reposo', 'escuchar', 'hablar', 'pensar', 'dormir'];
-export const ACCIONES = ['aparecer', 'saludar', 'alegria', 'desaparecer'];
+export const ACCIONES = ['aparecer', 'saludar', 'alegria', 'desaparecer', 'caricia', 'bostezo', 'curiosear', 'sacudir'];
+// Gestos que hace solo, de vez en cuando, si está en reposo.
+const GESTOS_OCIO = ['bostezo', 'curiosear', 'sacudir'];
 
 const NUM_COLAS = 9;
 const DESVIO_ZETA = new THREE.Vector3(0.35, 0.45, 0.2);
@@ -107,7 +109,20 @@ const OBJETIVOS = {
   },
 };
 
-const DURACIONES = { aparecer: 1.6, saludar: 1.9, alegria: 1.15, desaparecer: 0.95 };
+const DURACIONES = {
+  aparecer: 1.6,
+  saludar: 1.9,
+  alegria: 1.15,
+  desaparecer: 0.95,
+  caricia: 2.0,
+  bostezo: 2.6,
+  curiosear: 2.8,
+  sacudir: 1.5,
+};
+// Una caricia que sigue alarga el gesto, hasta este máximo.
+const CARICIA_MAX = 5;
+// Píxeles de arrastre sobre el zorro para que cuente como caricia y no como toque.
+const UMBRAL_CARICIA = 70;
 
 function texturaRadial(interior, exterior, tam = 128) {
   const lienzo = document.createElement('canvas');
@@ -132,6 +147,25 @@ function texturaZ(color) {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText('z', 32, 30);
+  const tex = new THREE.CanvasTexture(lienzo);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function texturaCorazon(color) {
+  const lienzo = document.createElement('canvas');
+  lienzo.width = lienzo.height = 64;
+  const g = lienzo.getContext('2d');
+  g.fillStyle = color;
+  g.shadowColor = color;
+  g.shadowBlur = 8;
+  g.beginPath();
+  g.moveTo(32, 52);
+  g.bezierCurveTo(8, 36, 10, 14, 24, 14);
+  g.bezierCurveTo(29, 14, 32, 18, 32, 22);
+  g.bezierCurveTo(32, 18, 35, 14, 40, 14);
+  g.bezierCurveTo(54, 14, 56, 36, 32, 52);
+  g.fill();
   const tex = new THREE.CanvasTexture(lienzo);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -217,6 +251,11 @@ export class Kitsune {
     this.tic = { espera: 4, t: -1, lado: 1 };
     this.mirada = { x: 0, y: 0, objetivoX: 0, objetivoY: 0, ultimoMovimiento: -10 };
     this.zetas = { espera: 0.6, activas: [] };
+    this.corazones = { espera: 0 };
+    // La boca sigue al texto: cada trozo que llega le da "energía" que se va apagando.
+    this.voz = { energia: 0, ultimo: -10 };
+    this.ocio = { espera: 14 + Math.random() * 10 };
+    this._caricia = null;
     // Objetos reutilizados en cada fotograma (sin basura para el recolector).
     this._pc = {};
     this._o = {};
@@ -228,8 +267,13 @@ export class Kitsune {
     this._puntero = new THREE.Vector2();
     this._alMoverPuntero = this._alMoverPuntero.bind(this);
     this._alPulsar = this._alPulsar.bind(this);
+    this._alSoltar = this._alSoltar.bind(this);
     window.addEventListener('pointermove', this._alMoverPuntero);
+    window.addEventListener('pointerup', this._alSoltar);
+    window.addEventListener('pointercancel', this._alSoltar);
     this.renderer.domElement.addEventListener('pointerdown', this._alPulsar);
+    // Arrastrar el dedo sobre el zorro es acariciarlo, no desplazar la página.
+    this.renderer.domElement.style.touchAction = 'none';
 
     this._observador = new ResizeObserver(() => this._ajustarTamano());
     this._observador.observe(contenedor);
@@ -277,6 +321,12 @@ export class Kitsune {
     });
   }
 
+  // Llega texto de la respuesta (o una palabra de la voz): mueve la boca en proporción.
+  pulsoHabla(caracteres = 4) {
+    this.voz.energia = Math.min(1.25, this.voz.energia + 0.22 + Math.min(caracteres, 40) * 0.02);
+    this.voz.ultimo = this.t;
+  }
+
   setPaleta(nombre) {
     const pal = PALETAS[nombre];
     if (!pal) return;
@@ -301,6 +351,12 @@ export class Kitsune {
     this._texturaZ = texturaZ(pal.fuegoNucleo);
     for (const s of this.zetas3d) {
       s.material.map = this._texturaZ;
+      s.material.needsUpdate = true;
+    }
+    this._texturaCorazon?.dispose();
+    this._texturaCorazon = texturaCorazon(pal.fuego);
+    for (const s of this.corazones3d) {
+      s.material.map = this._texturaCorazon;
       s.material.needsUpdate = true;
     }
     this._emitir('paleta', nombre);
@@ -351,6 +407,8 @@ export class Kitsune {
     this._observador.disconnect();
     this._visor.disconnect();
     window.removeEventListener('pointermove', this._alMoverPuntero);
+    window.removeEventListener('pointerup', this._alSoltar);
+    window.removeEventListener('pointercancel', this._alSoltar);
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
@@ -384,6 +442,7 @@ export class Kitsune {
       pecho: z.pecho,
       cabeza: z.cabeza,
       mandibula: z.mandibula,
+      boca: z.boca,
       orejas: z.orejas,
       patas: z.patas,
       colasBase: z.colasBase,
@@ -411,13 +470,16 @@ export class Kitsune {
       return cola;
     });
 
-    this.zetas3d = Array.from({ length: 3 }, () => {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
-      s.visible = false;
-      s.userData = { vida: 0, origen: new THREE.Vector3() };
-      this.escena.add(s);
-      return s;
-    });
+    const particulas = (cantidad) =>
+      Array.from({ length: cantidad }, () => {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }));
+        s.visible = false;
+        s.userData = { vida: 0, origen: new THREE.Vector3(), fase: 0 };
+        this.escena.add(s);
+        return s;
+      });
+    this.zetas3d = particulas(3);
+    this.corazones3d = particulas(5);
 
     this._mallasCuerpo = [...z.mallas, ...this.colas.map((c) => c.malla)];
   }
@@ -506,14 +568,19 @@ export class Kitsune {
     this.cuerpo.rotation.z = 0.015 * Math.sin(t * 0.7) * reducido;
 
     // Cabeza
-    const habla = p.habla * Math.max(0, Math.sin(t * 13.7) * 0.6 + Math.sin(t * 7.9 + 1.3) * 0.4) * (Math.sin(t * 1.9) > -0.55 ? 1 : 0.15);
+    const habla = this._habla(dt, p.habla);
     this.cabeza.position.set(0, 1.37 - 0.12 * p.agachado + respiracion * 0.006, 0.17 + 0.05 * p.agachado);
     this.cabeza.rotation.set(
-      p.cabeceo + o.cabeceo + this.mirada.y * -0.28 + p.habla * 0.04 * Math.sin(t * 6.8),
-      this.mirada.x * 0.55,
+      p.cabeceo + o.cabeceo + this.mirada.y * -0.28 + p.habla * 0.04 * Math.sin(t * 6.8) - 0.05 * habla,
+      this.mirada.x * 0.55 + o.giro,
       p.inclinacion + o.inclinacion + 0.03 * Math.sin(t * 0.5) * reducido,
     );
-    this.mandibula.rotation.x = clamp01(habla * 0.9 + o.boca) * 0.45;
+    // Hasta 1 al hablar; el bostezo la abre más.
+    const abertura = Math.min(1.7, Math.max(0, habla * 0.9 + o.boca));
+    this.mandibula.rotation.x = abertura * 0.45;
+    // El interior de la boca crece con ella: si no, al abrirla se vería el hueco.
+    this.boca.scale.y = 0.013 + 0.03 * abertura;
+    this.boca.position.y = -0.03 - 0.03 * abertura;
 
     const apertura = Math.max(0, Math.min(1.2, p.apertura * o.apertura * micro.parpadeo));
     for (const ojo of this.zorro.ojos) {
@@ -521,7 +588,7 @@ export class Kitsune {
       ojo.uniforms.uAlegria.value = clamp01(o.alegria);
       ojo.uniforms.uDilatacion.value = clamp01(p.dilatacion + 0.4 * o.alegria);
       ojo.uniforms.uMirada.value.set(
-        Math.max(-1, Math.min(1, p.miradaX + this.mirada.x * 0.8)),
+        Math.max(-1, Math.min(1, p.miradaX + this.mirada.x * 0.8 + o.giro * 0.7)),
         Math.max(-1, Math.min(1, p.miradaY + this.mirada.y * 0.8)),
       );
     }
@@ -578,6 +645,35 @@ export class Kitsune {
     });
 
     this._actualizarZetas(dt);
+    this._actualizarCorazones(dt);
+    this._gestosOcio(dt);
+  }
+
+  // Apertura de la boca al hablar. Si llega texto, sigue su ritmo (sílabas
+  // sobre la energía que deja cada trozo); si no (voz sin marcas de palabra),
+  // un balbuceo de respaldo para que nunca hable con la boca cerrada.
+  _habla(dt, nivel) {
+    const v = this.voz;
+    v.energia *= Math.exp(-3.2 * dt);
+    if (nivel < 0.01) return 0;
+    const t = this.t;
+    const silabas = 0.55 + 0.45 * Math.sin(t * 14.3) * Math.sin(t * 5.1 + 0.7);
+    if (t - v.ultimo < 0.9) return nivel * clamp01(v.energia) * silabas;
+    return nivel * Math.max(0, Math.sin(t * 13.7) * 0.6 + Math.sin(t * 7.9 + 1.3) * 0.4) * (Math.sin(t * 1.9) > -0.55 ? 1 : 0.15);
+  }
+
+  // De vez en cuando, en reposo, un gesto propio: bostezar (más de noche),
+  // mirar alrededor o sacudir las colas. Así nunca parece una imagen en bucle.
+  _gestosOcio(dt) {
+    const g = this.ocio;
+    if (this.estado !== 'reposo' || !this.visible || this.accion || this.opciones.movimientoReducido) return;
+    g.espera -= dt;
+    if (g.espera > 0) return;
+    g.espera = 18 + Math.random() * 22;
+    const hora = new Date().getHours();
+    const noche = hora >= 22 || hora < 7;
+    const r = Math.random();
+    this.reproducir(r < (noche ? 0.5 : 0.18) ? 'bostezo' : r < (noche ? 0.75 : 0.62) ? 'curiosear' : 'sacudir');
   }
 
   _rellenarDespliegue(calcular) {
@@ -600,6 +696,7 @@ export class Kitsune {
       inclinacion: 0,
       cabeceo: 0,
       boca: 0,
+      giro: 0,
       pata: 0,
       ondaPata: 0,
       ondaVel: 1,
@@ -680,6 +777,43 @@ export class Kitsune {
       o.alegria = Math.min(1, 1.6 * aire);
       o.boca = 0.32 * aire;
       o.orejas = 0.8 * aire;
+    } else if (a.nombre === 'caricia') {
+      // Cierra los ojos a gusto, echa las orejas atrás y se apoya en la mano.
+      const k = easeOutCubic(tramo(u, 0, 0.35)) * (1 - easeInOutCubic(tramo(u, a.dur - 0.5, a.dur)));
+      o.apertura = 1 - 0.78 * k;
+      o.alegria = k;
+      o.orejas = -0.6 * k;
+      o.inclinacion = (0.2 + 0.06 * Math.sin(u * 4.2)) * k * reducido;
+      o.cabeceo = 0.09 * k;
+      o.ondaVel = 1 + 0.9 * k;
+      o.abanico = 0.12 * k;
+      o.boca = 0.1 * k;
+      o.sy = 1 - 0.03 * k;
+    } else if (a.nombre === 'bostezo') {
+      const abre = campana(tramo(u, 0.15, 2.1));
+      o.boca = 1.6 * abre;
+      o.apertura = 1 - 0.92 * campana(tramo(u, 0.05, 2.3));
+      // Poco hacia atrás: con la cabeza muy levantada la boca abierta no se ve desde la cámara.
+      o.cabeceo = -0.07 * abre;
+      o.orejas = -0.55 * abre;
+      o.sy = 1 + 0.05 * abre * reducido;
+      o.abanico = 0.1 * abre;
+      o.ondaVel = 1 - 0.4 * abre;
+    } else if (a.nombre === 'curiosear') {
+      // Mira a un lado, luego al otro, con la cabeza ladeada, y vuelve.
+      const giro =
+        -0.45 * easeInOutCubic(tramo(u, 0, 0.45)) +
+        0.8 * easeInOutCubic(tramo(u, 1.1, 1.65)) -
+        0.35 * easeInOutCubic(tramo(u, 2.2, 2.8));
+      o.giro = giro * reducido;
+      o.inclinacion = 0.16 * campana(tramo(u, 0.3, 1.2)) - 0.14 * campana(tramo(u, 1.5, 2.4));
+      o.orejas = 0.7 * campana(tramo(u, 0, 2.8));
+    } else if (a.nombre === 'sacudir') {
+      const fuerza = campana(tramo(u, 0, 1.5));
+      o.ondaVel = 1 + 2.2 * fuerza;
+      o.abanico = 0.3 * fuerza;
+      o.inclinacion = 0.05 * Math.sin(u * 18) * fuerza * reducido;
+      o.orejas = 0.3 * fuerza;
     }
 
     if (a.t >= a.dur) this._cerrarAccion();
@@ -757,6 +891,7 @@ export class Kitsune {
   }
 
   _alMoverPuntero(evento) {
+    if (this._caricia) this._seguirCaricia(evento);
     const rect = this.renderer.domElement.getBoundingClientRect();
     if (!rect.width) return;
     const cabeza = this._vTmp;
@@ -786,8 +921,35 @@ export class Kitsune {
     return this._raycaster.intersectObjects(this._mallasCuerpo, false).length > 0;
   }
 
+  // Pulsar y soltar sin moverse es un toque; arrastrar por encima, una caricia.
   _alPulsar(evento) {
-    if (this.visible && this._tocaKitsune(evento)) this._emitir('toque');
+    if (!this.visible || !this._tocaKitsune(evento)) return;
+    this._caricia = { id: evento.pointerId, x: evento.clientX, y: evento.clientY, recorrido: 0, hecha: false };
+  }
+
+  _seguirCaricia(evento) {
+    const c = this._caricia;
+    if (!c || evento.pointerId !== c.id) return;
+    c.recorrido += Math.hypot(evento.clientX - c.x, evento.clientY - c.y);
+    c.x = evento.clientX;
+    c.y = evento.clientY;
+    if (c.recorrido < UMBRAL_CARICIA) return;
+    const a = this.accion;
+    if (a?.nombre === 'caricia') {
+      // Mientras sigue acariciando, el gesto no se acaba.
+      a.dur = Math.min(CARICIA_MAX, Math.max(a.dur, a.t + 1.1));
+    } else if (!c.hecha && (!a || GESTOS_OCIO.includes(a.nombre))) {
+      this.reproducir('caricia');
+      this._emitir('caricia');
+    }
+    c.hecha = true;
+  }
+
+  _alSoltar(evento) {
+    const c = this._caricia;
+    if (!c || evento.pointerId !== c.id) return;
+    this._caricia = null;
+    if (!c.hecha && c.recorrido < 14 && evento.type === 'pointerup') this._emitir('toque');
   }
 
   _actualizarZetas(dt) {
@@ -817,6 +979,40 @@ export class Kitsune {
       s.position.y += 0.9 * v;
       s.scale.setScalar(0.16 + 0.22 * v);
       s.material.opacity = campana(v) * 0.9;
+    }
+  }
+
+  _actualizarCorazones(dt) {
+    const c = this.corazones;
+    if (this.accion?.nombre === 'caricia' && this.visible) {
+      c.espera -= dt;
+      if (c.espera <= 0) {
+        const libre = this.corazones3d.find((s) => !s.visible);
+        if (libre) {
+          libre.visible = true;
+          libre.userData.vida = 0;
+          libre.userData.fase = Math.random() * Math.PI * 2;
+          this.cabeza.getWorldPosition(libre.userData.origen);
+          // A los lados de la cabeza: encima quedarían tapados por el diálogo.
+          libre.userData.origen.x += (Math.random() < 0.5 ? -1 : 1) * (0.32 + Math.random() * 0.2);
+          libre.userData.origen.y += 0.05;
+        }
+        c.espera = 0.38;
+      }
+    }
+    for (const s of this.corazones3d) {
+      if (!s.visible) continue;
+      s.userData.vida += dt;
+      const v = s.userData.vida / 1.8;
+      if (v >= 1) {
+        s.visible = false;
+        continue;
+      }
+      s.position.copy(s.userData.origen);
+      s.position.x += 0.12 * Math.sin(v * 7 + s.userData.fase);
+      s.position.y += 0.45 * easeOutCubic(v);
+      s.scale.setScalar(0.1 + 0.12 * easeOutBack(Math.min(1, v * 3), 2));
+      s.material.opacity = Math.min(1, v * 6) * (1 - easeInCubic(v));
     }
   }
 

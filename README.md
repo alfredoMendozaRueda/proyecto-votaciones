@@ -16,13 +16,25 @@ historial ni código con `main`.
   sistema y puede arrancar con Windows.
 - **Chat con Claude**: respuestas en tiempo real, con el zorro escuchando,
   pensando y hablando. Puede leer tu correo (solo lectura) para resumirlo o
-  contestarte preguntas sobre él, y leer las respuestas en voz alta.
+  contestarte preguntas sobre él, y leer las respuestas en voz alta. En el
+  móvil puedes dictarle con el micrófono: al terminar de hablar, lo envía.
+- **Recordatorios**: «recuérdame llamar a Lucía mañana a las 10». Claude lo
+  apunta con una herramienta y, a su hora, el zorro salta y llega una
+  notificación. Se pueden deshacer desde el chat o borrar en Ajustes.
+- **Pulso del día**: la primera vez que lo abres cada día te ofrece un
+  resumen de tu jornada: lo urgente del correo, recordatorios de hoy y mañana
+  y una sugerencia. Solo se pide al pulsar el botón (no gasta sin permiso).
+- **Conversación guardada** (versión web): si el móvil cierra la app, al
+  volver la conversación sigue donde estaba, guardada cifrada.
+- **Compartir y atajos** (móvil instalado): "Compartir → Kitsune" desde
+  cualquier app deja el texto o enlace listo para que lo resuma; manteniendo
+  pulsado el icono aparecen "Pulso del día" y "Correo".
 - **Correo**: bandeja tipo Gmail con búsqueda, filtros (recibidos, no leídos,
   destacados), lectura, responder, redactar, archivar, papelera y destacados.
   Los correos nuevos hacen saltar al zorro y muestran una notificación.
 - **Ajustes**: pelaje, tamaño, posición, calidad del pelo, fuegos fatuos,
-  mirada, atajo, inicio con Windows, sueño, voz, clave y modelo de Claude,
-  personalidad y cuenta de Gmail.
+  mirada, atajo, inicio con Windows, sueño, voz, pulso del día,
+  recordatorios, clave y modelo de Claude, personalidad y cuenta de Gmail.
 
 ## Puesta en marcha
 
@@ -104,6 +116,10 @@ Diferencias con la versión de escritorio:
 - Los avisos de correo nuevo llegan como notificaciones mientras la app está
   abierta o en segundo plano reciente; con la app cerrada el sistema no la
   despierta (haría falta un servidor propio).
+- Los recordatorios suenan con la app abierta o en segundo plano reciente;
+  si el móvil la había cerrado, avisa de los atrasados al volver a abrirla.
+- "Compartir → Kitsune" solo existe en Android (iPhone no lo permite a las
+  apps web). El dictado necesita conexión.
 - No hay atajo global, bandeja del sistema ni inicio automático.
 - La app abre sin conexión, pero hablar con Claude o ver el correo necesita red.
 
@@ -114,6 +130,9 @@ El zorro ajusta solo su coste:
 - **Calidad automática**: mide cuánto tarda cada fotograma y baja (o sube) la
   resolución, las capas de pelo y las sombras hasta ir fluido. Se puede fijar
   a mano en Ajustes → Calidad gráfica. En móviles empieza un nivel por debajo.
+- **Gestos sin coste extra**: los gestos en reposo y las caricias reutilizan
+  el mismo esqueleto y unos pocos sprites; no añaden llamadas de dibujo
+  pesadas.
 - **Fotogramas según lo que pasa**: 60 fps mientras habla, piensa o actúa;
   30 en reposo; 20 dormido; 0 cuando está oculto o la pestaña no se ve.
 - **Sin basura en cada fotograma**: vectores reutilizados y estelas de los
@@ -181,6 +200,13 @@ reales y un entorno de estudio para los reflejos).
 | `saludar`     | La primera vez de cada día.          |
 | `alegria`     | Al llegar un correo nuevo.           |
 | `desaparecer` | Al pulsar el atajo otra vez o `Esc`. |
+| `caricia`     | Al arrastrar el dedo o el ratón sobre él: cierra los ojos a gusto, echa las orejas atrás y suelta corazones. Mientras sigues, no para. |
+| `bostezo`     | Solo, en reposo (más a menudo de noche).    |
+| `curiosear`   | Solo, en reposo: mira a un lado y a otro.   |
+| `sacudir`     | Solo, en reposo: sacude las colas.          |
+
+Al hablar, la boca sigue al texto que llega de Claude (y, con la voz
+activada, a cada palabra pronunciada) en vez de moverse en bucle.
 
 Respeta `prefers-reduced-motion`: con movimiento reducido el balanceo de las
 colas y los saltos se atenúan.

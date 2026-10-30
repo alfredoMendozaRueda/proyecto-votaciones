@@ -31,6 +31,16 @@ export function guardarAjustes(cambios) {
   return ajustes;
 }
 
+// Datos de la app que no son secretos (recordatorios).
+export function leerDatos(nombre) {
+  const datos = leerJson(path.join(carpeta(), `${nombre}.json`));
+  return Array.isArray(datos) ? datos : [];
+}
+
+export function guardarDatos(nombre, datos) {
+  escribirJson(path.join(carpeta(), `${nombre}.json`), datos);
+}
+
 // Secretos (clave de Claude, tokens de Google): cifrados con la API del
 // sistema (DPAPI en Windows) y nunca enviados al renderer.
 export function leerSecreto(nombre) {

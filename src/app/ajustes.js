@@ -1,5 +1,6 @@
 import { icono } from './iconos.js';
 import { PALETAS } from '../kitsune/paletas.js';
+import { cuandoLegible } from './fechas.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -129,6 +130,15 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
             <div style="width:150px">${selector('dormirTrasMin', 'ajuste-dormir', [[0, 'Nunca'], [2, 'A los 2 min'], [5, 'A los 5 min'], [10, 'A los 10 min'], [30, 'A los 30 min']])}</div>
           </div>
           ${interruptor('voz', 'Leer las respuestas en voz alta', escritorio ? 'Usa las voces en español de Windows.' : 'Usa las voces en español del dispositivo.')}
+          ${interruptor('pulsoDiario', 'Pulso del día', 'La primera vez que abres Kitsune cada día te ofrece un resumen de correo y recordatorios.')}
+        </section>
+
+        <section class="grupo" id="seccion-recordatorios" aria-label="Recordatorios">
+          <h3>Recordatorios</h3>
+          <ul class="recordatorios" id="lista-recordatorios" aria-live="polite"></ul>
+          <p class="ajuste__ayuda">Pídeselos a Kitsune en el chat: «recuérdame llamar a Lucía mañana a las 10».${
+            escritorio ? '' : ' En el móvil suenan con la app abierta o en segundo plano; si estaba cerrada, te avisa al abrirla.'
+          }</p>
         </section>
 
         <section class="grupo" id="seccion-claude" aria-label="Claude">
@@ -192,7 +202,28 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
       </div>`;
 
     conectar();
+    pintarRecordatorios();
     if (seccion) contenedor.querySelector(`#seccion-${seccion}`)?.scrollIntoView({ block: 'start' });
+  }
+
+  async function pintarRecordatorios() {
+    const lista = contenedor.querySelector('#lista-recordatorios');
+    if (!lista || !api.recordatorios) return;
+    const pendientes = await api.recordatorios.listar().catch(() => []);
+    lista.innerHTML = pendientes.length
+      ? pendientes
+          .map(
+            (r) => `<li><span class="recordatorios__texto">${escapar(r.texto)}</span><time datetime="${new Date(r.cuando).toISOString()}">${escapar(cuandoLegible(r.cuando))}</time>
+              <button type="button" class="icono-boton" data-borrar="${escapar(r.id)}" aria-label="Borrar «${escapar(r.texto)}»" title="Borrar">${icono('papelera', 16)}</button></li>`,
+          )
+          .join('')
+      : '<li class="recordatorios__vacio">No tienes recordatorios pendientes.</li>';
+    lista.querySelectorAll('[data-borrar]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        await api.recordatorios.borrar(b.dataset.borrar).catch(() => {});
+        pintarRecordatorios();
+      }),
+    );
   }
 
   function conectar() {

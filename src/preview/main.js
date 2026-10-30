@@ -14,6 +14,10 @@ const INFO_ACCIONES = {
   saludar: { nombre: 'Saludar', cuando: 'La primera vez cada día' },
   alegria: { nombre: 'Alegría', cuando: 'Cuando llega un correo nuevo' },
   desaparecer: { nombre: 'Desaparecer', cuando: 'Atajo otra vez o Esc' },
+  caricia: { nombre: 'Caricia', cuando: 'Al arrastrar el dedo o el ratón sobre él' },
+  bostezo: { nombre: 'Bostezo', cuando: 'Solo, en reposo (más de noche)' },
+  curiosear: { nombre: 'Curiosear', cuando: 'Solo, en reposo' },
+  sacudir: { nombre: 'Sacudir las colas', cuando: 'Solo, en reposo' },
 };
 
 const escenario = document.getElementById('escenario');

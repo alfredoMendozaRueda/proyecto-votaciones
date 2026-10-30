@@ -21,6 +21,9 @@ const TRAZOS = {
   alerta: '<path d="M12 3l9.5 17h-19L12 3z"/><path d="M12 10v4M12 17.5v.1"/>',
   llave: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2"/>',
   parar: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+  campana: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>',
+  microfono: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/>',
+  pulso: '<path d="M3 12h4l2.5-6 4 12 2.5-6H21"/>',
 };
 
 export function icono(nombre, tam = 18) {

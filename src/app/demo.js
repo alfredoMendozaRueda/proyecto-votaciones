@@ -140,8 +140,48 @@ const NUEVO = {
   texto: 'Se me olvidó comentarte: el fontanero solo puede el lunes por la mañana, ¿te viene bien a las 9?\n\nLucía',
 };
 
+// "Recuérdame llamar a Lucía mañana a las 10" → mañana a las 10:00 (o en una hora si no se entiende).
+function recordatorioDe(texto) {
+  const t = texto.toLowerCase();
+  const cuando = new Date();
+  const hora = t.match(/a las (\d{1,2})(?::(\d{2}))?/);
+  const enHoras = t.match(/en (una|\d+) horas?/);
+  if (enHoras) cuando.setTime(Date.now() + (enHoras[1] === 'una' ? 1 : Number(enHoras[1])) * HORA);
+  else if (hora) {
+    if (/mañana/.test(t)) cuando.setDate(cuando.getDate() + 1);
+    cuando.setHours(Number(hora[1]), Number(hora[2] ?? 0), 0, 0);
+    if (cuando < new Date()) cuando.setDate(cuando.getDate() + 1);
+  } else cuando.setTime(Date.now() + HORA);
+  const que = texto
+    .replace(/^.*?recu[eé]rdame\s*(que\s*)?/i, '')
+    .replace(/\s*(mañana\s*)?(a las \d{1,2}(:\d{2})?|en (una|\d+) horas?)\s*$/i, '')
+    .trim();
+  return { texto: que ? que[0].toUpperCase() + que.slice(1) : 'Lo que me pediste', cuando: cuando.getTime() };
+}
+
 function respuestaPara(texto) {
   const t = texto.toLowerCase();
+  if (/recu[eé]rdame/.test(t)) {
+    const recordatorio = recordatorioDe(texto);
+    const hora = new Date(recordatorio.cuando).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    return {
+      herramienta: 'crear_recordatorio',
+      recordatorio,
+      texto: `Hecho: te aviso a las **${hora}** para «${recordatorio.texto.toLowerCase()}».`,
+    };
+  }
+  if (/pulso/.test(t)) {
+    return {
+      herramienta: 'buscar_correos',
+      texto:
+        '**Tu pulso de hoy**\n\n' +
+        '- **Urgente:** confirmar a Lucía el presupuesto de la cocina (8.460 €) **antes del viernes**.\n' +
+        '- **Trabajo:** Marcos necesita la gráfica de ventas actualizada para el **jueves a las 12**.\n' +
+        '- **Viaje:** tu tren a Valencia sale el 14 de noviembre a las 08:35 (coche 6, plaza 11A).\n' +
+        '- **Recordatorios:** ninguno para hoy.\n\n' +
+        'Te sugiero contestar a Lucía ahora: son dos minutos y desbloquea la obra. ¿Te preparo la respuesta?',
+    };
+  }
   if (/sin leer|no le[ií]d|nuevo|correo/.test(t) && !/respon|redact|contesta/.test(t)) {
     return {
       herramienta: 'buscar_correos',
@@ -175,7 +215,7 @@ function respuestaPara(texto) {
 
 export function crearDemo() {
   const correos = CORREOS.map((c) => ({ ...c }));
-  const oyentes = { claude: [], nuevo: [], alternar: [], ajustes: [] };
+  const oyentes = { claude: [], nuevo: [], alternar: [], ajustes: [], aviso: [] };
   let ajustes = {
     atajo: 'Control+Alt+K',
     paleta: 'carmesi',
@@ -192,8 +232,11 @@ export function crearDemo() {
     correoCadaMin: 5,
     avisarCorreo: true,
     googleClientId: '123456789-kitsune.apps.googleusercontent.com',
+    pulsoDiario: true,
   };
   let cancelado = false;
+  let recordatorios = [];
+  let numRecordatorio = 0;
 
   const emitir = (evento) => oyentes.claude.forEach((f) => f(evento));
   const escuchar = (lista, f) => {
@@ -218,15 +261,21 @@ export function crearDemo() {
         cancelado = true;
       },
       reiniciar: async () => {},
+      mensajes: async () => [],
       alEvento: (f) => escuchar('claude', f),
       async enviar(texto) {
         cancelado = false;
-        const { herramienta, texto: respuesta } = respuestaPara(texto);
+        const { herramienta, texto: respuesta, recordatorio } = respuestaPara(texto);
         emitir({ tipo: 'pensando' });
         await espera(700);
         if (herramienta) {
           emitir({ tipo: 'herramienta', nombre: herramienta });
           await espera(1100);
+          if (recordatorio) {
+            const nuevo = { id: `rdemo${++numRecordatorio}`, avisado: false, ...recordatorio };
+            recordatorios.push(nuevo);
+            emitir({ tipo: 'recordatorio', recordatorio: nuevo });
+          }
           emitir({ tipo: 'nuevo-bloque' });
           emitir({ tipo: 'pensando' });
           await espera(400);
@@ -282,6 +331,14 @@ export function crearDemo() {
       },
       alNuevo: (f) => escuchar('nuevo', f),
     },
+    recordatorios: {
+      listar: async () => recordatorios.filter((r) => !r.avisado).sort((a, b) => a.cuando - b.cuando),
+      async borrar(id) {
+        recordatorios = recordatorios.filter((r) => r.id !== id);
+        return { borrado: id };
+      },
+      alAviso: (f) => escuchar('aviso', f),
+    },
     ventana: {
       alAlternar: (f) => escuchar('alternar', f),
       alAbrirAjustes: (f) => escuchar('ajustes', f),
@@ -293,6 +350,9 @@ export function crearDemo() {
     simular: {
       alternar: (accion) => oyentes.alternar.forEach((f) => f(accion)),
       abrirAjustes: () => oyentes.ajustes.forEach((f) => f()),
+      recordatorio(texto = 'Llamar a Lucía por la cocina') {
+        oyentes.aviso.forEach((f) => f({ id: 'rdemo-aviso', texto, cuando: Date.now(), avisado: true }));
+      },
       correoNuevo() {
         if (correos.some((c) => c.id === NUEVO.id)) return;
         const correo = { ...NUEVO, fecha: Date.now() };

@@ -406,6 +406,7 @@ export function construirZorro(materialesCuerpo) {
     pecho,
     cabeza,
     mandibula,
+    boca,
     orejas,
     patas,
     ojos,
