@@ -27,8 +27,11 @@ self.addEventListener('fetch', (evento) => {
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
-  // La página: primero la red (para recibir versiones nuevas), la copia si no hay conexión.
+  // La app: primero la red (para recibir versiones nuevas), la copia si no hay conexión.
+  // Otras páginas (la de privacidad) van directas a la red y no pisan la copia de la app.
   if (request.mode === 'navigate') {
+    const raiz = new URL('./', self.registration.scope).pathname;
+    if (url.pathname !== raiz && url.pathname !== `${raiz}index.html`) return;
     evento.respondWith(
       fetch(request)
         .then((respuesta) => {

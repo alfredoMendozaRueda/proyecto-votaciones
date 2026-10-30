@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kitsune · Política de privacidad</title>
+    <meta name="description" content="Qué datos usa Kitsune, dónde se guardan y con quién se comparten." />
+    <link rel="icon" type="image/png" href="./iconos/favicon-32.png" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --fondo: #0b0708;
+        --texto: #f4e6e2;
+        --texto-2: #b89c98;
+        --rojo: #e3342c;
+        --linea: #3a1c22;
+      }
+      body {
+        margin: 0;
+        background: var(--fondo);
+        color: var(--texto);
+        font: 16px/1.6 system-ui, 'Segoe UI', sans-serif;
+      }
+      main {
+        max-width: 68ch;
+        margin: 0 auto;
+        padding: 40px 16px 64px;
+      }
+      h1 {
+        font: 800 2rem/1.2 Georgia, serif;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font: 700 1.15rem/1.3 Georgia, serif;
+        margin: 32px 0 8px;
+        padding-top: 16px;
+        border-top: 1px solid var(--linea);
+      }
+      p,
+      li {
+        color: var(--texto-2);
+      }
+      strong {
+        color: var(--texto);
+      }
+      a {
+        color: #ff6b62;
+      }
+      .fecha {
+        margin: 0 0 24px;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Política de privacidad de Kitsune</h1>
+      <p class="fecha">Última actualización: 30 de octubre de 2026</p>
+
+      <p>
+        Kitsune es un asistente personal de código abierto (aplicación de Windows y aplicación web) que te permite hablar con
+        Claude y consultar tu correo de Gmail y tu agenda de Google Calendar. Esta página explica qué datos usa y qué hace con
+        ellos.
+      </p>
+
+      <h2>Resumen</h2>
+      <ul>
+        <li><strong>Kitsune no tiene servidores propios.</strong> Todo funciona en tu ordenador o en tu navegador.</li>
+        <li><strong>Nadie más que tú ve tus datos</strong>: ni el autor de Kitsune ni terceros, salvo lo que tú decidas enviar a Claude.</li>
+        <li><strong>No se venden, no se usan para publicidad</strong> y no se usan para entrenar modelos de inteligencia artificial.</li>
+      </ul>
+
+      <h2>Datos de Google que usa Kitsune</h2>
+      <p>Solo si conectas tu cuenta de Google, Kitsune pide estos permisos:</p>
+      <ul>
+        <li>
+          <strong>Gmail (<code>gmail.modify</code>)</strong>: leer tus correos para mostrarlos en la bandeja, marcarlos como
+          leídos, destacarlos, archivarlos, moverlos a la papelera y enviar los correos que tú escribas o apruebes. Kitsune nunca
+          borra correos de forma definitiva.
+        </li>
+        <li>
+          <strong>Google Calendar (<code>calendar.events</code>)</strong>: ver tus eventos, crear los que tú pidas (siempre con tu
+          confirmación) y avisarte antes de cada cita.
+        </li>
+      </ul>
+      <p>
+        Las llamadas a Google se hacen directamente desde tu dispositivo. El acceso se guarda cifrado en tu equipo (con el
+        cifrado del sistema en Windows y con una llave no exportable en el navegador) y puedes revocarlo cuando quieras desde
+        Kitsune (Ajustes → Desconectar la cuenta) o desde
+        <a href="https://myaccount.google.com/permissions">la página de permisos de tu cuenta de Google</a>.
+      </p>
+
+      <h2>Claude (Anthropic)</h2>
+      <p>
+        Para responderte, Kitsune envía tus mensajes a la API de Claude de Anthropic usando <strong>tu propia clave de API</strong>.
+        Cuando tú le pides algo sobre tu correo o tu agenda, Claude puede consultar solo lo necesario para responder (por
+        ejemplo, los correos sin leer) y ese contenido viaja a Anthropic dentro de la conversación. Anthropic trata esos datos
+        según su propia <a href="https://www.anthropic.com/legal/privacy">política de privacidad</a> y sus condiciones de la API.
+        Si activas la búsqueda en internet, las búsquedas las hace Anthropic.
+      </p>
+
+      <h2>Qué se guarda en tu dispositivo</h2>
+      <ul>
+        <li>Tus ajustes, recordatorios, la memoria («recuerda que…») y el historial de conversaciones.</li>
+        <li>La memoria, el historial, tu clave de Claude y el acceso a Google se guardan <strong>cifrados</strong>.</li>
+        <li>Puedes borrar cada cosa desde la propia app (Memoria, Historial, Recordatorios) o desinstalando Kitsune.</li>
+      </ul>
+
+      <h2>Uso limitado de los datos de Google</h2>
+      <p>
+        El uso y la transferencia a cualquier otra aplicación de la información recibida de las API de Google por parte de
+        Kitsune cumplirá la
+        <a href="https://developers.google.com/terms/api-services-user-data-policy">Política de datos de usuario de los servicios de API de Google</a>,
+        incluidos los requisitos de uso limitado. Los datos de Google solo se usan para las funciones que ves en la app; no se
+        transfieren a terceros salvo a Claude cuando tú lo pides para responderte, no se usan para publicidad, no los lee
+        ninguna persona y no se usan para entrenar modelos de inteligencia artificial.
+      </p>
+
+      <h2>Contacto</h2>
+      <p>
+        Kitsune es un proyecto personal y abierto. Para cualquier duda sobre privacidad, abre una consulta en
+        <a href="https://github.com/alfredoMendozaRueda/proyecto-votaciones/issues">el repositorio del proyecto</a>.
+      </p>
+      <p><a href="./">← Volver a Kitsune</a></p>
+    </main>
+  </body>
+</html>
