@@ -67,6 +67,14 @@ const marcarPulso = () => {
 
 // Vista de chat. alEstado(nombre, datos) avisa al zorro: 'escuchar', 'pensar',
 // 'hablar' (con el trozo de texto que llega), 'reposo' o 'fin' (con la respuesta, para la voz).
+// El saludo cambia con la hora, como lo diría alguien de casa.
+function saludoDeLaHora(ahora = new Date()) {
+  const h = ahora.getHours();
+  if (h >= 6 && h < 13) return 'Buenos días.';
+  if (h >= 13 && h < 21) return 'Buenas tardes.';
+  return 'Buenas noches.';
+}
+
 export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjustes }) {
   // El dictado del navegador no funciona dentro de Electron (necesita los servicios de Google).
   const Reconocimiento = api.plataforma === 'electron' ? null : window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -141,8 +149,8 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
         </div>`
             : ''
         }
-        <p class="chat__saludo">Hola, soy Kitsune.</p>
-        <p>Pregúntame lo que quieras, pídeme que revise tu correo o que te recuerde algo.</p>
+        <p class="chat__saludo">${saludoDeLaHora()}</p>
+        <p>Pregúntame lo que quieras, o pídeme que mire tu correo, tu agenda o el tiempo.</p>
         <div class="sugerencias">${(pulso ? sugerencias : [{ texto: PEDIR_PULSO, icono: 'pulso' }, ...sugerencias])
           .map((s) => `<button type="button" data-texto="${s.texto}">${icono(s.icono, 16)}<span>${s.texto}</span></button>`)
           .join('')}</div>

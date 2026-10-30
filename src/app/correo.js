@@ -86,8 +86,8 @@ function prepararHtml(html, permitirImagenes) {
   });
   const srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>
     html{overflow-y:hidden}
-    body{margin:0;padding:16px 18px;font:15px/1.6 'Segoe UI',system-ui,sans-serif;color:#1d1416;background:#f7efe8;overflow-wrap:anywhere}
-    img{max-width:100%;height:auto} table{max-width:100%} a{color:#b3122e}
+    body{margin:0;padding:16px 18px;font:15px/1.6 'Segoe UI',system-ui,sans-serif;color:#231e18;background:#e9e1d0;overflow-wrap:anywhere}
+    img{max-width:100%;height:auto} table{max-width:100%} a{color:#8f2e1c}
   </style></head><body>${doc.body.innerHTML}</body></html>`;
   return { srcdoc, bloqueadas };
 }

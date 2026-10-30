@@ -1,30 +1,44 @@
-/* El diálogo flota sobre el escritorio: laca negra, bermellón de torii y un
-   hilo de oro solo para el foco del teclado. La ventana es transparente;
-   todo lo que no es diálogo ni zorro deja pasar el ratón. */
+/* Inari al anochecer: laca añil (yoru), blanco de concha (gofun), pan de
+   oro (kin) para lo que se pulsa y bermellón (shu) solo para el sello, lo
+   pendiente y lo que se borra. Las respuestas del zorro van en papel washi,
+   como los omikuji de los santuarios. La ventana es transparente; todo lo
+   que no es diálogo ni zorro deja pasar el ratón. */
 :root {
-  --negro: #0b0708;
-  --carbon: #140c0e;
-  --carbon-2: #1c1114;
-  --carbon-3: #26171b;
-  --linea: #3a1c22;
-  --linea-suave: #2a161a;
-  --texto: #f4e6e2;
-  --texto-2: #b89c98;
-  --texto-3: #8a716e;
-  --rojo: #e3342c;
-  --rojo-vivo: #ff4a3d;
-  --rojo-hondo: #8f1a20;
-  --rojo-velo: rgba(227, 52, 44, 0.14);
-  --oro: #d6a645;
-  --papel: #f7efe8;
+  --yoru: #0e1322;
+  --negro: #121829;
+  --carbon: #161d31;
+  --carbon-2: #1c2440;
+  --carbon-3: #263052;
+  --linea: #34405f;
+  --linea-suave: #252e49;
+  --texto: #ece6da;
+  --texto-2: #aeb2c3;
+  --texto-3: #7c839c;
+  /* Acento: oro. Los nombres «rojo» se quedan por compatibilidad con el resto de reglas. */
+  --kin: #c8a35f;
+  --kin-vivo: #dcbb7b;
+  --kin-hondo: #7d6334;
+  --kin-velo: rgba(200, 163, 95, 0.13);
+  --rojo: var(--kin);
+  --rojo-vivo: var(--kin-vivo);
+  --rojo-hondo: var(--kin-hondo);
+  --rojo-velo: var(--kin-velo);
+  --shu: #cf4a32;
+  --shu-vivo: #e8644c;
+  --shu-velo: rgba(207, 74, 50, 0.14);
+  --oro: var(--kin);
+  --tinta: #141a2c;
+  --papel: #e9e1d0;
+  --papel-tinta: #231e18;
+  --papel-tinta-2: #6b6255;
 
   --display: 'Shippori Mincho B1', 'Yu Mincho', 'Hiragino Mincho ProN', Georgia, serif;
   --ui: 'Zen Kaku Gothic New', 'Yu Gothic UI', 'Yu Gothic', 'Segoe UI', system-ui, sans-serif;
   --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
 
-  --radio: 16px;
+  --radio: 18px;
   --radio-sm: 10px;
-  --sombra: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(227, 52, 44, 0.08);
+  --sombra: 0 30px 70px rgba(4, 6, 14, 0.6), 0 2px 0 rgba(255, 255, 255, 0.03) inset;
   color-scheme: dark;
 }
 
@@ -114,7 +128,7 @@ button {
   flex-direction: column;
   border-radius: var(--radio);
   background:
-    radial-gradient(120% 60% at 0% 0%, rgba(143, 26, 32, 0.18), transparent 60%),
+    radial-gradient(120% 70% at 0% 0%, rgba(200, 163, 95, 0.07), transparent 60%),
     var(--carbon);
   border: 1px solid var(--linea);
   box-shadow: var(--sombra);
@@ -544,9 +558,9 @@ textarea.campo {
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  background: rgba(227, 52, 44, 0.1);
-  border: 1px solid rgba(227, 52, 44, 0.4);
-  color: #ffcdc8;
+  background: var(--shu-velo);
+  border: 1px solid rgba(207, 74, 50, 0.45);
+  color: #f3c9bd;
 }
 
 .burbuja p {
@@ -592,7 +606,7 @@ textarea.campo {
 }
 
 .burbuja a {
-  color: #ff8a7f;
+  color: var(--kin-vivo);
 }
 
 .chat__estado {
@@ -770,12 +784,11 @@ textarea.campo {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 10px 12px 5px;
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--texto-3);
+  padding: 12px 12px 6px;
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--kin);
   background: linear-gradient(var(--carbon) 70%, transparent);
 }
 
@@ -1074,7 +1087,7 @@ textarea.campo {
   margin-left: auto;
   border: 0;
   background: transparent;
-  color: #ff8a7f;
+  color: var(--kin-vivo);
   font-weight: 700;
   font-size: 12.5px;
 }
@@ -1187,11 +1200,10 @@ textarea.campo {
 
 .grupo h3 {
   margin: 0;
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--texto-3);
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--kin);
 }
 
 .ajuste {
@@ -1443,7 +1455,7 @@ kbd {
   border-radius: var(--radio-sm);
   border: 1px solid var(--linea);
   background:
-    radial-gradient(140% 120% at 0% 0%, rgba(227, 52, 44, 0.16), transparent 60%),
+    radial-gradient(140% 120% at 0% 0%, rgba(200, 163, 95, 0.1), transparent 60%),
     var(--carbon-2);
 }
 
@@ -1656,11 +1668,10 @@ kbd {
 
 .apartado__grupo h3 {
   margin: 4px 0 6px;
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--texto-3);
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--kin);
 }
 
 .filas {
@@ -1962,9 +1973,8 @@ kbd {
 
 .calendario__semana {
   padding: 4px 0;
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  font-weight: 500;
   text-align: center;
   color: var(--texto-3);
 }
@@ -2152,9 +2162,8 @@ kbd {
 }
 
 .fuentes__titulo {
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-family: var(--display);
+  font-size: 13px;
   color: var(--texto-3);
 }
 
@@ -2182,7 +2191,7 @@ kbd {
   border-radius: var(--radio-sm);
   border: 1px solid var(--rojo-hondo);
   background:
-    radial-gradient(140% 120% at 0% 0%, rgba(227, 52, 44, 0.12), transparent 60%),
+    radial-gradient(140% 120% at 0% 0%, rgba(200, 163, 95, 0.08), transparent 60%),
     var(--carbon-2);
   animation: entrar 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
 }
@@ -2331,7 +2340,8 @@ html {
 
 :root[data-plataforma='web'] body {
   background:
-    radial-gradient(70% 45% at 25% 100%, rgba(143, 26, 32, 0.35), transparent 70%),
+    radial-gradient(90% 55% at 50% 0%, rgba(54, 70, 120, 0.45), transparent 70%),
+    radial-gradient(60% 40% at 50% 100%, rgba(200, 163, 95, 0.08), transparent 70%),
     var(--negro);
 }
 
@@ -3047,3 +3057,498 @@ html {
   }
 }
 
+/* ==========================================================================
+   Tema: Inari al anochecer
+   Laca añil con un filo de oro, papel washi para lo que dice el zorro y
+   bermellón solo como sello. Va al final para mandar sobre lo anterior.
+   ========================================================================== */
+
+:root {
+  --fibra: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='f'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.35  0 0 0 0 0.28  0 0 0 0 0.18  0 0 0 0.09 0'/></filter><rect width='160' height='160' filter='url(%23f)'/></svg>");
+  --asanoha: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='69.28' viewBox='0 0 40 69.28'><path d='M40.0 -34.64L40.0 -11.55 M120.0 34.64L120.0 57.74 M80.0 34.64L100.0 0.0 M-40.0 34.64L0.0 34.64 M-60.0 0.0L-40.0 34.64 M100.0 69.28L120.0 80.83 M60.0 0.0L80.0 -11.55 M120.0 80.83L140.0 69.28 M-20.0 69.28L0.0 103.92 M-40.0 34.64L-20.0 0.0 M20.0 -23.09L20.0 0.0 M40.0 11.55L40.0 34.64 M120.0 -34.64L120.0 -11.55 M-40.0 80.83L-20.0 69.28 M0.0 -34.64L0.0 -11.55 M60.0 0.0L80.0 11.55 M-20.0 69.28L0.0 34.64 M20.0 0.0L40.0 34.64 M100.0 46.19L120.0 34.64 M0.0 34.64L20.0 69.28 M-40.0 11.55L-40.0 34.64 M-80.0 103.92L-60.0 92.38 M0.0 11.55L0.0 34.64 M60.0 69.28L80.0 80.83 M20.0 -23.09L40.0 -34.64 M40.0 -34.64L60.0 0.0 M40.0 34.64L60.0 0.0 M0.0 34.64L20.0 0.0 M20.0 69.28L40.0 103.92 M100.0 69.28L120.0 57.74 M-60.0 69.28L-40.0 103.92 M80.0 80.83L100.0 69.28 M60.0 69.28L100.0 69.28 M100.0 69.28L140.0 69.28 M120.0 11.55L120.0 34.64 M-20.0 69.28L0.0 80.83 M120.0 -34.64L140.0 0.0 M100.0 0.0L120.0 -34.64 M20.0 69.28L40.0 57.74 M20.0 0.0L20.0 23.09 M-60.0 69.28L-40.0 57.74 M-60.0 69.28L-20.0 69.28 M60.0 0.0L100.0 0.0 M60.0 0.0L80.0 34.64 M20.0 0.0L40.0 11.55 M80.0 11.55L80.0 34.64 M140.0 0.0L160.0 -34.64 M0.0 34.64L20.0 46.19 M40.0 34.64L60.0 46.19 M80.0 -34.64L100.0 -23.09 M80.0 34.64L80.0 57.74 M60.0 0.0L80.0 -34.64 M40.0 80.83L40.0 103.92 M-40.0 103.92L0.0 103.92 M0.0 103.92L20.0 69.28 M-20.0 0.0L0.0 34.64 M-20.0 0.0L0.0 -34.64 M40.0 103.92L60.0 92.38 M60.0 -23.09L60.0 0.0 M40.0 34.64L60.0 23.09 M-40.0 34.64L-20.0 69.28 M-20.0 69.28L0.0 57.74 M-60.0 0.0L-20.0 0.0 M-80.0 34.64L-60.0 23.09 M140.0 46.19L160.0 34.64 M60.0 46.19L80.0 34.64 M120.0 34.64L140.0 69.28 M-20.0 69.28L20.0 69.28 M40.0 34.64L40.0 57.74 M0.0 34.64L0.0 57.74 M80.0 34.64L100.0 23.09 M20.0 46.19L20.0 69.28 M-40.0 -34.64L-40.0 -11.55 M80.0 103.92L100.0 92.38 M120.0 34.64L140.0 0.0 M-40.0 11.55L-20.0 0.0 M-60.0 0.0L-60.0 23.09 M120.0 -34.64L140.0 -23.09 M0.0 11.55L20.0 0.0 M-60.0 69.28L-60.0 92.38 M-20.0 0.0L0.0 -11.55 M-40.0 34.64L-20.0 46.19 M20.0 69.28L60.0 69.28 M40.0 -11.55L60.0 0.0 M20.0 69.28L20.0 92.38 M80.0 80.83L80.0 103.92 M80.0 34.64L100.0 69.28 M120.0 34.64L140.0 46.19 M60.0 69.28L80.0 103.92 M-40.0 34.64L-20.0 23.09 M100.0 -23.09L120.0 -34.64 M80.0 -11.55L100.0 0.0 M100.0 -23.09L100.0 0.0 M-80.0 34.64L-60.0 0.0 M80.0 11.55L100.0 0.0 M-20.0 46.19L0.0 34.64 M0.0 57.74L20.0 69.28 M40.0 80.83L60.0 69.28 M20.0 69.28L40.0 34.64 M-20.0 0.0L20.0 0.0 M0.0 34.64L20.0 23.09 M100.0 0.0L100.0 23.09 M40.0 34.64L60.0 69.28 M0.0 -11.55L20.0 0.0 M-40.0 34.64L-40.0 57.74 M100.0 46.19L100.0 69.28 M-20.0 92.38L0.0 103.92 M-20.0 69.28L-20.0 92.38 M0.0 -34.64L20.0 -23.09 M-40.0 -11.55L-20.0 0.0 M80.0 34.64L100.0 46.19 M100.0 92.38L120.0 103.92 M60.0 23.09L80.0 34.64 M20.0 23.09L40.0 34.64 M100.0 23.09L120.0 34.64 M100.0 0.0L120.0 -11.55 M40.0 11.55L60.0 0.0 M80.0 57.74L100.0 69.28 M80.0 103.92L100.0 69.28 M100.0 69.28L100.0 92.38 M120.0 -11.55L140.0 0.0 M-60.0 0.0L-40.0 -11.55 M100.0 0.0L120.0 11.55 M140.0 69.28L160.0 34.64 M-60.0 92.38L-40.0 103.92 M140.0 -23.09L160.0 -34.64 M0.0 80.83L20.0 69.28 M-80.0 103.92L-60.0 69.28 M0.0 80.83L0.0 103.92 M-20.0 0.0L-20.0 23.09 M80.0 103.92L120.0 103.92 M120.0 103.92L140.0 69.28 M-40.0 57.74L-20.0 69.28 M-60.0 0.0L-40.0 11.55 M40.0 34.64L80.0 34.64 M0.0 34.64L40.0 34.64 M60.0 92.38L80.0 103.92 M60.0 69.28L60.0 92.38 M120.0 57.74L140.0 69.28 M100.0 0.0L140.0 0.0 M120.0 11.55L140.0 0.0 M100.0 69.28L120.0 34.64 M80.0 -34.64L80.0 -11.55 M0.0 103.92L40.0 103.92 M-20.0 46.19L-20.0 69.28 M-40.0 -34.64L-20.0 0.0 M120.0 -34.64L160.0 -34.64 M-20.0 23.09L0.0 34.64 M140.0 46.19L140.0 69.28 M40.0 103.92L80.0 103.92 M-60.0 0.0L-40.0 -34.64 M40.0 -34.64L60.0 -23.09 M20.0 0.0L40.0 -11.55 M-60.0 69.28L-40.0 34.64 M-40.0 103.92L-20.0 69.28 M20.0 92.38L40.0 103.92 M120.0 80.83L120.0 103.92 M60.0 69.28L80.0 34.64 M60.0 -23.09L80.0 -34.64 M60.0 0.0L60.0 23.09 M140.0 -23.09L140.0 0.0 M20.0 69.28L40.0 80.83 M40.0 57.74L60.0 69.28 M80.0 -34.64L120.0 -34.64 M-60.0 69.28L-40.0 80.83 M-40.0 -34.64L-20.0 -23.09 M20.0 0.0L60.0 0.0 M-20.0 0.0L0.0 11.55 M120.0 34.64L160.0 34.64 M80.0 -34.64L100.0 0.0 M20.0 0.0L40.0 -34.64 M-80.0 103.92L-40.0 103.92 M-60.0 23.09L-40.0 34.64 M20.0 46.19L40.0 34.64 M60.0 46.19L60.0 69.28 M100.0 0.0L120.0 34.64 M100.0 69.28L120.0 103.92 M0.0 -34.64L20.0 0.0 M40.0 -34.64L80.0 -34.64 M40.0 103.92L60.0 69.28 M0.0 103.92L20.0 92.38 M-80.0 34.64L-40.0 34.64 M60.0 69.28L80.0 57.74 M-40.0 103.92L-20.0 92.38 M-40.0 -34.64L0.0 -34.64 M-20.0 -23.09L0.0 -34.64 M-20.0 -23.09L-20.0 0.0 M0.0 -34.64L40.0 -34.64 M80.0 34.64L120.0 34.64 M-40.0 80.83L-40.0 103.92' fill='none' stroke='%23c8a35f' stroke-width='0.6'/></svg>");
+}
+
+:root[data-plataforma='web'] body,
+:root[data-plataforma='demo'] body {
+  background:
+    radial-gradient(90% 55% at 50% 0%, rgba(54, 70, 120, 0.42), transparent 70%),
+    radial-gradient(60% 40% at 50% 100%, rgba(200, 163, 95, 0.07), transparent 70%),
+    var(--yoru);
+}
+
+/* El diálogo: una caja lacada con el filo dorado, como las de maki-e. */
+.dialogo {
+  background: linear-gradient(180deg, #1a223b 0%, #141b2e 100%);
+  border-color: rgba(200, 163, 95, 0.22);
+  box-shadow: var(--sombra), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.dialogo::after {
+  background: #141b2e;
+  border-color: rgba(200, 163, 95, 0.22);
+}
+
+/* El sello: lo único bermellón de la cabecera. */
+.marca__sello {
+  background: var(--shu);
+  color: #f6ece0;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+.marca__nombre {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* Botones: rectángulos suaves, no píldoras. El principal, en oro. */
+.boton {
+  border-radius: 10px;
+  background: transparent;
+  border-color: var(--linea);
+  color: var(--texto);
+}
+
+.boton:hover {
+  border-color: var(--kin-hondo);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.boton--primario {
+  background: var(--kin);
+  border-color: var(--kin);
+  color: var(--tinta);
+  font-weight: 700;
+}
+
+.boton--primario:hover {
+  background: var(--kin-vivo);
+  border-color: var(--kin-vivo);
+}
+
+.campo,
+.buscador {
+  border-radius: 12px;
+  background: rgba(8, 11, 22, 0.55);
+}
+
+.campo:focus,
+.buscador:focus-within {
+  border-color: var(--kin-hondo);
+}
+
+.insignia,
+.apartados button[aria-selected='true'] .insignia {
+  background: var(--shu);
+  color: #fff;
+}
+
+/* Apartados: el activo se marca con una raya de oro, sin rellenar. */
+.apartados button[aria-selected='true'] {
+  background: transparent;
+  color: var(--texto);
+}
+
+.apartados button[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  bottom: -7px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--kin);
+}
+
+.apartados button[aria-selected='true'] .apartado__icono {
+  color: var(--kin);
+}
+
+/* ---------- Chat ---------- */
+
+/* Tus mensajes, en añil; los del zorro, en tiras de papel como los omikuji. */
+.burbuja--usuario {
+  background: var(--carbon-3);
+  border: 1px solid var(--linea);
+  border-radius: 16px 16px 4px 16px;
+  color: var(--texto);
+}
+
+.burbuja--kitsune {
+  background: var(--fibra), linear-gradient(180deg, #ede6d6, var(--papel));
+  border: 0;
+  border-radius: 4px 16px 16px 16px;
+  color: var(--papel-tinta);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 10px 26px rgba(4, 6, 14, 0.35);
+}
+
+.burbuja--kitsune strong {
+  color: #120f0b;
+}
+
+.burbuja--kitsune code,
+.burbuja--kitsune blockquote {
+  background: rgba(35, 30, 24, 0.07);
+  color: var(--papel-tinta);
+}
+
+.burbuja--kitsune blockquote {
+  border-left-color: var(--shu);
+}
+
+.burbuja--kitsune a {
+  color: #8f2e1c;
+}
+
+.burbuja--kitsune .burbuja__copiar {
+  border-color: rgba(35, 30, 24, 0.18);
+  background: #ddd4c1;
+  color: var(--papel-tinta-2);
+}
+
+.chat__saludo {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Sugerencias: una lista con filetes, no una pila de botones. */
+.sugerencias {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 0;
+  margin-top: 16px;
+  border-top: 1px solid var(--linea-suave);
+}
+
+.sugerencias button {
+  width: 100%;
+  gap: 12px;
+  padding: 11px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--linea-suave);
+  border-radius: 0;
+  background: transparent;
+  color: var(--texto);
+  font-size: 14px;
+  text-align: left;
+  transition: color 0.15s ease;
+}
+
+.sugerencias button:hover {
+  color: var(--kin-vivo);
+}
+
+.sugerencias button .icono {
+  color: var(--kin);
+}
+
+/* El pulso: una línea con un filo de oro, sin caja. */
+.pulso {
+  border: 0;
+  border-left: 2px solid var(--kin);
+  border-radius: 0;
+  background: transparent;
+  padding: 2px 0 2px 14px;
+}
+
+.pulso__latido {
+  display: none;
+}
+
+.pulso__titulo {
+  font-weight: 600 !important;
+}
+
+.compositor {
+  background: rgba(8, 11, 22, 0.55);
+}
+
+.compositor:focus-within {
+  border-color: var(--kin-hondo);
+}
+
+.boton-enviar {
+  background: var(--kin);
+  color: var(--tinta);
+}
+
+.boton-enviar:hover {
+  background: var(--kin-vivo);
+}
+
+.boton-micro.escuchando {
+  background: var(--shu);
+  color: #fff;
+}
+
+.puntos i {
+  background: var(--kin);
+}
+
+.nota-recordatorio {
+  border-style: solid;
+  border-color: var(--linea-suave);
+  background: transparent;
+}
+
+.nota-recordatorio__icono,
+.filas .fila__icono,
+.hoja__icono {
+  background: transparent;
+  color: var(--kin);
+}
+
+.nota-recordatorio--aviso {
+  border-color: var(--kin-hondo);
+}
+
+/* ---------- Correo ---------- */
+
+/* Filtros como pestañas de texto con la raya de oro. */
+.filtros {
+  gap: 18px;
+  padding: 2px 14px 6px;
+  border-bottom: 1px solid var(--linea-suave);
+}
+
+.filtros button {
+  padding: 6px 0 7px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--texto-3);
+  font-size: 13.5px;
+}
+
+.filtros button[aria-pressed='true'] {
+  background: transparent;
+  border-bottom-color: var(--kin);
+  color: var(--texto);
+}
+
+/* Avatares sobrios: la inicial en mincho sobre laca. */
+.avatar {
+  background: var(--carbon-3);
+  color: var(--texto);
+  font-family: var(--display);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--linea);
+}
+
+.fila.no-leida::before {
+  background: var(--shu);
+}
+
+.fila.no-leida .fila__fecha {
+  color: var(--kin);
+}
+
+.fila + .fila {
+  margin-top: 0;
+  border-top: 1px solid var(--linea-suave);
+  border-radius: 0;
+}
+
+.fila:hover {
+  border-radius: 14px;
+}
+
+.cuerpo-html {
+  background: var(--papel);
+}
+
+/* ---------- Agenda ---------- */
+
+.calendario {
+  background: transparent;
+  border-color: var(--linea-suave);
+}
+
+.calendario__celda.hoy .calendario__numero {
+  color: var(--shu-vivo);
+  box-shadow: inset 0 0 0 1.5px var(--shu);
+}
+
+.calendario__celda[aria-pressed='true'] .calendario__numero {
+  background: var(--kin);
+  color: var(--tinta);
+}
+
+.calendario__puntos i {
+  background: var(--kin);
+}
+
+.calendario__puntos i.todo-el-dia {
+  background: var(--texto-2);
+}
+
+.filas .fila--evento {
+  border-left-color: var(--kin);
+}
+
+.filas .fila--todo-el-dia {
+  border-left-color: var(--texto-2);
+}
+
+.fila--todo-el-dia .fila__hora {
+  color: var(--texto-2);
+}
+
+.boton-borrar.confirmando {
+  background: var(--shu);
+  color: #fff;
+}
+
+/* ---------- Ajustes ---------- */
+
+.segmentado button[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 1px var(--kin-hondo);
+}
+
+/* ---------- Móvil ---------- */
+
+:root.movil .apartados {
+  background: transparent;
+}
+
+:root.movil .apartados button[aria-selected='true'] .apartado__icono,
+:root.movil .apartados button.activo .apartado__icono {
+  background: transparent;
+  color: var(--kin);
+}
+
+:root.movil .apartados button[aria-selected='true']::after,
+:root.movil .apartados button.activo::after {
+  content: '';
+  position: absolute;
+  top: -5px;
+  bottom: auto;
+  left: 36%;
+  right: 36%;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--kin);
+}
+
+:root.movil .apartados .insignia,
+:root.movil .apartados button[aria-selected='true'] .insignia {
+  background: var(--shu);
+  box-shadow: 0 0 0 2px #141b2e;
+}
+
+:root.movil .sugerencias {
+  gap: 0;
+  margin-top: 18px;
+}
+
+:root.movil .sugerencias button {
+  min-height: 50px;
+  padding: 0 2px;
+  border-radius: 0;
+  font-size: 15px;
+}
+
+:root.movil .sugerencias button:active {
+  background: transparent;
+  color: var(--kin-vivo);
+  transform: none;
+}
+
+:root.movil .chat__vacio {
+  text-align: left;
+  padding: 0 4px;
+}
+
+:root.movil .chat__vacio > p:not(.chat__saludo) {
+  margin-inline: 0;
+}
+
+:root.movil .chat__saludo {
+  font-size: 30px;
+}
+
+:root.movil .pulso {
+  padding: 2px 0 2px 14px;
+}
+
+/* Con el zorro solo, el fondo es un santuario de noche: asanoha muy tenue y
+   «九尾の狐» (zorro de nueve colas) escrito en vertical. */
+:root.movil .escena::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--asanoha);
+  background-size: 46px auto;
+  opacity: 0.09;
+  -webkit-mask-image: radial-gradient(70% 55% at 50% 46%, #000, transparent 75%);
+  mask-image: radial-gradient(70% 55% at 50% 46%, #000, transparent 75%);
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+}
+
+:root.movil .escena:not([data-modo='solo'])::before {
+  opacity: 0.03;
+}
+
+:root.movil .escena::after {
+  content: '九尾の狐';
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 28px);
+  left: max(18px, env(safe-area-inset-left, 0px));
+  writing-mode: vertical-rl;
+  font-family: var(--display);
+  font-size: 15px;
+  letter-spacing: 0.5em;
+  color: var(--kin);
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+:root.movil .escena:not([data-modo='solo'])::after {
+  opacity: 0;
+}
+
+:root.movil .escena[data-modo='solo'] .pista-zorro {
+  font-family: var(--display);
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  color: var(--texto-2);
+}
+
+.hoja {
+  background: rgba(22, 29, 49, 0.96);
+  border-top-color: rgba(200, 163, 95, 0.22);
+}
+
+.hoja__titulo {
+  font-weight: 600;
+}
+
+/* Listas de Agenda, Recordatorios, Memoria e Historial: filas con filete, sin cajas. */
+.filas .fila {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--linea-suave);
+  border-radius: 0;
+  padding-left: 6px;
+}
+
+.filas .fila:first-child {
+  border-top: 1px solid var(--linea-suave);
+}
+
+.filas .fila--hoy {
+  background: linear-gradient(90deg, var(--kin-velo), transparent 70%);
+}
+
+.filas .fila--evento,
+.filas .fila--todo-el-dia {
+  border-left: 2px solid var(--kin);
+  padding-left: 12px;
+}
+
+.filas .fila--todo-el-dia {
+  border-left-color: var(--texto-2);
+}
