@@ -167,9 +167,11 @@ function mostrar() {
 
 // Al llamarlo con el atajo, si hay texto nuevo copiado, Kitsune ofrece
 // resumirlo, traducirlo… Solo se lee el portapapeles en ese momento.
-function ofrecerPortapapeles() {
-  if (!obtenerAjustes().ofrecerPortapapeles) return;
-  const texto = clipboard.readText().trim();
+// En Electron 45 leer el portapapeles es asíncrono (devuelve una promesa); con
+// await vale igual para las versiones que lo devuelven directamente.
+async function ofrecerPortapapeles() {
+  if (!obtenerAjustes().ofrecerPortapapeles || !ventana) return;
+  const texto = String((await clipboard.readText()) ?? '').trim();
   if (texto.length < 3 || texto === textoOfrecido) return;
   textoOfrecido = texto;
   ventana.webContents.send('ventana:texto', texto.slice(0, 8000));
@@ -180,7 +182,8 @@ function alternar() {
   if (ventana.isVisible()) ventana.webContents.send('ventana:alternar', 'ocultar');
   else {
     mostrar();
-    ofrecerPortapapeles();
+    // Si el portapapeles no se puede leer, no se ofrece nada; la app sigue.
+    ofrecerPortapapeles().catch(() => {});
   }
 }
 
@@ -382,6 +385,9 @@ function registrarCanales() {
     if (evento.sender === ventana?.webContents) ventana.setIgnoreMouseEvents(!dentro, { forward: true });
   });
 }
+
+// Solo en las pruebas automáticas: pulsar el atajo sin teclado.
+if (process.env.KITSUNE_PRUEBAS === '1') globalThis.kitsunePruebas = { alternar };
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
