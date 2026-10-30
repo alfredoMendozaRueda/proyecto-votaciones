@@ -1,4 +1,5 @@
 import { icono } from './iconos.js';
+import { retirar } from './animaciones.js';
 import { cuandoLegible, haceCuanto } from './fechas.js';
 
 // Apartados de Agenda, Recordatorios, Memoria e Historial. Cada uno pinta su
@@ -87,7 +88,7 @@ function diasDeLaCuadricula(anio, mes) {
 
 // La agenda es un calendario: el mes en cuadrícula, con puntos en los días que
 // tienen algo, y debajo los eventos del día elegido.
-export function crearAgenda({ contenedor, api, abrirAjustes, preguntar }) {
+export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear = () => {} }) {
   const hoy = () => inicioDelDia(Date.now());
   let seleccionado = hoy();
   let mesVisible = { anio: new Date().getFullYear(), mes: new Date().getMonth() };
@@ -174,6 +175,7 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar }) {
     boton.disabled = true;
     try {
       await api.calendario.crear({ titulo: formulario.titulo.value.trim(), inicio, fin, todoElDia, lugar: formulario.lugar.value.trim() });
+      alCrear();
       formulario.hidden = true;
       cargado = null;
       seleccionado = inicioDelDia(inicio);
@@ -276,7 +278,7 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar }) {
     lista.querySelector('.calendario__mes').textContent = titulo;
     contenedor.querySelector('#agenda-hoy').hidden = mismoDia(seleccionado, Date.now());
     rejilla.innerHTML = diasDeLaCuadricula(anio, mes)
-      .map((dia) => {
+      .map((dia, i) => {
         const d = new Date(dia);
         const suyos = delDia(dia);
         const fuera = d.getMonth() !== mes;
@@ -287,7 +289,7 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar }) {
           .map((e) => `<i class="${e.todoElDia ? 'todo-el-dia' : ''}"></i>`)
           .join('');
         return `<button type="button" class="calendario__celda${fuera ? ' fuera' : ''}${mismoDia(dia, Date.now()) ? ' hoy' : ''}"
-          data-dia="${dia}" aria-label="${nombre}${cuantos}" aria-pressed="${dia === seleccionado}"
+          data-dia="${dia}" style="--i: ${(i % 7) + Math.floor(i / 7)}" aria-label="${nombre}${cuantos}" aria-pressed="${dia === seleccionado}"
           ${mismoDia(dia, Date.now()) ? 'aria-current="date"' : ''} tabindex="${dia === seleccionado ? 0 : -1}">
           <span class="calendario__numero">${d.getDate()}</span><span class="calendario__puntos">${puntos}</span></button>`;
       })
@@ -454,7 +456,7 @@ export function crearRecordatorios({ contenedor, api, web, alCambiar }) {
       li.append(
         botonBorrar(`Borrar el recordatorio «${r.texto}»`, async () => {
           await api.recordatorios.borrar(r.id);
-          li.remove();
+          await retirar(li);
           alCambiar?.();
           if (!lista.children.length) lista.innerHTML = '<li class="apartado__vacio">No tienes recordatorios pendientes.</li>';
         }),

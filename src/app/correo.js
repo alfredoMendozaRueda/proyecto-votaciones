@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify';
 import { icono } from './iconos.js';
+import { deslizar } from './animaciones.js';
 
 const FILTROS = [
   ['recibidos', 'Recibidos'],
@@ -92,7 +93,7 @@ function prepararHtml(html, permitirImagenes) {
   return { srcdoc, bloqueadas };
 }
 
-export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
+export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos, alLeer = () => {} }) {
   const estado = { filtro: 'recibidos', consulta: '', mensajes: [], siguiente: null, actual: null, imagenes: false };
   let ultimaCarga = 0;
 
@@ -238,6 +239,7 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
       if (accion === 'destacar') m.destacado = !m.destacado;
       if (accion === 'leido') m.noLeido = !m.noLeido;
       pintarLista();
+      if (accion === 'destacar' && m.destacado) contenedor.querySelector(`.fila[data-id="${id}"] .estrella`)?.classList.add('brilla');
       contarNoLeidos();
     } catch (e) {
       avisar(e.message);
@@ -256,6 +258,8 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
   // ---------- Lectura ----------
 
   async function leer(id) {
+    alLeer();
+    deslizar(contenedor, 1);
     contenedor.innerHTML = '<div class="lectura"><div class="esqueleto" style="height:120px;margin:14px"></div></div>';
     let correo;
     try {
@@ -315,6 +319,7 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
     pintarCuerpo();
     contenedor.querySelector('#lectura-volver').addEventListener('click', () => {
       bandeja();
+      deslizar(contenedor, -1);
       if (Date.now() - ultimaCarga > 60_000) cargar();
     });
     contenedor.querySelector('#mostrar-imagenes').addEventListener('click', () => {
@@ -336,6 +341,7 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
           c.destacado = !c.destacado;
           if (enLista) enLista.destacado = c.destacado;
           b.setAttribute('aria-pressed', String(c.destacado));
+          b.classList.toggle('brilla', c.destacado);
           return;
         }
         if (accion === 'no-leido' && enLista) enLista.noLeido = true;

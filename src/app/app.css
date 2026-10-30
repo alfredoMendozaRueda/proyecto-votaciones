@@ -1411,10 +1411,6 @@ kbd {
   transform-origin: 0 100%;
 }
 
-/* Cambio de pestaña: la vista nueva entra con un fundido corto. */
-.vista:not([hidden]) {
-  animation: cambiar-vista 0.22s ease-out both;
-}
 
 @keyframes cambiar-vista {
   from {
@@ -3556,4 +3552,351 @@ html {
 
 .filas .fila--todo-el-dia {
   border-left-color: var(--texto-2);
+}
+
+/* ==========================================================================
+   Animaciones
+   Una sola curva para casi todo (sale rápida y se posa) y duraciones cortas.
+   «Reducir movimiento» lo apaga todo con la regla general de más arriba.
+   ========================================================================== */
+
+/* Onda de tinta al pulsar: nace donde tocas y se disuelve. */
+.con-onda {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.onda {
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(circle, currentColor 0 35%, transparent 70%);
+  opacity: 0.22;
+  transform: scale(0);
+  pointer-events: none;
+  animation: onda 0.65s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes onda {
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* La raya del apartado activo se desliza con un pequeño rebote. */
+.apartados {
+  position: relative;
+}
+
+.apartados button[aria-selected='true']::after,
+:root.movil .apartados button[aria-selected='true']::after,
+:root.movil .apartados button.activo::after {
+  content: none;
+}
+
+.apartados__indicador {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--acento);
+  box-shadow: 0 0 10px rgba(236, 80, 64, 0.55);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.apartados__indicador.lista {
+  opacity: 1;
+  transition:
+    transform 0.45s cubic-bezier(0.3, 1.35, 0.45, 1),
+    width 0.45s cubic-bezier(0.3, 1.35, 0.45, 1);
+}
+
+:root.movil .apartados__indicador {
+  top: 0;
+  bottom: auto;
+}
+
+.apartados button .apartado__icono {
+  transition: transform 0.3s cubic-bezier(0.3, 1.5, 0.5, 1), color 0.2s ease;
+}
+
+.apartados button[aria-selected='true'] .apartado__icono,
+.apartados button.activo .apartado__icono {
+  transform: translateY(-1px) scale(1.08);
+}
+
+/* Las listas entran en cascada al abrir un apartado. */
+:is(.lista-correos, .filas, .sugerencias, .hoja__lista, .chat__vacio, .fuentes) > :nth-child(1) {
+  --i: 0;
+}
+
+:is(.lista-correos, .filas, .sugerencias, .hoja__lista, .chat__vacio, .fuentes) > :nth-child(2) {
+  --i: 1;
+}
+
+:is(.lista-correos, .filas, .sugerencias, .hoja__lista, .chat__vacio, .fuentes) > :nth-child(3) {
+  --i: 2;
+}
+
+:is(.lista-correos, .filas, .sugerencias, .hoja__lista, .chat__vacio, .fuentes) > :nth-child(4) {
+  --i: 3;
+}
+
+:is(.lista-correos, .filas, .sugerencias, .hoja__lista, .chat__vacio, .fuentes) > :nth-child(5) {
+  --i: 4;
+}
+
+:is(.lista-correos, .filas, .sugerencias, .hoja__lista, .chat__vacio, .fuentes) > :nth-child(6) {
+  --i: 5;
+}
+
+:is(.lista-correos, .filas, .sugerencias, .hoja__lista, .chat__vacio, .fuentes) > :nth-child(7) {
+  --i: 6;
+}
+
+:is(.lista-correos, .filas, .sugerencias, .hoja__lista, .chat__vacio, .fuentes) > :nth-child(8) {
+  --i: 7;
+}
+
+:is(.lista-correos, .filas, .sugerencias, .hoja__lista, .chat__vacio, .fuentes) > :nth-child(9) {
+  --i: 8;
+}
+
+:is(.lista-correos, .filas, .sugerencias, .hoja__lista, .chat__vacio, .fuentes) > :nth-child(10) {
+  --i: 9;
+}
+
+:is(.lista-correos, .filas, .sugerencias, .hoja__lista, .chat__vacio, .fuentes) > :nth-child(11) {
+  --i: 10;
+}
+
+:is(.lista-correos, .filas, .sugerencias, .hoja__lista, .chat__vacio, .fuentes) > :nth-child(12) {
+  --i: 11;
+}
+
+:is(.lista-correos, .filas, .sugerencias, .hoja__lista, .chat__vacio, .fuentes) > :nth-child(13) {
+  --i: 12;
+}
+
+:is(.lista-correos, .filas, .sugerencias, .hoja__lista, .chat__vacio, .fuentes) > :nth-child(14) {
+  --i: 13;
+}
+
+.vista.entrando :is(.lista-correos, .filas) > li,
+.vista.entrando .calendario__celda,
+.chat__vacio > *,
+.hoja:not(.cerrandose) .hoja__lista > li,
+.fuentes > * {
+  animation: subir 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 32ms + 40ms);
+}
+
+.vista.entrando .calendario__celda {
+  animation-name: aparecer-dia;
+  animation-duration: 0.4s;
+  animation-delay: calc(var(--i, 0) * 22ms);
+}
+
+@keyframes subir {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes aparecer-dia {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+}
+
+/* Las respuestas del zorro se desenrollan como un omikuji. */
+.burbuja--kitsune {
+  transform-origin: 0 0;
+  animation: desenrollar 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+@keyframes desenrollar {
+  from {
+    clip-path: inset(0 0 100% 0 round 4px 16px 16px 16px);
+    transform: translateY(-6px) rotate(-1.2deg);
+    opacity: 0.3;
+  }
+  to {
+    clip-path: inset(0 0 0 0 round 4px 16px 16px 16px);
+  }
+}
+
+/* Tus mensajes salen disparados desde el campo de texto. */
+.burbuja--usuario {
+  transform-origin: 100% 100%;
+  animation: enviar 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.25) backwards;
+}
+
+@keyframes enviar {
+  from {
+    opacity: 0;
+    transform: translate(18px, 22px) scale(0.86);
+  }
+}
+
+/* El botón de enviar: el avión de papel sale volando y vuelve. */
+.boton-enviar.volando .icono {
+  animation: volar 0.55s cubic-bezier(0.5, 0, 0.3, 1);
+}
+
+@keyframes volar {
+  40% {
+    transform: translate(16px, -16px) rotate(-12deg);
+    opacity: 0;
+  }
+  41% {
+    transform: translate(-14px, 14px);
+    opacity: 0;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.puntos i {
+  box-shadow: 0 0 6px rgba(236, 80, 64, 0.7);
+}
+
+/* Las insignias saltan cuando cambia el número. */
+.insignia.salta {
+  animation: saltar 0.5s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+@keyframes saltar {
+  0% {
+    transform: scale(0.4);
+  }
+  60% {
+    transform: scale(1.3);
+  }
+}
+
+/* Estrella: un pequeño estallido dorado al destacar. */
+.estrella.brilla .icono {
+  animation: brillar 0.55s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+.estrella.brilla::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  border: 2px solid var(--kin);
+  pointer-events: none;
+  animation: aro 0.55s ease-out forwards;
+}
+
+@keyframes brillar {
+  0% {
+    transform: scale(0.5) rotate(-30deg);
+  }
+  60% {
+    transform: scale(1.35) rotate(8deg);
+  }
+}
+
+@keyframes aro {
+  from {
+    transform: scale(0.4);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* El día elegido del calendario se marca como un sello hanko. */
+.calendario__celda[aria-pressed='true'] .calendario__numero {
+  animation: sello 0.42s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+
+/* El sello de la cabecera, cada vez que se abre el diálogo. */
+.dialogo:not([hidden]) .marca__sello {
+  animation: sello 0.55s cubic-bezier(0.3, 1.5, 0.5, 1) 0.25s backwards;
+}
+
+@keyframes sello {
+  from {
+    transform: scale(1.6) rotate(-14deg);
+    opacity: 0;
+  }
+}
+
+/* Interruptores con un poco de muelle. */
+.interruptor::after {
+  transition:
+    transform 0.38s cubic-bezier(0.3, 1.6, 0.5, 1),
+    background-color 0.2s ease;
+}
+
+/* Chispas de fuego fatuo subiendo en la pantalla del zorro. */
+.chispas {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.8s ease;
+}
+
+:root.movil .escena[data-modo='solo'] .chispas {
+  opacity: 1;
+}
+
+.chispas i {
+  position: absolute;
+  bottom: -12px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffe0c0 0 25%, #ff5a38 55%, transparent 72%);
+  box-shadow: 0 0 10px 2px rgba(255, 90, 56, 0.45);
+  animation: subir-chispa linear infinite;
+}
+
+@keyframes subir-chispa {
+  0% {
+    transform: translate(0, 0) scale(0.6);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.9;
+  }
+  55% {
+    transform: translate(calc(var(--deriva) * 0.4), -48vh) scale(1);
+  }
+  100% {
+    transform: translate(var(--deriva), -95vh) scale(0.3);
+    opacity: 0;
+  }
+}
+
+/* «Toca a Kitsune» respira mientras espera. */
+:root.movil .escena[data-modo='solo'] .pista-zorro {
+  animation:
+    pista 0.6s ease-out 1.6s both,
+    respirar 3.4s ease-in-out 2.4s infinite;
+}
+
+@keyframes respirar {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Los esqueletos de carga brillan con un reflejo de laca. */
+.esqueleto {
+  background: linear-gradient(100deg, var(--carbon-2) 30%, #2f201e 50%, var(--carbon-2) 70%);
+  background-size: 220% 100%;
 }

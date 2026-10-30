@@ -7,6 +7,7 @@ import { crearAjustes } from './ajustes.js';
 import { crearAgenda, crearRecordatorios, crearMemoria, crearHistorial } from './vistas.js';
 import { icono } from './iconos.js';
 import { prepararMovil } from './movil.js';
+import { prepararOndas, prepararIndicador, entrarVista, saltar, prepararEnvio } from './animaciones.js';
 
 // Electron trae window.asistente (preload). En el navegador se usa la versión
 // web real, salvo en el modo de ejemplo (?demo o la página de demostración).
@@ -61,7 +62,12 @@ function aplicarAjustes(a) {
   kitsune.setCalidad(a.calidadPelo);
 }
 
+// Orden de los apartados: la vista nueva entra desde el lado hacia el que se va.
+const ORDEN_VISTAS = ['chat', 'correo', 'agenda', 'recordatorios', 'memoria', 'historial', 'ajustes'];
+let moverIndicador = null;
+
 function mostrarVista(nombre, seccionAjustes = null) {
+  const anterior = vistaActual;
   vistaActual = nombre;
   for (const [clave, vista] of Object.entries(vistas)) vista.hidden = clave !== nombre;
   for (const [clave, pestana] of Object.entries(pestanas)) {
@@ -72,6 +78,8 @@ function mostrarVista(nombre, seccionAjustes = null) {
   pestanas[nombre]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   document.getElementById('boton-ajustes').setAttribute('aria-pressed', String(nombre === 'ajustes'));
   movil?.alCambiarVista(nombre);
+  moverIndicador?.();
+  if (anterior !== nombre) entrarVista(vistas[nombre], Math.sign(ORDEN_VISTAS.indexOf(nombre) - ORDEN_VISTAS.indexOf(anterior)));
   if (nombre === 'ajustes') panelAjustes.abrir(seccionAjustes);
   if (nombre === 'chat') enfocarChat();
   apartados[nombre]?.mostrar();
@@ -84,6 +92,7 @@ async function contarRecordatoriosDeHoy() {
   fin.setHours(23, 59, 59, 999);
   const hoy = (pendientes ?? []).filter((r) => r.cuando <= fin.getTime()).length;
   insigniaRecordatorios.hidden = hoy === 0;
+  if (insigniaRecordatorios.textContent !== String(hoy) && hoy) saltar(insigniaRecordatorios);
   insigniaRecordatorios.textContent = String(hoy);
   recordatoriosHoy = hoy;
   ponerInsigniaApp();
@@ -113,7 +122,9 @@ function cerrarDialogo() {
 function ponerNoLeidos(n) {
   noLeidos = n === null ? noLeidos + 1 : n;
   insignia.hidden = noLeidos === 0;
-  insignia.textContent = noLeidos > 99 ? '99+' : String(noLeidos);
+  const texto = noLeidos > 99 ? '99+' : String(noLeidos);
+  if (insignia.textContent !== texto && !insignia.hidden) saltar(insignia);
+  insignia.textContent = texto;
   ponerInsigniaApp();
 }
 
@@ -123,6 +134,13 @@ function ponerInsigniaApp() {
   if (api.plataforma !== 'web' || !('setAppBadge' in navigator)) return;
   const total = noLeidos + recordatoriosHoy;
   (total ? navigator.setAppBadge(total) : navigator.clearAppBadge()).catch(() => {});
+}
+
+// Un gesto del zorro como reacción, sin cortarle si está apareciendo o despidiéndose.
+function gesto(nombre) {
+  if (!kitsune?.visible || ['aparecer', 'desaparecer', 'saludar'].includes(kitsune.accion?.nombre)) return;
+  actividad();
+  kitsune.reproducir(nombre);
 }
 
 function actividad() {
@@ -186,6 +204,7 @@ async function iniciar() {
     api,
     abrirAjustes: (seccion) => mostrarVista('ajustes', seccion),
     alNoLeidos: ponerNoLeidos,
+    alLeer: () => gesto('olfatear'),
   });
   panelAjustes = crearAjustes({
     contenedor: vistas.ajustes,
@@ -202,6 +221,7 @@ async function iniciar() {
   apartados.agenda = crearAgenda({
     contenedor: vistas.agenda,
     api,
+    alCrear: () => gesto('celebrar'),
     abrirAjustes: (seccion) => mostrarVista('ajustes', seccion),
     preguntar: (texto) => {
       mostrarVista('chat');
@@ -262,6 +282,9 @@ async function iniciar() {
   contarRecordatoriosDeHoy();
   setInterval(contarRecordatoriosDeHoy, 60_000);
   api.claude.alEvento((e) => e.tipo === 'recordatorio' && contarRecordatoriosDeHoy());
+  // El zorro reacciona a lo que pasa en la conversación.
+  const GESTOS = { recordatorio: 'asentir', memoria: 'asentir', evento: 'celebrar', error: 'triste', rechazo: 'triste' };
+  api.claude.alEvento((e) => GESTOS[e.tipo] && gesto(GESTOS[e.tipo]));
   document.getElementById('boton-ajustes').addEventListener('click', () =>
     mostrarVista(vistaActual === 'ajustes' ? 'chat' : 'ajustes'),
   );
@@ -271,6 +294,9 @@ async function iniciar() {
     mostrarVista('chat');
   };
   document.getElementById('boton-nueva').addEventListener('click', nuevaConversacion);
+  prepararOndas(document);
+  moverIndicador = prepararIndicador(document.querySelector('.apartados'));
+  prepararEnvio(document.getElementById('chat-formulario'), document.getElementById('chat-enviar'));
   if (api.plataforma !== 'electron') {
     movil = prepararMovil({
       escena,

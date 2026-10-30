@@ -119,6 +119,10 @@ const DURACIONES = {
   bostezo: 2.6,
   curiosear: 2.8,
   sacudir: 1.5,
+  asentir: 0.95,
+  olfatear: 1.3,
+  celebrar: 1.5,
+  triste: 2.2,
 };
 // Una caricia que sigue alarga el gesto, hasta este máximo.
 const CARICIA_MAX = 5;
@@ -599,6 +603,7 @@ export class Kitsune {
 
     // Cuerpo: salto, squash & stretch, respiración, encogido al dormir
     this.cuerpo.position.y = o.saltoY;
+    this.raiz.rotation.y = 0.32 + o.vuelta;
     const encogido = 1 - 0.06 * p.agachado;
     // Un animal real apenas se deforma: el squash & stretch se queda a la mitad.
     const sx = 1 + (o.sx - 1) * 0.5;
@@ -758,6 +763,7 @@ export class Kitsune {
       radioFuego: null,
       fuegoVis: null,
       velFuego: 1,
+      vuelta: 0,
     });
     const a = this.accion;
     if (!a) return o;
@@ -862,6 +868,46 @@ export class Kitsune {
       o.giro = giro * reducido;
       o.inclinacion = 0.16 * campana(tramo(u, 0.3, 1.2)) - 0.14 * campana(tramo(u, 1.5, 2.4));
       o.orejas = 0.7 * campana(tramo(u, 0, 2.8));
+    } else if (a.nombre === 'asentir') {
+      // Dos cabeceos cortos, el segundo más suave: «hecho».
+      const k = campana(tramo(u, 0, 0.95));
+      o.cabeceo = 0.16 * Math.sin(tramo(u, 0.05, 0.85) * Math.PI * 4) * (1 - 0.4 * tramo(u, 0.4, 0.85)) * reducido;
+      o.orejas = 0.4 * k;
+      o.alegria = 0.5 * k;
+      o.ondaVel = 1 + 0.5 * k;
+    } else if (a.nombre === 'olfatear') {
+      // Estira el hocico hacia delante y husmea con golpecitos rápidos.
+      const k = campana(tramo(u, 0, 1.3));
+      o.cabeceo = (0.1 * k + 0.035 * Math.sin(u * 26) * k) * reducido;
+      o.orejas = 0.55 * k;
+      o.inclinacion = 0.08 * Math.sin(u * 3.2) * k * reducido;
+      o.apertura = 1 + 0.1 * k;
+    } else if (a.nombre === 'celebrar') {
+      // Salto con una vuelta completa en el aire y las colas en abanico.
+      const sube = tramo(u, 0.12, 0.62);
+      const cae = tramo(u, 0.62, 1.05);
+      const agacha = campana(tramo(u, 0, 0.2)) + campana(tramo(u, 1.0, 1.35));
+      o.saltoY = (u < 0.62 ? 0.7 * easeOutCubic(sube) : 0.7 * (1 - easeInCubic(cae))) * reducido;
+      o.vuelta = Math.PI * 2 * easeInOutCubic(tramo(u, 0.15, 1.0)) * reducido;
+      o.sy = 1 - 0.12 * agacha * reducido + 0.08 * campana(sube) * reducido;
+      o.sx = 1 + 0.06 * agacha * reducido;
+      const aire = campana(tramo(u, 0.1, 1.2));
+      o.abanico = 0.5 * aire;
+      o.ondaVel = 1 + 1.5 * aire;
+      o.alegria = Math.min(1, 1.8 * aire);
+      o.boca = 0.35 * aire;
+      o.orejas = 0.9 * aire;
+      o.anillo = u > 0.95 && u < 1.5 ? tramo(u, 0.95, 1.5) : 0;
+    } else if (a.nombre === 'triste') {
+      // Cabeza gacha, orejas atrás, ojos entornados y colas caídas.
+      const k = easeOutCubic(tramo(u, 0, 0.5)) * (1 - easeInOutCubic(tramo(u, 1.6, 2.2)));
+      o.cabeceo = 0.22 * k;
+      o.orejas = -1.0 * k;
+      o.apertura = 1 - 0.45 * k;
+      o.inclinacion = -0.1 * k * reducido;
+      o.abanico = -0.25 * k;
+      o.ondaVel = 1 - 0.6 * k;
+      o.sy = 1 - 0.04 * k;
     } else if (a.nombre === 'sacudir') {
       const fuerza = campana(tramo(u, 0, 1.5));
       o.ondaVel = 1 + 2.2 * fuerza;

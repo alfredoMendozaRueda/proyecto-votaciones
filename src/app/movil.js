@@ -1,4 +1,5 @@
 import { icono } from './iconos.js';
+import { crearChispas } from './animaciones.js';
 
 // Disposición de móvil de la versión web (la PWA). Al abrir la app solo está
 // el zorro, grande en el centro; al tocarlo se encoge (se vuelve una cría),
@@ -39,7 +40,7 @@ export function prepararMovil({ escena, dialogo, zorro, kitsune, mostrarVista, o
   const pista = document.createElement('p');
   pista.className = 'pista-zorro';
   pista.textContent = 'Toca a Kitsune';
-  escena.append(hueco, pista);
+  escena.append(crearChispas(), hueco, pista);
 
   function aplicarModo() {
     raiz.classList.toggle('movil', consulta.matches);
