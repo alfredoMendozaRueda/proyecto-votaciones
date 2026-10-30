@@ -3,6 +3,7 @@ import { PALETAS, PALETA_POR_DEFECTO } from './paletas.js';
 import { Cola } from './cola.js';
 import { FuegosFatuos } from './fuegos.js';
 import { crearMaterialContorno } from './contorno.js';
+import { crearGeometriaOjo, crearMaterialOjo, colorearOjo } from './ojo.js';
 import {
   clamp01,
   lerp,
@@ -241,8 +242,7 @@ export class Kitsune {
       this.mat[clave].color.set(pal[clave]);
     }
     this.mat.marca.color.set(pal.marca);
-    this.mat.iris.color.set(pal.iris);
-    this.mat.pupila.color.set(pal.pupila);
+    for (const ojo of this.ojos) colorearOjo(ojo, pal);
     this.mat.contorno.uniforms.uColor.value.set(pal.contorno);
     this.mat.anillo.color.set(pal.fuego);
     this.luzContra.color.set(pal.luzContra);
@@ -285,9 +285,6 @@ export class Kitsune {
       cascabel: toon(),
       cola: toon({ vertexColors: true }),
       marca: new THREE.MeshBasicMaterial(),
-      iris: new THREE.MeshBasicMaterial(),
-      pupila: new THREE.MeshBasicMaterial(),
-      brillo: new THREE.MeshBasicMaterial({ color: '#ffffff' }),
       contorno: crearMaterialContorno('#000000', grosor, this.resolucion),
       anillo: new THREE.MeshBasicMaterial({
         transparent: true,
@@ -452,31 +449,11 @@ export class Kitsune {
     const Z = new THREE.Vector3(0, 0, 1);
 
     this.ojos = [-1, 1].map((lado) => {
-      const { punto, normal } = enSuperficie(0.42 * lado, 0.12, 0.9);
-      const ojo = new THREE.Group();
-      ojo.position.copy(punto).addScaledVector(normal, -0.012);
-      ojo.quaternion.setFromUnitVectors(Z, normal);
-      this.cabeza.add(ojo);
-
-      const parpado = new THREE.Group();
-      parpado.rotation.z = 0.28 * lado;
-      ojo.add(parpado);
-      this._parte(esfera, m.negro, parpado, { esc: [0.09, 0.112, 0.045], contorno: false });
-      const iris = new THREE.Group();
-      parpado.add(iris);
-      this._parte(esfera, m.iris, iris, { pos: [0, 0, 0.022], esc: [0.072, 0.092, 0.03], contorno: false });
-      this._parte(esfera, m.pupila, iris, { pos: [0, 0, 0.042], esc: [0.015, 0.062, 0.02], contorno: false });
-      this._parte(esfera, m.brillo, iris, { pos: [0.024, 0.036, 0.052], esc: [0.019, 0.019, 0.012], contorno: false });
-      this._parte(esfera, m.brillo, iris, { pos: [-0.02, -0.03, 0.05], esc: [0.008, 0.008, 0.006], contorno: false });
-
-      // Trazo rojo en el rabillo del ojo, como en las máscaras de kitsune.
-      this._parte(esfera, m.marca, ojo, {
-        pos: [0.095 * lado, 0.04, 0.012],
-        esc: [0.075, 0.013, 0.012],
-        rot: [0, 0, 0.5 * lado],
-        contorno: false,
-      });
-      return { parpado, iris };
+      const material = crearMaterialOjo(lado);
+      const malla = new THREE.Mesh(crearGeometriaOjo(centro, radios, new THREE.Vector3(0.5 * lado, 0.16, 0.86)), material);
+      malla.renderOrder = 1;
+      this.cabeza.add(malla);
+      return material;
     });
 
     const frente = enSuperficie(0, 0.55, 0.83);
@@ -574,13 +551,13 @@ export class Kitsune {
     );
     this.mandibula.rotation.x = clamp01(habla * 0.9 + o.boca) * 0.45;
 
-    const apertura = Math.max(0.06, Math.min(1.2, p.apertura * o.apertura * micro.parpadeo));
+    const apertura = Math.max(0, Math.min(1.2, p.apertura * o.apertura * micro.parpadeo));
     for (const ojo of this.ojos) {
-      ojo.parpado.scale.set(1 + 0.04 * (p.apertura - 1), apertura, 1);
-      ojo.iris.position.set(
-        (p.miradaX + this.mirada.x * 0.6) * 0.016,
-        (p.miradaY + this.mirada.y * 0.6) * 0.02,
-        0,
+      ojo.uniforms.uApertura.value = apertura;
+      ojo.uniforms.uAlegria.value = clamp01(o.alegria);
+      ojo.uniforms.uMirada.value.set(
+        Math.max(-1, Math.min(1, p.miradaX + this.mirada.x * 0.8)),
+        Math.max(-1, Math.min(1, p.miradaY + this.mirada.y * 0.8)),
       );
     }
     const pulsoMarca = 1 + 0.08 * p.remolino * Math.sin(t * 5);
@@ -652,6 +629,7 @@ export class Kitsune {
       despliegue: null,
       abanico: 0,
       apertura: 1,
+      alegria: 0,
       orejas: 0,
       inclinacion: 0,
       cabeceo: 0,
@@ -708,7 +686,7 @@ export class Kitsune {
       o.ondaVel = 1 + 1.2 * o.pata;
       o.abanico = 0.1 * o.pata;
       o.boca = 0.2 * o.pata;
-      o.apertura = 1 - 0.4 * o.pata;
+      o.alegria = 0.9 * o.pata;
     } else if (a.nombre === 'alegria') {
       const preparacion = tramo(u, 0, 0.16);
       const sube = tramo(u, 0.16, 0.5);
@@ -734,7 +712,7 @@ export class Kitsune {
       const aire = campana(tramo(u, 0.1, 0.95));
       o.abanico = 0.35 * aire;
       o.ondaVel = 1 + aire;
-      o.apertura = 1 - 0.62 * aire;
+      o.alegria = Math.min(1, 1.6 * aire);
       o.boca = 0.32 * aire;
       o.orejas = 0.8 * aire;
       o.cascabel = 0.6 * Math.sin(u * Math.PI * 2 * 3) * (1 - clamp01(u / 1.15));
