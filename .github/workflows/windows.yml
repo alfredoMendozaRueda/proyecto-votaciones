@@ -29,6 +29,19 @@ jobs:
         env:
           # Sin certificado de firma: el instalador se genera sin firmar.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Probar el instalador (instala, arranca y sigue abierto)
+        shell: pwsh
+        run: |
+          $instalador = Get-ChildItem out -Filter 'Kitsune Setup*.exe' | Select-Object -First 1
+          Start-Process -Wait -FilePath $instalador.FullName -ArgumentList '/S'
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs", "$env:ProgramFiles" -Recurse -Filter 'Kitsune.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw 'El instalador no dejó Kitsune.exe instalado.' }
+          Write-Host "Instalado en $($exe.FullName)"
+          $proceso = Start-Process -FilePath $exe.FullName -PassThru
+          Start-Sleep -Seconds 20
+          if ($proceso.HasExited) { throw "Kitsune se cerró al arrancar (código $($proceso.ExitCode))." }
+          Write-Host 'Kitsune sigue abierto tras 20 s.'
+          Get-Process -Name Kitsune -ErrorAction SilentlyContinue | Stop-Process -Force
       - name: Publicar el instalador
         shell: bash
         env:
