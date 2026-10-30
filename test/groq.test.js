@@ -55,7 +55,7 @@ test('Groq: herramienta en trozos, resultado y respuesta; el historial queda en 
   assert.equal(primera.cuerpo.stream, true);
   const nombres = primera.cuerpo.tools.map((t) => t.function.name);
   assert.ok(nombres.includes('recordar'));
-  assert.ok(!nombres.includes('web_search'), 'la búsqueda web es solo de Claude');
+  assert.ok(!nombres.includes('web_search'), 'la búsqueda de Anthropic no se envía a Groq');
   assert.equal(primera.cuerpo.messages[0].role, 'system');
   assert.deepEqual(segunda.cuerpo.messages.slice(-2).map((m) => m.role), ['assistant', 'tool']);
   assert.equal(segunda.cuerpo.messages.at(-1).tool_call_id, 'call_1');
@@ -110,4 +110,94 @@ test('recorte: con poco margen solo viaja el turno actual, empezando en una preg
   assert.ok(desde > 0 && desde < historial.length - 1);
   assert.equal(historial[desde].role, 'user');
   assert.equal(inicioReciente(historial, historial.length - 1, 10), historial.length - 1);
+});
+
+test('Groq: busca en internet en una petición aparte y muestra las fuentes bajo la respuesta', async () => {
+  const { fetch, peticiones } = groqSimulado([
+    {
+      trozos: [
+        delta({ tool_calls: [{ index: 0, id: 'call_b', type: 'function', function: { name: 'buscar_en_internet', arguments: '{"consulta":"¿Quién ganó ayer?"}' } }] }),
+        delta({}, 'tool_calls'),
+      ],
+    },
+    {
+      json: {
+        choices: [
+          {
+            message: {
+              content: 'Ganó el Albacete 2-1【1†L3-L5】. Fuentes: https://www.marca.com/futbol/albacete.html',
+              executed_tools: [{ type: 'browser_search', search_results: { results: [{ url: 'https://as.com/partido', title: 'Crónica del partido' }] } }],
+            },
+          },
+        ],
+      },
+    },
+    { trozos: [delta({ content: 'Ganó el Albacete 2-1.' }), delta({}, 'stop')] },
+  ]);
+  const { c, eventos } = conversacion(fetch);
+  await c.enviar('¿Quién ganó ayer?');
+
+  const nombres = peticiones[0].cuerpo.tools.map((t) => t.function.name);
+  assert.ok(nombres.includes('buscar_en_internet') && nombres.includes('ver_tiempo'));
+  const busqueda = peticiones[1].cuerpo;
+  assert.equal(busqueda.model, 'openai/gpt-oss-20b');
+  assert.deepEqual(busqueda.tools, [{ type: 'browser_search' }]);
+  assert.equal(busqueda.messages.at(-1).content, '¿Quién ganó ayer?');
+  const resultado = JSON.parse(peticiones[2].cuerpo.messages.at(-1).content);
+  assert.ok(!resultado.resultado.includes('【'), 'sin marcas de cita');
+  const fuentes = eventos.filter((e) => e.tipo === 'fuentes').flatMap((e) => e.fuentes);
+  assert.deepEqual(fuentes, [
+    { url: 'https://as.com/partido', titulo: 'Crónica del partido' },
+    { url: 'https://www.marca.com/futbol/albacete.html', titulo: 'marca.com' },
+  ]);
+  assert.ok(eventos.findIndex((e) => e.tipo === 'fuentes') > eventos.findIndex((e) => e.tipo === 'texto'), 'las fuentes van tras el texto');
+  assert.equal(eventos.at(-1).tipo, 'fin');
+});
+
+test('tiempo: Open-Meteo sin clave; con la búsqueda apagada no se ofrece buscar', async () => {
+  const { fetch, peticiones } = groqSimulado([
+    {
+      trozos: [
+        delta({ tool_calls: [{ index: 0, id: 'call_t', type: 'function', function: { name: 'ver_tiempo', arguments: '{"lugar":"Albacete, España","dias":2}' } }] }),
+        delta({}, 'tool_calls'),
+      ],
+    },
+    {
+      json: {
+        results: [
+          { name: 'Albacete', admin1: 'Otro sitio', country: 'Estados Unidos', latitude: 1, longitude: 1 },
+          { name: 'Albacete', admin1: 'Castilla-La Mancha', country: 'España', latitude: 38.99, longitude: -1.86 },
+        ],
+      },
+    },
+    {
+      json: {
+        current: { temperature_2m: 17.4, apparent_temperature: 16.2, relative_humidity_2m: 40, weather_code: 2, wind_speed_10m: 11.6 },
+        daily: {
+          time: ['2026-10-30', '2026-10-31'],
+          weather_code: [2, 61],
+          temperature_2m_max: [21.2, 18],
+          temperature_2m_min: [7.6, 9.1],
+          precipitation_probability_max: [5, 70],
+        },
+      },
+    },
+    { trozos: [delta({ content: 'Hoy 17 °C.' }), delta({}, 'stop')] },
+  ]);
+  const { c } = conversacion(fetch, {
+    obtenerAjustes: () => ({ proveedor: 'groq', modeloGroq: 'openai/gpt-oss-120b', busquedaWeb: false, usarMemoria: false, personalidad: '' }),
+  });
+  await c.enviar('¿Qué tiempo hace en Albacete?');
+
+  const nombres = peticiones[0].cuerpo.tools.map((t) => t.function.name);
+  assert.ok(nombres.includes('ver_tiempo') && !nombres.includes('buscar_en_internet'));
+  assert.match(peticiones[0].cuerpo.messages[0].content, /No puedes buscar en internet/);
+  assert.match(peticiones[1].url, /^https:\/\/geocoding-api\.open-meteo\.com\/v1\/search\?name=Albacete&/);
+  assert.match(peticiones[2].url, /latitude=38\.99&longitude=-1\.86/);
+  assert.match(peticiones[2].url, /forecast_days=2/);
+  const tiempo = JSON.parse(peticiones[3].cuerpo.messages.at(-1).content);
+  assert.equal(tiempo.lugar, 'Albacete, Castilla-La Mancha, España');
+  assert.deepEqual(tiempo.ahora, { temperatura: '17 °C', sensacion: '16 °C', estado: 'parcialmente nuboso', humedad: '40 %', viento: '12 km/h' });
+  assert.equal(tiempo.dias[1].estado, 'lluvia débil');
+  assert.equal(tiempo.dias[1].probabilidadLluvia, '70 %');
 });

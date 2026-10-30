@@ -200,10 +200,16 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
             <p class="ajuste__ayuda">${ia.ayuda}${estadoClaude.configurado ? ' <button type="button" class="boton" id="quitar-clave" style="margin-left:6px;padding:2px 10px">Quitar clave</button>' : ''}</p>
             <p class="mensaje-ajuste" id="mensaje-claude" role="status"></p>
           </div>
+          ${interruptor(
+            'busquedaWeb',
+            'Buscar en internet',
+            ajustes.proveedor === 'claude'
+              ? 'Para noticias, precios u horarios. Cada búsqueda suma un pequeño coste en tu cuenta de Claude.'
+              : 'Para noticias, precios u horarios. Gratis: cuenta para el límite diario de Groq.',
+          )}
           ${
             ajustes.proveedor === 'claude'
-              ? `${interruptor('busquedaWeb', 'Buscar en internet', 'Para el tiempo, noticias, precios u horarios. Cada búsqueda suma un pequeño coste en tu cuenta de Claude.')}
-          <div class="ajuste">
+              ? `<div class="ajuste">
             <label class="ajuste__etiqueta" for="ajuste-modelo">Modelo</label>
             ${selector('modelo', 'ajuste-modelo', MODELOS)}
           </div>`

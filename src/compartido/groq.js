@@ -194,6 +194,61 @@ export async function textoGroq({ apiKey, modelo, sistema, usuario, fetch }) {
   return (datos.choices?.[0]?.message?.content ?? '').trim();
 }
 
+// Búsqueda web gratuita: la hacen los servidores de Groq con la herramienta
+// browser_search de los modelos GPT-OSS. Va en una petición aparte (con el
+// modelo pequeño, que tiene su propio límite) y devuelve un resumen corto,
+// así funciona con cualquier modelo de chat y no llena la conversación.
+const MODELO_BUSQUEDA = 'openai/gpt-oss-20b';
+const URL_WEB = /https?:\/\/[^\s<>()\]【】"']+/g;
+
+const limpiarCitas = (texto) => texto.replace(/【[^】]*】/g, '').replace(/[ \t]+\n/g, '\n').trim();
+
+function fuentesDeBusqueda(mensaje, texto) {
+  const urls = new Map();
+  for (const herramienta of mensaje.executed_tools ?? []) {
+    const resultados = herramienta.search_results?.results ?? herramienta.search_results ?? [];
+    for (const r of Array.isArray(resultados) ? resultados : []) {
+      if (typeof r?.url === 'string' && /^https?:\/\//.test(r.url)) urls.set(r.url, r.title || '');
+    }
+  }
+  for (const url of texto.match(URL_WEB) ?? []) {
+    const limpia = url.replace(/[.,;:]+$/, '');
+    if (!urls.has(limpia)) urls.set(limpia, '');
+  }
+  return [...urls].slice(0, 5).map(([url, titulo]) => ({ url, titulo: titulo || new URL(url).hostname.replace(/^www\./, '') }));
+}
+
+export async function buscarEnInternetGroq({ apiKey, consulta, signal, fetch }) {
+  const respuesta = await pedir(apiKey, '/chat/completions', {
+    signal,
+    fetch,
+    cuerpo: {
+      model: MODELO_BUSQUEDA,
+      messages: [
+        {
+          role: 'system',
+          content:
+            `Hoy es ${new Date().toLocaleDateString('es-ES', { dateStyle: 'full' })}. Busca en internet y responde en español ` +
+            'con los datos concretos que encuentres (cifras, fechas, nombres), en menos de 120 palabras. Si no encuentras ' +
+            'nada fiable, dilo. Al final, en una línea, las direcciones de las páginas que has usado.',
+        },
+        { role: 'user', content: consulta },
+      ],
+      tools: [{ type: 'browser_search' }],
+      tool_choice: 'required',
+      max_completion_tokens: 2000,
+      reasoning_effort: 'low',
+    },
+  });
+  const datos = await respuesta.json();
+  const mensaje = datos.choices?.[0]?.message ?? {};
+  // Si el modelo no llega a escribir el resumen, se usa lo que leyó.
+  const leido = (mensaje.executed_tools ?? []).map((h) => (typeof h.output === 'string' ? h.output : '')).join('\n');
+  const texto = limpiarCitas(mensaje.content || '') || limpiarCitas(leido).slice(0, 3000);
+  if (!texto) throw new ErrorGroq('La búsqueda no ha devuelto resultados.');
+  return { resultado: texto, fuentes: fuentesDeBusqueda(mensaje, texto) };
+}
+
 // Comprueba la clave sin gastar nada: pide la lista de modelos.
 export async function probarClaveGroq(apiKey, fetch) {
   await pedir(apiKey, '/models', { fetch });

@@ -38,9 +38,12 @@ Todo lo que se borra pide un segundo toque para confirmar.
 - **Memoria**: «recuerda que mi hermana se llama Ana». Kitsune guarda datos y
   preferencias (cifrados) y los tiene en cuenta en cada conversación. Se ven,
   se borran o se pausan en Ajustes → Memoria.
-- **Búsqueda en internet**: tiempo, noticias, precios u horarios, con los
-  enlaces a las fuentes debajo de la respuesta. Usa la herramienta de búsqueda
-  de la API de Claude (cada búsqueda tiene un pequeño coste); se puede apagar.
+- **Búsqueda en internet**: noticias, precios u horarios, con los enlaces a
+  las fuentes debajo de la respuesta. Con Groq es gratis (búsqueda integrada de
+  sus modelos GPT-OSS); con Claude cada búsqueda tiene un pequeño coste. Se
+  puede apagar en Ajustes.
+- **El tiempo**: «¿qué tiempo hace en Albacete?». Temperatura, cielo, lluvia y
+  previsión de hasta siete días con Open-Meteo, gratis y sin clave.
 - **Google Calendar**: «¿qué tengo esta semana?», «añade el tren a mi
   calendario». Antes de crear un evento aparece una tarjeta para confirmarlo;
   sin tu «Añadir» no se crea nada. Avisa un cuarto de hora antes de cada cita.
@@ -108,8 +111,8 @@ Kitsune funciona con dos IA; se elige en Ajustes → Inteligencia artificial.
 
 Usa modelos abiertos (GPT-OSS 120B por defecto; también Llama 3.3 70B y
 GPT-OSS 20B) con las mismas herramientas: correo, agenda, recordatorios y
-memoria. No tiene búsqueda web, y la capa gratuita limita las peticiones por
-minuto y por día: si se llega al límite, Kitsune lo avisa. En conversaciones
+memoria, y también busca en internet. La capa gratuita limita las peticiones
+por minuto y por día: si se llega al límite, Kitsune lo avisa. En conversaciones
 largas solo se envía la parte reciente.
 
 **Claude (de pago)**

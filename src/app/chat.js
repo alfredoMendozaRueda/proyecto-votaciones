@@ -12,6 +12,8 @@ const ETIQUETAS_HERRAMIENTA = {
   ver_recordatorios: 'Mirando tus recordatorios…',
   borrar_recordatorio: 'Borrando el recordatorio…',
   web_search: 'Buscando en internet…',
+  buscar_en_internet: 'Buscando en internet…',
+  ver_tiempo: 'Mirando el tiempo…',
   web_fetch: 'Leyendo la página…',
   ver_agenda: 'Mirando tu agenda…',
   crear_evento: 'Preparando el evento…',
