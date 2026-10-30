@@ -63,7 +63,21 @@ Todo lo que se borra pide un segundo toque para confirmar.
   mirada, atajo, inicio con Windows, sueño, voz, pulso del día,
   recordatorios, clave y modelo de Claude, personalidad y cuenta de Gmail.
 
-## Puesta en marcha
+## Instalar en Windows
+
+Descarga **Kitsune-Setup.exe** de la página de descargas del repositorio
+(Releases → «Kitsune para Windows»). Se compila sola con cada cambio en esta
+rama (`.github/workflows/windows.yml`).
+
+1. Abre el instalador. Como no está firmado, Windows puede mostrar «Windows
+   protegió tu PC»: pulsa **Más información** → **Ejecutar de todas formas**.
+2. Sigue el asistente (puedes elegir la carpeta).
+3. Pulsa **Ctrl + Alt + K**: aparece el zorro. Vive en la bandeja del sistema,
+   junto al reloj; desde ahí también están Ajustes y Salir.
+
+Para desinstalarlo: Configuración de Windows → Aplicaciones → Kitsune.
+
+## Puesta en marcha (desarrollo)
 
 Necesitas Node.js 20 o superior.
 

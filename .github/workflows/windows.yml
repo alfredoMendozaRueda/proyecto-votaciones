@@ -1,0 +1,50 @@
+# Compila el instalador de Windows y lo deja en la página de descargas
+# (Releases) del repositorio, siempre con la última versión de esta rama.
+name: Kitsune para Windows
+
+on:
+  push:
+    branches: [kitsune-asistente]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kitsune-windows
+  cancel-in-progress: true
+
+jobs:
+  instalador:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run dist -- --publish never
+        env:
+          # Sin certificado de firma: el instalador se genera sin firmar.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Publicar el instalador
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          instalador=$(ls out/Kitsune\ Setup*.exe | head -n 1)
+          cp "$instalador" out/Kitsune-Setup.exe
+          # Una sola descarga, siempre la más reciente: se rehace en cada cambio.
+          gh release delete kitsune-windows --cleanup-tag --yes || true
+          gh release create kitsune-windows out/Kitsune-Setup.exe \
+            --target "$GITHUB_SHA" \
+            --title "Kitsune para Windows" \
+            --notes "Instalador de Kitsune para Windows 10 y 11 (64 bits), compilado a partir de la rama kitsune-asistente.
+
+          1. Descarga **Kitsune-Setup.exe** (abajo, en Assets).
+          2. Ábrelo. Como el instalador no está firmado, Windows puede mostrar «Windows protegió tu PC»: pulsa **Más información** y luego **Ejecutar de todas formas**.
+          3. Sigue el asistente. Al terminar, pulsa **Ctrl + Alt + K** para llamar al zorro.
+
+          Compilación: ${GITHUB_SHA::7}"
