@@ -87,7 +87,7 @@ const botonesPaleta = Object.entries(PALETAS).map(([clave, pal]) => {
   boton.className = 'paleta';
   boton.innerHTML = `
     <span class="paleta__muestra" aria-hidden="true">
-      <i style="background:${pal.pelaje}"></i><i style="background:${pal.puntaCola}"></i><i style="background:${pal.marca}"></i>
+      <i style="background:${pal.flanco}"></i><i style="background:${pal.medias}"></i><i style="background:${pal.marca}"></i>
     </span>${pal.nombre}`;
   boton.addEventListener('click', () => kitsune.setPaleta(clave));
   document.getElementById('paletas').append(boton);

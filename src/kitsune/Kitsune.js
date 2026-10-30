@@ -2,8 +2,10 @@ import * as THREE from 'three';
 import { PALETAS, PALETA_POR_DEFECTO } from './paletas.js';
 import { Cola } from './cola.js';
 import { FuegosFatuos } from './fuegos.js';
-import { crearMaterialContorno } from './contorno.js';
-import { crearGeometriaOjo, crearMaterialOjo, colorearOjo } from './ojo.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { construirZorro } from './anatomia.js';
+import { crearMaterialesPelaje } from './pelaje.js';
+import { colorearOjo } from './ojo.js';
 import {
   clamp01,
   lerp,
@@ -27,6 +29,7 @@ const REPOSO = {
   inclinacion: 0,
   cabeceo: 0,
   apertura: 0.9,
+  dilatacion: 0.25,
   miradaX: 0,
   miradaY: 0,
   habla: 0,
@@ -51,6 +54,7 @@ const OBJETIVOS = {
     inclinacion: 0.2,
     cabeceo: -0.04,
     apertura: 1.08,
+    dilatacion: 0.55,
     abanico: 0.95,
     ondaAmp: 0.45,
     ondaVel: 0.7,
@@ -73,6 +77,7 @@ const OBJETIVOS = {
     inclinacion: -0.24,
     cabeceo: -0.2,
     apertura: 0.62,
+    dilatacion: 0.12,
     miradaX: 0.5,
     miradaY: 0.75,
     abanico: 1.1,
@@ -130,15 +135,6 @@ function texturaZ(color) {
   return tex;
 }
 
-function gradienteToon() {
-  const datos = new Uint8Array([86, 168, 255]);
-  const tex = new THREE.DataTexture(datos, datos.length, 1, THREE.RedFormat);
-  tex.minFilter = THREE.NearestFilter;
-  tex.magFilter = THREE.NearestFilter;
-  tex.needsUpdate = true;
-  return tex;
-}
-
 export class Kitsune {
   constructor(contenedor, opciones = {}) {
     const reducido =
@@ -157,6 +153,10 @@ export class Kitsune {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setClearColor(0x000000, 0);
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.domElement.style.display = 'block';
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
@@ -167,15 +167,25 @@ export class Kitsune {
     this.camara.position.set(0, 2.0, 8.4);
     this.camara.lookAt(0, 1.2, 0);
 
-    this.escena.add(new THREE.HemisphereLight('#ffe9e2', '#3a1418', 1.15));
-    const clave = new THREE.DirectionalLight('#fff4ea', 2.3);
-    clave.position.set(3, 5, 6);
-    this.luzContra = new THREE.DirectionalLight('#ff3048', 2.2);
-    this.luzContra.position.set(-4, 3, -5);
-    this.escena.add(clave, this.luzContra);
+    // Luz de estudio suave para reflejos realistas en ojos y trufa.
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.escena.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.escena.environmentIntensity = 0.45;
+    pmrem.dispose();
 
-    this.resolucion = new THREE.Vector2(1, 1);
-    this._crearMateriales();
+    this.escena.add(new THREE.HemisphereLight('#ffe8dc', '#2a0f12', 0.5));
+    const clave = new THREE.DirectionalLight('#fff1e2', 2.6);
+    clave.position.set(2.5, 5, 5);
+    clave.castShadow = true;
+    clave.shadow.mapSize.set(1024, 1024);
+    Object.assign(clave.shadow.camera, { left: -2.5, right: 2.5, top: 3, bottom: -1, near: 1, far: 15 });
+    clave.shadow.normalBias = 0.02;
+    const relleno = new THREE.DirectionalLight('#9fb4ff', 0.35);
+    relleno.position.set(-4, 1.5, 3);
+    this.luzContra = new THREE.DirectionalLight('#ff5a38', 2.2);
+    this.luzContra.position.set(-3, 3, -4.5);
+    this.escena.add(clave, relleno, this.luzContra);
+
     this._construir();
 
     this.fuegos = new FuegosFatuos(this.escena);
@@ -238,15 +248,21 @@ export class Kitsune {
     const pal = PALETAS[nombre];
     if (!pal) return;
     this.paleta = nombre;
-    for (const clave of ['pelaje', 'crema', 'negro', 'orejaInterior', 'bocaInterior', 'collar', 'cascabel']) {
-      this.mat[clave].color.set(pal[clave]);
-    }
-    this.mat.marca.color.set(pal.marca);
-    for (const ojo of this.ojos) colorearOjo(ojo, pal);
-    this.mat.contorno.uniforms.uColor.value.set(pal.contorno);
+    const colores = Object.fromEntries(
+      Object.entries(pal)
+        .filter(([, v]) => typeof v === 'string' && v.startsWith('#'))
+        .map(([k, v]) => [k, new THREE.Color(v)]),
+    );
+    this.zorro.repintar(colores);
+    for (const cola of this.colas) cola.setColores(pal);
+    for (const ojo of this.zorro.ojos) colorearOjo(ojo, pal);
+    this.zorro.marca.uniforms.uColor.value.set(pal.marca);
+    const sueltos = this.zorro.materialesSueltos;
+    sueltos.nariz.color.set(pal.nariz);
+    sueltos.boca.color.set(pal.bocaInterior);
+    sueltos.bigotes.color.set(pal.bigotes);
     this.mat.anillo.color.set(pal.fuego);
     this.luzContra.color.set(pal.luzContra);
-    for (const cola of this.colas) cola.setColores(pal.pelaje, pal.puntaCola);
     this.fuegos.setColores(pal.fuego, pal.fuegoNucleo);
     this._texturaZ?.dispose();
     this._texturaZ = texturaZ(pal.fuegoNucleo);
@@ -271,21 +287,10 @@ export class Kitsune {
 
   // ---------- Construcción ----------
 
-  _crearMateriales() {
-    const gradiente = gradienteToon();
-    const toon = (extra = {}) => new THREE.MeshToonMaterial({ gradientMap: gradiente, ...extra });
-    const grosor = 2.4 * this.renderer.getPixelRatio();
+  _construir() {
     this.mat = {
-      pelaje: toon(),
-      crema: toon(),
-      negro: toon(),
-      orejaInterior: toon(),
-      bocaInterior: toon(),
-      collar: toon(),
-      cascabel: toon(),
-      cola: toon({ vertexColors: true }),
-      marca: new THREE.MeshBasicMaterial(),
-      contorno: crearMaterialContorno('#000000', grosor, this.resolucion),
+      cuerpo: crearMaterialesPelaje({ largo: 0.028, capas: 12, densidad: 110 }),
+      colas: crearMaterialesPelaje({ largo: 0.07, capas: 14, densidad: 75, gravedad: 0.3 }),
       anillo: new THREE.MeshBasicMaterial({
         transparent: true,
         depthWrite: false,
@@ -293,97 +298,45 @@ export class Kitsune {
         opacity: 0,
       }),
       sombra: new THREE.MeshBasicMaterial({
-        map: texturaRadial('rgba(10,4,6,0.55)', 'rgba(10,4,6,0)'),
+        map: texturaRadial('rgba(10,4,6,0.45)', 'rgba(10,4,6,0)'),
         transparent: true,
         depthWrite: false,
       }),
     };
-  }
 
-  _parte(geometria, material, padre, { pos = [0, 0, 0], esc = [1, 1, 1], rot = [0, 0, 0], contorno = true } = {}) {
-    const malla = new THREE.Mesh(geometria, material);
-    malla.position.set(...pos);
-    malla.scale.set(...esc);
-    malla.rotation.set(...rot);
-    if (contorno) malla.add(new THREE.Mesh(geometria, this.mat.contorno));
-    padre.add(malla);
-    return malla;
-  }
-
-  _construir() {
-    const m = this.mat;
-    const esfera = new THREE.SphereGeometry(1, 40, 28);
-
-    this.raiz = new THREE.Group();
+    this.zorro = construirZorro(this.mat.cuerpo);
+    const z = this.zorro;
+    this.raiz = z.raiz;
     this.raiz.rotation.y = 0.32;
     this.escena.add(this.raiz);
+    Object.assign(this, {
+      cuerpo: z.cuerpo,
+      pecho: z.pecho,
+      cabeza: z.cabeza,
+      mandibula: z.mandibula,
+      orejas: z.orejas,
+      patas: z.patas,
+      colasBase: z.colasBase,
+    });
 
-    this.sombra = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.3), m.sombra);
+    const suelo = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), new THREE.ShadowMaterial({ opacity: 0.32 }));
+    suelo.rotation.x = -Math.PI / 2;
+    suelo.position.y = 0.001;
+    suelo.receiveShadow = true;
+    this.raiz.add(suelo);
+
+    this.sombra = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.2), this.mat.sombra);
     this.sombra.rotation.x = -Math.PI / 2;
     this.sombra.position.set(0, 0.002, -0.05);
     this.raiz.add(this.sombra);
 
-    this.anillo = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 72), m.anillo);
+    this.anillo = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 72), this.mat.anillo);
     this.anillo.rotation.x = -Math.PI / 2;
     this.anillo.position.y = 0.01;
     this.escena.add(this.anillo);
 
-    // El cuerpo escala desde el suelo: el squash & stretch de los saltos no lo despega.
-    this.cuerpo = new THREE.Group();
-    this.raiz.add(this.cuerpo);
-
-    this.torso = this._parte(esfera, m.pelaje, this.cuerpo, {
-      pos: [0, 0.78, -0.02],
-      esc: [0.5, 0.68, 0.46],
-      rot: [0.18, 0, 0],
-    });
-    this.pecho = this._parte(esfera, m.crema, this.cuerpo, {
-      pos: [0, 0.9, 0.22],
-      esc: [0.34, 0.5, 0.26],
-      rot: [0.25, 0, 0],
-    });
-    for (const lado of [-1, 1]) {
-      this._parte(esfera, m.pelaje, this.cuerpo, { pos: [0.27 * lado, 0.3, -0.12], esc: [0.3, 0.3, 0.36] });
-      this._parte(esfera, m.negro, this.cuerpo, { pos: [0.34 * lado, 0.06, 0.12], esc: [0.11, 0.07, 0.19] });
-    }
-
-    const capsulaAlta = new THREE.CapsuleGeometry(0.085, 0.32, 8, 16);
-    const capsulaBaja = new THREE.CapsuleGeometry(0.08, 0.3, 8, 16);
-    this.patas = [-1, 1].map((lado) => {
-      const hombro = new THREE.Group();
-      hombro.position.set(0.17 * lado, 0.78, 0.2);
-      this.cuerpo.add(hombro);
-      this._parte(capsulaAlta, m.pelaje, hombro, { pos: [0, -0.2, 0] });
-      const antebrazo = new THREE.Group();
-      antebrazo.position.y = -0.36;
-      hombro.add(antebrazo);
-      this._parte(capsulaBaja, m.pelaje, antebrazo, { pos: [0, -0.14, 0] });
-      this._parte(esfera, m.negro, antebrazo, { pos: [0, -0.355, 0.05], esc: [0.1, 0.065, 0.14] });
-      return { hombro, antebrazo };
-    });
-
-    this.collar = this._parte(new THREE.TorusGeometry(0.36, 0.055, 14, 48), m.collar, this.cuerpo, {
-      pos: [0, 1.24, 0.14],
-      rot: [Math.PI / 2 + 0.42, 0, 0],
-    });
-    this.cascabel = new THREE.Group();
-    this.cascabel.position.set(0, 1.1, 0.5);
-    this.cuerpo.add(this.cascabel);
-    this._parte(esfera, m.cascabel, this.cascabel, { pos: [0, -0.06, 0.02], esc: [0.075, 0.075, 0.075] });
-    this._parte(new THREE.BoxGeometry(0.09, 0.012, 0.02), m.negro, this.cascabel, {
-      pos: [0, -0.085, 0.085],
-      contorno: false,
-    });
-
-    this._construirCabeza(esfera);
-
-    this.colasBase = new THREE.Group();
-    this.colasBase.position.set(0, 0.34, -0.28);
-    // El abanico se gira hacia la cámara para que las nueve colas se vean repartidas.
-    this.colasBase.rotation.y = -0.28;
-    this.cuerpo.add(this.colasBase);
     this.colas = Array.from({ length: NUM_COLAS }, (_, i) => {
-      const cola = new Cola(i, NUM_COLAS, m.cola, m.contorno);
+      const cola = new Cola(i, NUM_COLAS, this.mat.colas);
       this.colasBase.add(cola.malla);
       return cola;
     });
@@ -395,94 +348,7 @@ export class Kitsune {
       return s;
     });
 
-    this._mallasCuerpo = [];
-    this.cuerpo.traverse((o) => {
-      if (o.isMesh && o.material !== m.contorno) this._mallasCuerpo.push(o);
-    });
-  }
-
-  _construirCabeza(esfera) {
-    const m = this.mat;
-    this.cabeza = new THREE.Group();
-    this.cabeza.rotation.order = 'YXZ';
-    this.cabeza.position.set(0, 1.44, 0.1);
-    this.cabeza.scale.setScalar(1.12);
-    this.cuerpo.add(this.cabeza);
-
-    const centro = new THREE.Vector3(0, 0.2, 0);
-    const radios = new THREE.Vector3(0.42, 0.38, 0.38);
-    this._parte(esfera, m.pelaje, this.cabeza, { pos: centro.toArray(), esc: radios.toArray() });
-
-    for (const lado of [-1, 1]) {
-      this._parte(esfera, m.crema, this.cabeza, {
-        pos: [0.25 * lado, 0.03, 0.09],
-        esc: [0.2, 0.13, 0.17],
-        rot: [0, 0, -0.5 * lado],
-      });
-      this._parte(new THREE.ConeGeometry(0.085, 0.3, 16), m.crema, this.cabeza, {
-        pos: [0.43 * lado, -0.05, 0.02],
-        esc: [1, 1, 0.55],
-        rot: [0, 0, -lado * (Math.PI / 2 + 0.75)],
-      });
-    }
-
-    this._parte(esfera, m.pelaje, this.cabeza, { pos: [0, 0.13, 0.3], esc: [0.12, 0.1, 0.28], rot: [0.22, 0, 0] });
-    this._parte(esfera, m.crema, this.cabeza, { pos: [0, 0.05, 0.34], esc: [0.13, 0.09, 0.27] });
-    this._parte(esfera, m.negro, this.cabeza, { pos: [0, 0.1, 0.6], esc: [0.05, 0.038, 0.042] });
-    this._parte(esfera, m.bocaInterior, this.cabeza, {
-      pos: [0, 0.0, 0.36],
-      esc: [0.075, 0.03, 0.16],
-      contorno: false,
-    });
-
-    this.mandibula = new THREE.Group();
-    this.mandibula.position.set(0, -0.02, 0.2);
-    this.cabeza.add(this.mandibula);
-    this._parte(esfera, m.crema, this.mandibula, { pos: [0, -0.01, 0.17], esc: [0.105, 0.045, 0.21] });
-
-    const enSuperficie = (x, y, z) => {
-      const d = new THREE.Vector3(x, y, z).normalize();
-      const punto = new THREE.Vector3(d.x * radios.x, d.y * radios.y, d.z * radios.z).add(centro);
-      const normal = new THREE.Vector3(d.x / radios.x, d.y / radios.y, d.z / radios.z).normalize();
-      return { punto, normal };
-    };
-    const Z = new THREE.Vector3(0, 0, 1);
-
-    this.ojos = [-1, 1].map((lado) => {
-      const material = crearMaterialOjo(lado);
-      const malla = new THREE.Mesh(crearGeometriaOjo(centro, radios, new THREE.Vector3(0.5 * lado, 0.16, 0.86)), material);
-      malla.renderOrder = 1;
-      this.cabeza.add(malla);
-      return material;
-    });
-
-    const frente = enSuperficie(0, 0.55, 0.83);
-    this.marcaFrente = new THREE.Group();
-    this.marcaFrente.position.copy(frente.punto).addScaledVector(frente.normal, -0.006);
-    this.marcaFrente.quaternion.setFromUnitVectors(Z, frente.normal);
-    this.cabeza.add(this.marcaFrente);
-    this._parte(esfera, m.marca, this.marcaFrente, { esc: [0.036, 0.085, 0.016], contorno: false });
-    for (const lado of [-1, 1]) {
-      this._parte(esfera, m.marca, this.marcaFrente, {
-        pos: [0.055 * lado, -0.03, -0.004],
-        esc: [0.018, 0.05, 0.012],
-        rot: [0, 0, 0.45 * lado],
-        contorno: false,
-      });
-    }
-
-    const conoOreja = new THREE.ConeGeometry(0.15, 0.44, 24);
-    const conoInterior = new THREE.ConeGeometry(0.1, 0.3, 20);
-    const conoPunta = new THREE.ConeGeometry(0.054, 0.15, 20);
-    this.orejas = [-1, 1].map((lado) => {
-      const pivote = new THREE.Group();
-      pivote.position.set(0.2 * lado, 0.5, -0.04);
-      this.cabeza.add(pivote);
-      this._parte(conoOreja, m.pelaje, pivote, { pos: [0, 0.22, 0], esc: [1, 1, 0.5] });
-      this._parte(conoInterior, m.orejaInterior, pivote, { pos: [0, 0.16, 0.035], esc: [1, 1, 0.35], contorno: false });
-      this._parte(conoPunta, m.negro, pivote, { pos: [0, 0.365, 0], esc: [1.04, 1, 0.53], contorno: false });
-      return { pivote, lado };
-    });
+    this._mallasCuerpo = [...z.mallas, ...this.colas.map((c) => c.malla)];
   }
 
   // ---------- Bucle ----------
@@ -497,7 +363,6 @@ export class Kitsune {
     this.camara.position.set(0, 2.0, distancia);
     this.camara.lookAt(0, 1.2, 0);
     this.camara.updateProjectionMatrix();
-    this.renderer.getDrawingBufferSize(this.resolucion);
   }
 
   _bucle() {
@@ -533,17 +398,23 @@ export class Kitsune {
     // Cuerpo: salto, squash & stretch, respiración, encogido al dormir
     this.cuerpo.position.y = o.saltoY;
     const encogido = 1 - 0.06 * p.agachado;
-    this.cuerpo.scale.set(o.sx, o.sy * encogido, o.sx);
+    // Un animal real apenas se deforma: el squash & stretch se queda a la mitad.
+    const sx = 1 + (o.sx - 1) * 0.5;
+    const sy = 1 + (o.sy - 1) * 0.5;
+    this.cuerpo.scale.set(sx, sy * encogido, sx);
     const respiracion = Math.sin(this.relojRespiracion);
-    const ampRespiracion = 0.012 + 0.016 * p.agachado;
-    this.torso.scale.y = 0.68 * (1 + ampRespiracion * respiracion);
-    this.pecho.scale.y = 0.5 * (1 + ampRespiracion * respiracion);
-    this.torso.rotation.x = 0.18 + 0.12 * p.agachado;
+    const ampRespiracion = 0.014 + 0.016 * p.agachado;
+    this.pecho.scale.set(
+      1 + ampRespiracion * respiracion * 0.7,
+      1 + ampRespiracion * respiracion * 0.3,
+      1 + ampRespiracion * respiracion,
+    );
+    this.pecho.rotation.x = 0.1 * p.agachado;
     this.cuerpo.rotation.z = 0.015 * Math.sin(t * 0.7) * reducido;
 
     // Cabeza
     const habla = p.habla * Math.max(0, Math.sin(t * 13.7) * 0.6 + Math.sin(t * 7.9 + 1.3) * 0.4) * (Math.sin(t * 1.9) > -0.55 ? 1 : 0.15);
-    this.cabeza.position.set(0, 1.44 - 0.12 * p.agachado + respiracion * 0.008, 0.1 + 0.05 * p.agachado);
+    this.cabeza.position.set(0, 1.37 - 0.12 * p.agachado + respiracion * 0.006, 0.17 + 0.05 * p.agachado);
     this.cabeza.rotation.set(
       p.cabeceo + o.cabeceo + this.mirada.y * -0.28 + p.habla * 0.04 * Math.sin(t * 6.8),
       this.mirada.x * 0.55,
@@ -552,16 +423,16 @@ export class Kitsune {
     this.mandibula.rotation.x = clamp01(habla * 0.9 + o.boca) * 0.45;
 
     const apertura = Math.max(0, Math.min(1.2, p.apertura * o.apertura * micro.parpadeo));
-    for (const ojo of this.ojos) {
+    for (const ojo of this.zorro.ojos) {
       ojo.uniforms.uApertura.value = apertura;
       ojo.uniforms.uAlegria.value = clamp01(o.alegria);
+      ojo.uniforms.uDilatacion.value = clamp01(p.dilatacion + 0.4 * o.alegria);
       ojo.uniforms.uMirada.value.set(
         Math.max(-1, Math.min(1, p.miradaX + this.mirada.x * 0.8)),
         Math.max(-1, Math.min(1, p.miradaY + this.mirada.y * 0.8)),
       );
     }
-    const pulsoMarca = 1 + 0.08 * p.remolino * Math.sin(t * 5);
-    this.marcaFrente.scale.setScalar(pulsoMarca);
+    this.zorro.marca.uniforms.uBrillo.value = p.remolino * (0.5 + 0.5 * Math.sin(t * 5));
 
     const orejas = Math.max(-1.2, Math.min(1.4, p.orejas + o.orejas));
     for (const oreja of this.orejas) {
@@ -569,9 +440,9 @@ export class Kitsune {
       const caida = Math.max(0, -orejas);
       const tic = micro.tic * (oreja.lado === this.tic.lado ? 1 : 0);
       oreja.pivote.rotation.set(
-        -0.12 + 0.2 * alerta - 0.55 * caida,
+        -0.18 + 0.22 * alerta - 0.6 * caida,
         0,
-        -oreja.lado * (0.3 - 0.1 * alerta + 0.28 * caida) + tic * oreja.lado,
+        -oreja.lado * (0.24 - 0.1 * alerta + 0.3 * caida) + tic * oreja.lado,
       );
     }
 
@@ -579,7 +450,6 @@ export class Kitsune {
     const [, derecha] = this.patas;
     derecha.hombro.rotation.x = -1.25 * o.pata + o.ondaPata * 0.16;
     derecha.antebrazo.rotation.x = 0.85 * o.pata + o.ondaPata * 0.35;
-    this.cascabel.rotation.x = o.cascabel + 0.05 * Math.sin(t * 2.3) * reducido;
 
     // Colas
     const pc = {
@@ -637,7 +507,6 @@ export class Kitsune {
       pata: 0,
       ondaPata: 0,
       ondaVel: 1,
-      cascabel: 0,
       anillo: 0,
       radioFuego: null,
       fuegoVis: null,
@@ -715,7 +584,6 @@ export class Kitsune {
       o.alegria = Math.min(1, 1.6 * aire);
       o.boca = 0.32 * aire;
       o.orejas = 0.8 * aire;
-      o.cascabel = 0.6 * Math.sin(u * Math.PI * 2 * 3) * (1 - clamp01(u / 1.15));
     }
 
     if (a.t >= a.dur) this._cerrarAccion();

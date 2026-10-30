@@ -1,39 +1,13 @@
 import * as THREE from 'three';
 
-// Medidas del ojo en unidades de la cabeza: semiancho y semialto del almendrado.
-// El parche es más grande para que quepan la raya del párpado y el trazo rojo.
-const W = 0.125;
-const H = 0.092;
-const PARCHE = new THREE.Vector2(W * 1.6, H * 1.45);
+// Ojo de zorro: almendra estrecha y oblicua, borde negro, casi sin blanco,
+// iris ámbar que llena la abertura y pupila en rendija vertical.
+const W = 0.064;
+const H = 0.04;
+export const PARCHE_OJO = { mitadU: W * 1.75, mitadV: H * 1.75 };
 
-// Parche curvo que se apoya sobre el cráneo (un elipsoide): se parte de un
-// plano tangente y cada vértice se proyecta sobre la superficie, así el ojo
-// queda pintado sobre la cabeza en lugar de sobresalir como una pegatina.
-export function crearGeometriaOjo(centro, radios, direccion) {
-  const d = direccion.clone().normalize();
-  const punto = new THREE.Vector3(d.x * radios.x, d.y * radios.y, d.z * radios.z).add(centro);
-  const normal = new THREE.Vector3(d.x / radios.x, d.y / radios.y, d.z / radios.z).normalize();
-  const u = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), normal).normalize();
-  const v = new THREE.Vector3().crossVectors(normal, u).normalize();
-
-  const geometria = new THREE.PlaneGeometry(PARCHE.x * 2, PARCHE.y * 2, 20, 14);
-  const pos = geometria.attributes.position;
-  const p = new THREE.Vector3();
-  const n = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
-    p.copy(punto).addScaledVector(u, pos.getX(i)).addScaledVector(v, pos.getY(i)).sub(centro);
-    p.divideScalar(Math.hypot(p.x / radios.x, p.y / radios.y, p.z / radios.z));
-    n.set(p.x / radios.x ** 2, p.y / radios.y ** 2, p.z / radios.z ** 2).normalize();
-    p.add(centro).addScaledVector(n, 0.004);
-    pos.setXYZ(i, p.x, p.y, p.z);
-  }
-  geometria.computeVertexNormals();
-  return geometria;
-}
-
-// lado: +1 ojo derecho del zorro (a la izquierda en pantalla), -1 el izquierdo.
-// Todo el dibujo es procedural en el shader: forma, párpado, iris, pupila,
-// brillos y trazos; así parpadear, entornar o mirar es cambiar un uniform.
+// lado: +1 para el ojo en +x, -1 para el de -x. Todo se dibuja en el shader:
+// parpadear, entornar, mirar o dilatar la pupila es cambiar un uniform.
 export function crearMaterialOjo(lado) {
   return new THREE.ShaderMaterial({
     transparent: true,
@@ -44,9 +18,10 @@ export function crearMaterialOjo(lado) {
     uniforms: {
       uLado: { value: lado },
       uMedio: { value: new THREE.Vector2(W, H) },
-      uParche: { value: PARCHE },
+      uParche: { value: new THREE.Vector2(PARCHE_OJO.mitadU, PARCHE_OJO.mitadV) },
       uApertura: { value: 1 },
       uAlegria: { value: 0 },
+      uDilatacion: { value: 0.25 },
       uMirada: { value: new THREE.Vector2() },
       uIris: { value: new THREE.Color() },
       uIrisClaro: { value: new THREE.Color() },
@@ -69,6 +44,7 @@ export function crearMaterialOjo(lado) {
       uniform vec2 uMedio;
       uniform float uApertura;
       uniform float uAlegria;
+      uniform float uDilatacion;
       uniform vec2 uMirada;
       uniform vec3 uIris;
       uniform vec3 uIrisClaro;
@@ -82,7 +58,6 @@ export function crearMaterialOjo(lado) {
       float curva(float x, float alto, float potencia) {
         return alto * pow(max(1.0 - x * x, 0.0), potencia);
       }
-
       float banda(float y, float desde, float hasta, float aa) {
         return smoothstep(desde - aa, desde + aa, y) * (1.0 - smoothstep(hasta - aa, hasta + aa, y));
       }
@@ -91,92 +66,152 @@ export function crearMaterialOjo(lado) {
         float W = uMedio.x;
         float H = uMedio.y;
         vec2 q = vQ;
-        // xn = +1 en el rabillo exterior de cada ojo (espejo según el lado).
-        float xn = q.x * uLado / W;
+        float xn = q.x * uLado / W;          // +1 = rabillo exterior
         float x = clamp(xn, -1.0, 1.0);
-        float aa = max(fwidth(q.y), 1e-4);
+        float aa = max(fwidth(q.y), 1e-5);
 
-        // Párpados: almendra con el rabillo exterior levantado.
-        float incl = 0.24 * H * x;
-        float sup = incl + curva(x, 0.8 * H, 0.5);
-        float inf = incl - curva(x, 0.62 * H, 0.75);
-        float cerrado = inf + curva(x, 0.14 * H, 1.0);
+        // Párpados: almendra oblicua, con el rabillo exterior más alto.
+        float incl = 0.32 * H * x;
+        float sup = incl + curva(x, 0.78 * H, 0.55);
+        float inf = incl - curva(x, 0.52 * H, 0.8);
+        float cerrado = inf + curva(x, 0.12 * H, 1.0);
         float abierto = clamp(uApertura, 0.0, 1.0);
-        float supEf = mix(cerrado, sup, abierto) + max(uApertura - 1.0, 0.0) * curva(x, 0.7 * H, 0.5);
-        float infEf = inf;
-        // Alegría: el párpado inferior sube hasta dejar un arco ^.
-        float arco = incl + curva(x, 0.45 * H, 0.7) - 0.06 * H;
-        supEf = mix(supEf, arco, uAlegria);
-        infEf = mix(infEf, arco - 0.001, uAlegria);
-
+        float supEf = mix(cerrado, sup, abierto) + max(uApertura - 1.0, 0.0) * curva(x, 0.6 * H, 0.55);
+        // Alegría: los ojos se entornan desde abajo, como al sonreír.
+        float f = pow(max(1.0 - x * x, 0.0), 0.6);
+        supEf = mix(supEf, min(supEf, incl + 0.36 * H * f), uAlegria);
+        float infEf = mix(inf, incl - 0.02 * H * f, uAlegria * 0.85);
         float dentro = banda(q.y, infEf, supEf, aa) * step(abs(xn), 1.0);
 
-        // Iris grande con degradado, fibras y pupila ovalada vertical.
-        float rI = 0.8 * H;
-        vec2 cI = vec2(uMirada.x * 0.026, uMirada.y * 0.016 + 0.04 * H);
+        // Iris: llena la abertura; aro oscuro, fibras y reflejo del cielo arriba.
+        float rI = 0.98 * H;
+        vec2 cI = vec2(uMirada.x * 0.016, uMirada.y * 0.01 + 0.1 * H);
         vec2 dI = q - cI;
         float t = length(dI) / rI;
         float aaT = max(fwidth(t), 1e-4);
         float enIris = 1.0 - smoothstep(1.0 - aaT, 1.0 + aaT, t);
-        vec3 iris = mix(uIrisClaro, uIris, smoothstep(0.1, 0.7, t));
-        iris = mix(iris, uIrisOscuro, smoothstep(0.74, 1.0, t));
-        iris *= 1.0 + 0.08 * sin(atan(dI.y, dI.x) * 22.0) * smoothstep(0.35, 0.8, t);
-        iris = mix(iris, uIrisClaro, 0.45 * smoothstep(0.1, 0.9, -dI.y / rI) * (1.0 - smoothstep(0.8, 1.0, t)));
-        float pu = length(dI / vec2(0.3 * rI, 0.64 * rI));
+        vec3 iris = mix(uIrisClaro, uIris, smoothstep(0.15, 0.65, t));
+        iris = mix(iris, uIrisOscuro, smoothstep(0.7, 1.0, t));
+        float fibras = sin(atan(dI.y, dI.x) * 26.0) * 0.5 + sin(atan(dI.y, dI.x) * 61.0) * 0.5;
+        iris *= 1.0 + 0.1 * fibras * smoothstep(0.3, 0.85, t);
+        iris += 0.12 * smoothstep(-0.2, 0.9, dI.y / rI) * (1.0 - t) * vec3(1.0, 0.95, 0.85);
+
+        // Pupila en rendija vertical, más redonda al dilatarse.
+        float anchoP = rI * (0.12 + 0.3 * uDilatacion);
+        float altoP = rI * (0.82 - 0.1 * uDilatacion);
+        float pu = abs(dI.x) / anchoP + (dI.y / altoP) * (dI.y / altoP);
         float aaP = max(fwidth(pu), 1e-4);
         iris = mix(iris, uPupila, 1.0 - smoothstep(1.0 - aaP, 1.0 + aaP, pu));
         vec3 color = mix(uEsclera, iris, enIris);
 
-        // Sombra que proyecta el párpado superior: da profundidad al ojo.
-        color *= mix(0.5, 1.0, smoothstep(0.0, 0.03, supEf - q.y));
+        // Sombra que proyecta el párpado sobre el globo ocular.
+        color *= mix(0.3, 1.0, smoothstep(0.0, 0.35 * H, supEf - q.y));
 
-        // Brillos (mismo lado en los dos ojos, como una sola fuente de luz).
-        float b1 = 1.0 - smoothstep(0.8, 1.0, length(q - cI - vec2(0.022, 0.024)) / (0.27 * rI));
-        float b2 = 1.0 - smoothstep(0.75, 1.0, length(q - cI - vec2(-0.02, -0.022)) / (0.12 * rI));
-        color = mix(color, vec3(1.0), max(b1, 0.85 * b2) * enIris);
+        // Brillos de la córnea: uno nítido de la luz principal y otro tenue.
+        float b1 = 1.0 - smoothstep(0.7, 1.0, length((q - cI - vec2(0.3 * rI, 0.38 * rI)) / vec2(0.17, 0.13) / rI));
+        float b2 = 1.0 - smoothstep(0.6, 1.0, length(q - cI - vec2(-0.32 * rI, -0.4 * rI)) / (0.07 * rI));
+        color = mix(color, vec3(1.0), (0.95 * b1 + 0.6 * b2) * dentro);
 
-        // Raya del párpado superior, que se prolonga en un rabillo afilado.
+        // Borde negro de los párpados, más grueso arriba.
+        float gs = (0.0045 + 0.004 * smoothstep(-0.5, 1.0, xn)) * smoothstep(-1.05, -0.8, xn);
+        float gi = 0.0035 * smoothstep(-1.0, -0.6, xn);
         float extra = max(xn - 1.0, 0.0);
-        float grosor = (0.011 + 0.012 * smoothstep(-0.6, 0.9, xn)) * smoothstep(-1.02, -0.7, xn);
-        grosor *= 1.0 - smoothstep(0.0, 0.32, extra);
-        float baseRaya = supEf + extra * 0.55 * H;
-        float raya = banda(q.y, baseRaya - 0.25 * grosor, baseRaya + grosor, aa)
-          * step(xn, 1.32) * step(-1.0, xn);
+        float baseSup = supEf + extra * 0.35 * H;
+        float bordeSup = banda(q.y, baseSup - 0.3 * gs, baseSup + gs * (1.0 - smoothstep(0.0, 0.22, extra)), aa)
+          * step(-1.0, xn) * step(xn, 1.22);
+        float bordeInf = banda(q.y, infEf - gi, infEf + 0.2 * gi, aa) * step(-1.0, xn) * step(xn, 1.0)
+          * smoothstep(0.05, 0.4, uApertura);
 
-        // Trazo rojo de máscara kitsune por encima del rabillo.
-        float baseMarca = baseRaya + grosor + 0.011 + extra * 0.35 * H;
-        float grosorMarca = 0.011 * smoothstep(0.45, 0.8, xn) * (1.0 - smoothstep(1.15, 1.5, xn));
-        float marca = banda(q.y, baseMarca, baseMarca + grosorMarca, aa) * (1.0 - uAlegria * 0.4);
+        // Lagrimal: la muesca oscura que baja hacia el hocico, típica del zorro.
+        float tLag = clamp((-0.85 - xn) / 0.55, 0.0, 1.0);
+        float yLag = incl * 0.0 - 0.32 * H - tLag * 0.85 * H;
+        float gLag = 0.006 * (1.0 - tLag);
+        float lagrimal = banda(q.y, yLag - gLag, yLag + gLag, aa) * step(xn, -0.85) * step(-1.4, xn);
 
-        // Línea fina del párpado inferior, se apaga al cerrar o entornar.
-        float lineaInf = banda(q.y, infEf - 0.006, infEf + 0.001, aa)
-          * smoothstep(-0.4, 0.2, xn) * step(xn, 1.0)
-          * smoothstep(0.15, 0.6, uApertura) * (1.0 - uAlegria);
+        // Pincelada roja de kitsune sobre el rabillo.
+        float baseMarca = baseSup + gs + 0.004 + extra * 0.3 * H;
+        float gm = 0.0042 * smoothstep(0.35, 0.75, xn) * (1.0 - smoothstep(1.15, 1.6, xn));
+        float marca = banda(q.y, baseMarca, baseMarca + gm, aa);
 
-        float alfaLinea = max(raya, 0.8 * lineaInf);
+        float linea = max(max(bordeSup, bordeInf), lagrimal);
         vec4 c = vec4(color, dentro);
-        c.rgb = mix(c.rgb, uLinea, alfaLinea);
-        c.a = max(c.a, alfaLinea);
+        c.rgb = mix(c.rgb, uLinea, linea);
+        c.a = max(c.a, linea);
         c.rgb = mix(c.rgb, uMarca, marca);
         c.a = max(c.a, marca);
-        // Nada se dibuja más allá del lagrimal: ahí el parche solo es hueco.
-        c.a *= step(-1.0, xn);
+        c.a *= step(-1.4, xn);
         if (c.a < 0.01) discard;
         gl_FragColor = c;
+        #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
     `,
   });
 }
 
-// Deriva los tonos del iris a partir de un color base de la paleta.
 export function colorearOjo(material, paleta) {
   const u = material.uniforms;
   u.uIris.value.set(paleta.iris);
-  u.uIrisClaro.value.set(paleta.iris).lerp(new THREE.Color('#fff4d6'), 0.55);
-  u.uIrisOscuro.value.set(paleta.iris).multiplyScalar(0.35);
-  u.uPupila.value.set(paleta.pupila);
+  u.uIrisClaro.value.set(paleta.iris).lerp(new THREE.Color('#fff0b8'), 0.5);
+  u.uIrisOscuro.value.set(paleta.iris).multiplyScalar(0.3);
+  u.uPupila.value.set('#050303');
   u.uEsclera.value.set(paleta.esclera);
-  u.uLinea.value.set(paleta.linea);
+  u.uLinea.value.set('#0a0605');
   u.uMarca.value.set(paleta.marca);
+}
+
+// Marca de la frente: llama central y dos pinceladas laterales, como en las
+// máscaras de kitsune. uBrillo la hace latir cuando el zorro piensa.
+export const PARCHE_MARCA = { mitadU: 0.075, mitadV: 0.075 };
+
+export function crearMaterialMarca() {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+    uniforms: {
+      uColor: { value: new THREE.Color() },
+      uBrillo: { value: 0 },
+      uParche: { value: new THREE.Vector2(PARCHE_MARCA.mitadU, PARCHE_MARCA.mitadV) },
+    },
+    vertexShader: /* glsl */ `
+      uniform vec2 uParche;
+      varying vec2 vQ;
+      void main() {
+        vQ = (uv * 2.0 - 1.0) * uParche;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uColor;
+      uniform float uBrillo;
+      varying vec2 vQ;
+
+      // Gota alargada: base redonda en 'base', punta afilada hacia 'dir'.
+      float gota(vec2 p, vec2 base, vec2 dir, float largo, float ancho) {
+        vec2 d = normalize(dir);
+        vec2 r = p - base;
+        float t = dot(r, d) / largo;
+        float lateral = abs(r.x * d.y - r.y * d.x);
+        float w = ancho * pow(max(sin(3.14159 * clamp(t, 0.0, 1.0)), 0.0), 0.5) * pow(max(1.0 - t, 0.0), 0.7);
+        return w - lateral;
+      }
+
+      void main() {
+        vec2 p = vQ;
+        float sd = gota(p, vec2(0.0, -0.045), vec2(0.0, 1.0), 0.1, 0.019);
+        sd = max(sd, gota(p, vec2(-0.03, -0.03), vec2(-0.55, 1.0), 0.055, 0.009));
+        sd = max(sd, gota(p, vec2(0.03, -0.03), vec2(0.55, 1.0), 0.055, 0.009));
+        float aa = max(fwidth(sd), 1e-5);
+        float a = smoothstep(-aa, aa, sd) * 0.92;
+        if (a < 0.01) discard;
+        vec3 color = uColor * (1.0 + 0.6 * uBrillo);
+        gl_FragColor = vec4(color, a);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  });
 }

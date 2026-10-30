@@ -21,17 +21,23 @@ registrada con `globalShortcut` (por defecto `Ctrl + Alt + K`).
 
 ## El personaje
 
-Todo el kitsune se genera por código con [three.js](https://threejs.org), sin
-modelos ni texturas externas, en `src/kitsune/`:
+Un zorro semirrealista generado por código con [three.js](https://threejs.org),
+sin modelos ni texturas externas, en `src/kitsune/`. La anatomía está hecha de
+tubos con perfil propio (torso, cuello, cabeza, patas, colas), el pelo se
+dibuja por capas instanciadas peinadas a favor del cuerpo, y la luz es física
+(ACES, sombras reales y un entorno de estudio para los reflejos).
 
-| Archivo        | Qué contiene                                                                 |
-| -------------- | ---------------------------------------------------------------------------- |
-| `Kitsune.js`   | Montaje del zorro, máquina de estados, acciones y micro-gestos.              |
-| `cola.js`      | Cada cola: tubo cuya columna se recalcula por cinemática directa.            |
-| `fuegos.js`    | Kitsunebi: fuegos fatuos que orbitan con estela.                             |
-| `contorno.js`  | Contorno de cómic con grosor constante en píxeles.                           |
-| `paletas.js`   | Pelajes: Carmesí, Sombra y Nieve.                                            |
-| `easing.js`    | Curvas de animación y suavizado interrumpible.                               |
+| Archivo        | Qué contiene                                                                    |
+| -------------- | ------------------------------------------------------------------------------- |
+| `Kitsune.js`   | Escena, luces, máquina de estados, acciones y micro-gestos.                     |
+| `anatomia.js`  | Montaje del zorro y "pintores" del pelaje (pecho blanco, medias, lágrimas...). |
+| `geometria.js` | Tubos de sección elíptica, orejas en cuenco y parches proyectados.             |
+| `pelaje.js`    | Pelo por capas (shell texturing) con una sola llamada de dibujo por pieza.     |
+| `ojo.js`       | Ojos y marca de la frente dibujados por shader: párpados, iris, pupila.        |
+| `cola.js`      | Cada cola: tubo cuya columna se recalcula por cinemática directa.              |
+| `fuegos.js`    | Kitsunebi: fuegos fatuos que orbitan con estela.                               |
+| `paletas.js`   | Pelajes reales: zorro rojo (Carmesí), plateado (Sombra) y ártico (Nieve).      |
+| `easing.js`    | Curvas de animación y suavizado interrumpible.                                 |
 
 ### Estados (en bucle, interrumpibles)
 
