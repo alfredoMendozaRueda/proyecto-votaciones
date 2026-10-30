@@ -11,8 +11,8 @@ const MODELOS = [
 
 const MODELOS_GROQ = [
   ['openai/gpt-oss-120b', 'GPT-OSS 120B · el más capaz (recomendado)'],
-  ['llama-3.3-70b-versatile', 'Llama 3.3 70B'],
   ['openai/gpt-oss-20b', 'GPT-OSS 20B · el más rápido'],
+  ['qwen/qwen3.8-27b', 'Qwen 3.8 27B'],
 ];
 
 // Lo que cambia según la IA elegida.

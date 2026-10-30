@@ -86,8 +86,8 @@ test('Groq: con el cupo del día gastado prueba otro modelo, y si todos están g
   const otro = groqSimulado([{ estado: 429, mensaje: limiteDia('openai/gpt-oss-120b') }, hola]);
   const a = conversacion(otro.fetch);
   await a.c.enviar('Hola');
-  assert.deepEqual(otro.peticiones.map((p) => p.cuerpo.model), ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile']);
-  assert.ok(!('reasoning_effort' in otro.peticiones[1].cuerpo), 'Llama no razona');
+  assert.deepEqual(otro.peticiones.map((p) => p.cuerpo.model), ['openai/gpt-oss-120b', 'openai/gpt-oss-20b']);
+  assert.equal(otro.peticiones[1].cuerpo.reasoning_effort, 'low');
   assert.equal(a.eventos.at(-1).tipo, 'fin');
 
   const gastado = groqSimulado([1, 2, 3].map(() => ({ estado: 429, mensaje: limiteDia('x') })));
@@ -239,4 +239,24 @@ test('tiempo: Open-Meteo sin clave; con la búsqueda apagada no se ofrece buscar
   assert.deepEqual(tiempo.ahora, { temperatura: '17 °C', sensacion: '16 °C', estado: 'parcialmente nuboso', humedad: '40 %', viento: '12 km/h' });
   assert.equal(tiempo.dias[1].estado, 'lluvia débil');
   assert.equal(tiempo.dias[1].probabilidadLluvia, '70 %');
+});
+
+test('Groq: un modelo retirado no corta la respuesta: se pasa al siguiente', async () => {
+  const retirado = (m) => ({ estado: 404, mensaje: `The model \`${m}\` does not exist or you do not have access to it.` });
+  const { fetch, peticiones } = groqSimulado([
+    { estado: 429, mensaje: limiteDia('openai/gpt-oss-120b') },
+    retirado('openai/gpt-oss-20b'),
+    hola,
+  ]);
+  const { c, eventos } = conversacion(fetch);
+  await c.enviar('Hola');
+  assert.deepEqual(peticiones.map((p) => p.cuerpo.model), ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b']);
+  assert.equal(peticiones[2].cuerpo.reasoning_effort, 'none');
+  assert.equal(eventos.at(-1).tipo, 'fin');
+
+  const todos = groqSimulado([1, 2, 3].map(() => retirado('x')));
+  const b = conversacion(todos.fetch);
+  await b.c.enviar('Hola');
+  assert.match(b.eventos.at(-1).mensaje, /ya no está disponible/);
+  assert.ok(!b.eventos.at(-1).mensaje.includes('`'));
 });

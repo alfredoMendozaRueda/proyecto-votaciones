@@ -109,8 +109,8 @@ Kitsune funciona con dos IA; se elige en Ajustes → Inteligencia artificial.
 1. Crea una clave gratis, sin tarjeta, en [console.groq.com](https://console.groq.com) → API Keys → Create API Key.
 2. En Kitsune: Ajustes → Inteligencia artificial → Groq → pega la clave y pulsa Guardar.
 
-Usa modelos abiertos (GPT-OSS 120B por defecto; también Llama 3.3 70B y
-GPT-OSS 20B) con las mismas herramientas: correo, agenda, recordatorios y
+Usa modelos abiertos (GPT-OSS 120B por defecto; también GPT-OSS 20B y
+Qwen 3.8 27B) con las mismas herramientas: correo, agenda, recordatorios y
 memoria, y también busca en internet. La capa gratuita limita las peticiones
 por minuto y por día: si se llega al límite, Kitsune lo avisa. En conversaciones
 largas solo se envía la parte reciente.

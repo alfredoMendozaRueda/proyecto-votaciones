@@ -4,7 +4,8 @@
 // historial, la memoria y las herramientas sirven igual con las dos IA.
 
 export const URL_GROQ = 'https://api.groq.com/openai/v1';
-export const MODELOS_GROQ = ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile', 'openai/gpt-oss-20b'];
+// Los modelos del plan gratuito (Llama dejó de estarlo en agosto de 2026).
+export const MODELOS_GROQ = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
 
 // La capa gratuita permite unos 8.000 tokens por minuto, sumando lo que se
 // envía y lo que se responde: solo viaja la parte reciente de la conversación.
@@ -17,9 +18,10 @@ const ESPERA_MAXIMA = 30; // segundos
 const MAX_ESPERAS = 2;
 
 export class ErrorGroq extends Error {
-  constructor(mensaje, limite = null) {
+  constructor(mensaje, { limite = null, probarOtro = Boolean(limite) } = {}) {
     super(mensaje);
     this.limite = limite; // 'minuto' o 'dia' cuando es un 429
+    this.probarOtro = probarOtro; // otro modelo podría responder
   }
 }
 
@@ -30,7 +32,7 @@ function mensajeDeEstado(estado, detalle, limite) {
   if (estado === 413) return 'La conversación es demasiado larga para la versión gratuita. Empieza una conversación nueva.';
   if (estado === 400 && /tool/i.test(detalle)) return 'La IA se ha liado al usar una herramienta. Prueba a pedírmelo de otra forma.';
   if (estado >= 500) return 'Groq ha tenido un problema. Prueba de nuevo en un momento.';
-  return `Groq devolvió un error: ${detalle || estado}`;
+  return `Groq devolvió un error: ${detalle.replaceAll('`', '') || estado}`;
 }
 
 // "Please try again in 11.25s", "in 1m2.5s", "in 340ms" o la cabecera retry-after.
@@ -68,26 +70,29 @@ async function pedir(apiKey, ruta, { cuerpo, signal, fetch: hacerFetch = fetch, 
     if (respuesta.ok) return respuesta;
     const datos = await respuesta.json().catch(() => ({}));
     const detalle = datos.error?.message ?? '';
+    if (respuesta.status === 404 || /does not exist|decommissioned|model_not_found/i.test(detalle)) {
+      throw new ErrorGroq('El modelo de Groq elegido ya no está disponible. Elige otro en Ajustes.', { probarOtro: true });
+    }
     if (respuesta.status !== 429) throw new ErrorGroq(mensajeDeEstado(respuesta.status, detalle));
     const limite = /per day|\b[TR]PD\b/i.test(detalle) ? 'dia' : 'minuto';
     const espera = segundosDeEspera(respuesta.headers.get('retry-after'), detalle) ?? 10;
     if (limite === 'dia' || espera > ESPERA_MAXIMA || esperas >= MAX_ESPERAS) {
-      throw new ErrorGroq(mensajeDeEstado(429, detalle, limite), limite);
+      throw new ErrorGroq(mensajeDeEstado(429, detalle, limite), { limite });
     }
     alEsperar?.(Math.ceil(espera));
     await dormir(espera * 1000 + 250, signal);
   }
 }
 
-// Cada modelo tiene su propio cupo gratuito: si el elegido lo ha gastado, se
-// prueba con los demás antes de rendirse.
+// Cada modelo tiene su propio cupo gratuito: si el elegido lo ha gastado (o
+// Groq lo ha retirado), se prueba con los demás antes de rendirse.
 async function conRespaldo(modelo, peticion, alternativas = MODELOS_GROQ) {
   const modelos = [modelo, ...alternativas.filter((m) => m !== modelo)];
   for (const [i, m] of modelos.entries()) {
     try {
       return await peticion(m);
     } catch (error) {
-      if (!(error instanceof ErrorGroq) || !error.limite || i === modelos.length - 1) throw error;
+      if (!(error instanceof ErrorGroq) || !error.probarOtro || i === modelos.length - 1) throw error;
     }
   }
 }
@@ -153,7 +158,12 @@ export function inicioReciente(historial, inicioTurno, presupuesto = PRESUPUESTO
   return desde;
 }
 
-const parametrosModelo = (modelo) => (modelo.startsWith('openai/gpt-oss') ? { reasoning_effort: 'low' } : {});
+// Respuestas rápidas: poco razonamiento en GPT-OSS y ninguno en Qwen.
+function parametrosModelo(modelo) {
+  if (modelo.startsWith('openai/gpt-oss')) return { reasoning_effort: 'low' };
+  if (modelo.startsWith('qwen/')) return { reasoning_effort: 'none' };
+  return {};
+}
 
 // Un turno de la conversación con respuesta en directo. Devuelve el mensaje
 // en el formato de Claude: { content: [...bloques], stop_reason }.
