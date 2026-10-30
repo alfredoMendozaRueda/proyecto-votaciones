@@ -3,11 +3,14 @@ import { createServer } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
 import { leerSecreto, guardarSecreto, borrarSecreto } from './almacen.js';
 import { ClienteGmail } from '../src/compartido/gmail.js';
+import { ClienteCalendario, PERMISO_CALENDARIO } from '../src/compartido/calendario.js';
 
 const AUTORIZAR = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN = 'https://oauth2.googleapis.com/token';
 // gmail.modify: leer, marcar, archivar, mover a la papelera y enviar; nunca borrar para siempre.
-const PERMISOS = 'https://www.googleapis.com/auth/gmail.modify';
+// calendar.events: ver y crear eventos (no toca la configuración de los calendarios).
+const PERMISO_GMAIL = 'https://www.googleapis.com/auth/gmail.modify';
+const PERMISOS = `${PERMISO_GMAIL} ${PERMISO_CALENDARIO}`;
 
 const base64Url = (buffer) => buffer.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
@@ -19,12 +22,19 @@ export class Gmail {
     this.obtenerAjustes = obtenerAjustes;
     this.acceso = null;
     this.caduca = 0;
-    this.cliente = new ClienteGmail({
+    const credenciales = {
       token: () => this.#tokenAcceso(),
       invalidar: () => {
         this.acceso = null;
       },
-    });
+    };
+    this.cliente = new ClienteGmail(credenciales);
+    this.calendario = new ClienteCalendario(credenciales);
+  }
+
+  // Quien conectó antes de que Kitsune usara el calendario tiene que volver a conectar.
+  get conCalendario() {
+    return this.conectado && (leerSecreto('googleAlcances') ?? '').includes(PERMISO_CALENDARIO);
   }
 
   get conectado() {
@@ -36,6 +46,7 @@ export class Gmail {
       conectado: this.conectado,
       email: leerSecreto('googleEmail'),
       configurado: Boolean(this.obtenerAjustes().googleClientId && leerSecreto('googleSecreto')),
+      calendario: this.conCalendario,
     };
   }
 
@@ -105,6 +116,7 @@ export class Gmail {
     });
     if (!tokens.refresh_token) throw new Error('Google no devolvió un token de actualización.');
     guardarSecreto('googleRefresco', tokens.refresh_token);
+    guardarSecreto('googleAlcances', tokens.scope ?? '');
     this.#recordarAcceso(tokens);
     const perfil = await this.cliente.perfil();
     guardarSecreto('googleEmail', perfil.emailAddress);
@@ -119,6 +131,7 @@ export class Gmail {
     }
     borrarSecreto('googleRefresco');
     borrarSecreto('googleEmail');
+    borrarSecreto('googleAlcances');
     this.acceso = null;
     this.cliente.olvidarVistos();
     return this.estado();

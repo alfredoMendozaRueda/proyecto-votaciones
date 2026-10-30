@@ -11,7 +11,42 @@ const ETIQUETAS_HERRAMIENTA = {
   crear_recordatorio: 'Apuntando el recordatorio…',
   ver_recordatorios: 'Mirando tus recordatorios…',
   borrar_recordatorio: 'Borrando el recordatorio…',
+  web_search: 'Buscando en internet…',
+  web_fetch: 'Leyendo la página…',
+  ver_agenda: 'Mirando tu agenda…',
+  crear_evento: 'Preparando el evento…',
+  recordar: 'Apuntándolo en mi memoria…',
+  olvidar: 'Olvidándolo…',
 };
+
+// Acciones para un texto copiado (Windows) o compartido desde otra app (móvil).
+const ACCIONES_TEXTO = [
+  ['Resumir', 'Resume este texto en pocas líneas'],
+  ['Traducir', 'Traduce este texto al español; si ya está en español, tradúcelo al inglés'],
+  ['Mejorar', 'Mejora la redacción de este texto sin cambiar el idioma ni el tono. Devuelve solo el texto mejorado'],
+  ['Explicar', 'Explícame este texto de forma sencilla'],
+];
+
+const fechaEvento = (e) =>
+  e.todoElDia
+    ? new Date(e.inicio).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
+    : `${cuandoLegible(e.inicio)} – ${new Date(e.fin).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+
+async function copiar(texto) {
+  try {
+    await navigator.clipboard.writeText(texto);
+    return true;
+  } catch {
+    // Sin permiso para el portapapeles (http, iframes): el método antiguo.
+    const campo = Object.assign(document.createElement('textarea'), { value: texto });
+    campo.style.cssText = 'position:fixed;opacity:0';
+    document.body.append(campo);
+    campo.select();
+    const ok = document.execCommand('copy');
+    campo.remove();
+    return ok;
+  }
+}
 
 const leerPulso = () => {
   try {
@@ -84,25 +119,131 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     mensajes.querySelectorAll('.sugerencias button').forEach((b) => b.addEventListener('click', () => preguntar(b.textContent)));
   }
 
-  // Nota en el chat al apuntar un recordatorio (con deshacer) o cuando llega su hora.
-  function notaRecordatorio(r, aviso = false) {
+  // Nota pequeña en el chat (recordatorio, memoria, cita), con un botón opcional para deshacer.
+  function nota({ simbolo, etiqueta, texto, aviso = false, deshacer = null }) {
     const div = añadir(`nota-recordatorio${aviso ? ' nota-recordatorio--aviso' : ''}`, `
-      <span class="nota-recordatorio__icono">${icono('campana', 16)}</span>
+      <span class="nota-recordatorio__icono">${icono(simbolo, 16)}</span>
       <div class="nota-recordatorio__cuerpo"><span class="nota-recordatorio__cuando"></span><span class="nota-recordatorio__texto"></span></div>
-      ${aviso ? '' : '<button type="button" class="boton">Deshacer</button>'}`);
-    div.querySelector('.nota-recordatorio__cuando').textContent = aviso ? 'Es la hora' : `Recordatorio · ${cuandoLegible(r.cuando)}`;
-    div.querySelector('.nota-recordatorio__texto').textContent = r.texto;
-    const deshacer = div.querySelector('button');
-    deshacer?.addEventListener('click', async () => {
-      deshacer.disabled = true;
+      ${deshacer ? `<button type="button" class="boton">${deshacer.etiqueta}</button>` : ''}`);
+    div.querySelector('.nota-recordatorio__cuando').textContent = etiqueta;
+    div.querySelector('.nota-recordatorio__texto').textContent = texto;
+    const boton = div.querySelector('button');
+    boton?.addEventListener('click', async () => {
+      boton.disabled = true;
       try {
-        await api.recordatorios.borrar(r.id);
+        await deshacer.accion();
         div.classList.add('nota-recordatorio--borrada');
-        deshacer.textContent = 'Borrado';
+        boton.textContent = deshacer.hecho;
       } catch {
-        deshacer.disabled = false;
+        boton.disabled = false;
       }
     });
+    return div;
+  }
+
+  function notaRecordatorio(r, aviso = false) {
+    nota({
+      simbolo: 'campana',
+      etiqueta: aviso ? 'Es la hora' : `Recordatorio · ${cuandoLegible(r.cuando)}`,
+      texto: r.texto,
+      aviso,
+      deshacer: aviso ? null : { etiqueta: 'Deshacer', hecho: 'Borrado', accion: () => api.recordatorios.borrar(r.id) },
+    });
+  }
+
+  // Claude pide permiso antes de crear un evento: el usuario decide aquí.
+  function tarjetaConfirmar({ id, accion }) {
+    const div = añadir('confirmar', `
+      <span class="confirmar__icono">${icono('calendario', 18)}</span>
+      <div class="confirmar__cuerpo">
+        <span class="confirmar__pregunta">¿Lo añado a tu calendario?</span>
+        <strong class="confirmar__titulo"></strong>
+        <span class="confirmar__detalle"></span>
+      </div>
+      <div class="confirmar__botones">
+        <button type="button" class="boton boton--primario" data-si>Añadir</button>
+        <button type="button" class="boton" data-no>No</button>
+      </div>`);
+    div.querySelector('.confirmar__titulo').textContent = accion.titulo;
+    div.querySelector('.confirmar__detalle').textContent = [fechaEvento(accion), accion.lugar].filter(Boolean).join(' · ');
+    const responder = (acepta) => {
+      div.querySelectorAll('button').forEach((b) => (b.disabled = true));
+      div.querySelector('.confirmar__pregunta').textContent = acepta ? 'Añadiendo al calendario…' : 'No se ha añadido.';
+      div.classList.toggle('confirmar--no', !acepta);
+      div.dataset.estado = acepta ? 'esperando' : 'no';
+      api.claude.confirmar(id, acepta);
+      alEstado('pensar');
+    };
+    div.querySelector('[data-si]').addEventListener('click', () => responder(true));
+    div.querySelector('[data-no]').addEventListener('click', () => responder(false));
+    alEstado('escuchar');
+  }
+
+  // Enlaces a las páginas que citó la búsqueda web, debajo de la respuesta.
+  function ponerFuentes(fuentes) {
+    const ultima = burbuja ?? [...mensajes.querySelectorAll('.burbuja--kitsune')].at(-1);
+    if (!ultima) return;
+    let lista = ultima.nextElementSibling?.classList.contains('fuentes') ? ultima.nextElementSibling : null;
+    if (!lista) {
+      lista = document.createElement('div');
+      lista.className = 'fuentes';
+      lista.innerHTML = '<span class="fuentes__titulo">Fuentes</span>';
+      ultima.after(lista);
+    }
+    for (const f of fuentes.slice(0, 5)) {
+      const enlace = document.createElement('button');
+      enlace.type = 'button';
+      enlace.className = 'fuentes__enlace';
+      enlace.title = f.url;
+      enlace.textContent = f.titulo.length > 42 ? `${f.titulo.slice(0, 40)}…` : f.titulo;
+      enlace.addEventListener('click', () => api.ventana.abrirEnlace(f.url));
+      lista.append(enlace);
+    }
+  }
+
+  // Botón para copiar una respuesta terminada (útil tras "Mejorar" o "Traducir").
+  function ponerCopiar(div, contenido) {
+    if (!contenido.trim()) return;
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.className = 'burbuja__copiar';
+    boton.setAttribute('aria-label', 'Copiar la respuesta');
+    boton.title = 'Copiar';
+    boton.innerHTML = icono('copiar', 14);
+    boton.addEventListener('click', async () => {
+      if (await copiar(contenido)) {
+        boton.innerHTML = icono('hecho', 14);
+        boton.setAttribute('aria-label', 'Copiada');
+        setTimeout(() => {
+          boton.innerHTML = icono('copiar', 14);
+          boton.setAttribute('aria-label', 'Copiar la respuesta');
+        }, 1500);
+      }
+    });
+    div.append(boton);
+  }
+
+  // Texto copiado o compartido: Kitsune propone qué hacer con él.
+  function ofrecerTexto(textoRecibido, origen = 'copiado') {
+    mensajes.querySelector('.texto-ofrecido')?.remove();
+    const limpio = textoRecibido.trim().slice(0, 8000);
+    const div = añadir('texto-ofrecido', `
+      <div class="texto-ofrecido__cabecera"><span>${icono('clip', 15)} Texto ${origen}</span>
+        <button type="button" class="icono-boton" data-cerrar aria-label="Descartar el texto">${icono('cerrar', 15)}</button></div>
+      <p class="texto-ofrecido__extracto"></p>
+      <div class="texto-ofrecido__acciones">${ACCIONES_TEXTO.map(([nombre], i) => `<button type="button" class="boton" data-accion="${i}">${nombre}</button>`).join('')}</div>`);
+    const extracto = limpio.length > 180 ? `${limpio.slice(0, 180)}…` : limpio;
+    div.querySelector('.texto-ofrecido__extracto').textContent = `«${extracto}»`;
+    div.querySelector('[data-cerrar]').addEventListener('click', () => div.remove());
+    div.querySelectorAll('[data-accion]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const [nombre, instruccion] = ACCIONES_TEXTO[Number(b.dataset.accion)];
+        div.remove();
+        const corto = limpio.length > 60 ? `${limpio.slice(0, 60)}…` : limpio;
+        preguntar(`${instruccion}:\n\n<texto>\n${limpio}\n</texto>`, `${nombre}: «${corto}»`);
+      }),
+    );
+    alEstado('escuchar');
   }
 
   // Al volver a abrir la app, la conversación sigue donde estaba.
@@ -111,8 +252,8 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     const anteriores = (await api.claude.mensajes?.().catch(() => [])) ?? [];
     if (!anteriores.length || mensajes.querySelector('.burbuja')) return false;
     for (const m of anteriores) {
-      if (m.rol === 'usuario') añadir('burbuja--usuario', m.texto, true);
-      else añadir('burbuja--kitsune', markdownAHtml(m.texto));
+      if (m.rol === 'usuario') añadir('burbuja--usuario', m.texto.replace(/\n*<texto>[\s\S]*<\/texto>/, ' (texto)'), true);
+      else ponerCopiar(añadir('burbuja--kitsune', markdownAHtml(m.texto)), m.texto);
     }
     return true;
   }
@@ -174,7 +315,10 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
   }
 
   function cerrarBloque() {
-    if (burbuja) pintar();
+    if (burbuja) {
+      pintar();
+      ponerCopiar(burbuja, texto);
+    }
     respuestaCompleta += texto ? `${texto}\n\n` : '';
     burbuja = null;
     texto = '';
@@ -208,6 +352,30 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
         break;
       case 'recordatorio':
         notaRecordatorio(e.recordatorio);
+        break;
+      case 'memoria':
+        nota({
+          simbolo: 'memoria',
+          etiqueta: 'Lo recordaré',
+          texto: e.dato.texto,
+          deshacer: { etiqueta: 'Olvidar', hecho: 'Olvidado', accion: () => api.memoria.olvidar(e.dato.id) },
+        });
+        break;
+      case 'confirmar':
+        quitarEstado();
+        tarjetaConfirmar(e);
+        break;
+      case 'evento': {
+        const tarjeta = [...mensajes.querySelectorAll('.confirmar[data-estado="esperando"]')].at(-1);
+        if (tarjeta) {
+          tarjeta.dataset.estado = 'hecho';
+          tarjeta.classList.add('confirmar--hecho');
+          tarjeta.querySelector('.confirmar__pregunta').textContent = 'Añadido a tu calendario';
+        }
+        break;
+      }
+      case 'fuentes':
+        ponerFuentes(e.fuentes);
         break;
       case 'texto':
         quitarEstado();
@@ -256,11 +424,12 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     }
   });
 
-  async function preguntar(contenido) {
+  // mostrado: lo que se ve en la burbuja si no es lo mismo que se envía (acciones con texto).
+  async function preguntar(contenido, mostrado = null) {
     const limpio = contenido.trim();
     if (!limpio || ocupado) return;
     if (limpio === PEDIR_PULSO) marcarPulso();
-    añadir('burbuja--usuario', limpio, true);
+    añadir('burbuja--usuario', mostrado ?? limpio, true);
     entrada.value = '';
     ajustarAltura();
     respuestaCompleta = '';
@@ -300,7 +469,8 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     cerrarBloque();
     quitarEstado();
     vacio();
-    entrada.focus();
+    // En táctil, enfocar abriría el teclado sin pedirlo.
+    if (!matchMedia('(pointer: coarse)').matches) entrada.focus();
   });
 
   // ---------- Dictado ----------
@@ -372,9 +542,14 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
       actualizarBoton();
       alEstado('escuchar');
     },
-    avisoRecordatorio: (r) => {
-      mensajes.querySelector('.chat__vacio')?.remove();
-      notaRecordatorio(r, true);
-    },
+    avisoRecordatorio: (r) => notaRecordatorio(r, true),
+    avisoCita: (cita) =>
+      nota({
+        simbolo: 'calendario',
+        etiqueta: `Cita · ${cuandoLegible(cita.inicio)}`,
+        texto: [cita.titulo, cita.lugar].filter(Boolean).join(' · '),
+        aviso: true,
+      }),
+    ofrecerTexto,
   };
 }

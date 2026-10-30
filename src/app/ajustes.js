@@ -122,7 +122,12 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
             <div class="atajo" id="atajo"><span id="atajo-teclas">${teclasDe(ajustes.atajo)}</span><button type="button" class="boton" id="atajo-cambiar">Cambiar</button></div>
           </div>
           <p class="mensaje-ajuste solo-escritorio" id="mensaje-atajo" role="status"></p>
-          <div class="solo-escritorio">${interruptor('iniciarConWindows', 'Abrir al iniciar Windows')}</div>`
+          <div class="solo-escritorio">${interruptor('iniciarConWindows', 'Abrir al iniciar Windows')}</div>
+          <div class="solo-escritorio">${interruptor(
+            'ofrecerPortapapeles',
+            'Ofrecer acciones con el texto copiado',
+            'Copia un texto, llama a Kitsune con el atajo y te propone resumirlo, traducirlo, mejorarlo o explicarlo.',
+          )}</div>`
               : ''
           }
           <div class="ajuste ajuste--fila">
@@ -141,6 +146,13 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
           }</p>
         </section>
 
+        <section class="grupo" id="seccion-memoria" aria-label="Memoria">
+          <h3>Memoria</h3>
+          ${interruptor('usarMemoria', 'Usar la memoria', 'Kitsune recuerda lo que le cuentes («recuerda que mi hermana se llama Ana») y lo tiene en cuenta. Si la apagas, ni la usa ni guarda nada nuevo.')}
+          <ul class="recordatorios" id="lista-memoria" aria-live="polite"></ul>
+          <div><button type="button" class="boton" id="olvidar-todo" hidden>Olvidar todo</button></div>
+        </section>
+
         <section class="grupo" id="seccion-claude" aria-label="Claude">
           <h3>Claude</h3>
           <div class="estado-cuenta ${estadoClaude.configurado ? 'ok' : ''}"><span class="punto"></span>${
@@ -155,6 +167,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
             <p class="ajuste__ayuda">Créala en console.anthropic.com, en API Keys.${estadoClaude.configurado ? ' <button type="button" class="boton" id="quitar-clave" style="margin-left:6px;padding:2px 10px">Quitar clave</button>' : ''}</p>
             <p class="mensaje-ajuste" id="mensaje-claude" role="status"></p>
           </div>
+          ${interruptor('busquedaWeb', 'Buscar en internet', 'Para el tiempo, noticias, precios u horarios. Cada búsqueda suma un pequeño coste en tu cuenta de Claude.')}
           <div class="ajuste">
             <label class="ajuste__etiqueta" for="ajuste-modelo">Modelo</label>
             ${selector('modelo', 'ajuste-modelo', MODELOS)}
@@ -165,17 +178,23 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
           </div>
         </section>
 
-        <section class="grupo" id="seccion-correo" aria-label="Correo">
-          <h3>Correo</h3>
+        <section class="grupo" id="seccion-correo" aria-label="Google: correo y calendario">
+          <h3>Google: correo y calendario</h3>
           <div class="estado-cuenta ${estadoCorreo.conectado ? 'ok' : ''}"><span class="punto"></span>${
-            estadoCorreo.conectado ? `<span>Conectado como <strong>${escapar(estadoCorreo.email)}</strong></span>` : 'Gmail sin conectar'
+            estadoCorreo.conectado ? `<span>Conectado como <strong>${escapar(estadoCorreo.email)}</strong></span>` : 'Gmail y Calendar sin conectar'
           }</div>
+          ${
+            estadoCorreo.conectado && !estadoCorreo.calendario
+              ? `<p class="ajuste__ayuda">Para que Kitsune vea tu agenda y cree eventos, activa la API de Google Calendar en tu proyecto de Google Cloud y vuelve a conectar la cuenta.</p>
+            <div><button type="button" class="boton boton--primario" id="conectar-correo">${icono('calendario', 15)} Conectar también el calendario</button></div>`
+              : ''
+          }
           ${
             estadoCorreo.conectado
               ? '<div><button type="button" class="boton" id="desconectar-correo">Desconectar la cuenta</button></div>'
               : `
             <ol class="pasos">
-              <li>En Google Cloud Console, crea un proyecto y activa la API de Gmail.</li>
+              <li>En Google Cloud Console, crea un proyecto y activa la API de Gmail y la de Google Calendar.</li>
               ${
                 escritorio
                   ? '<li>Crea un ID de cliente OAuth de tipo <strong>App de escritorio</strong>.</li><li>Pega aquí el ID y el secreto, y pulsa Conectar.</li>'
@@ -198,11 +217,13 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
             <div style="width:150px">${selector('correoCadaMin', 'ajuste-frecuencia', [[1, 'Cada minuto'], [5, 'Cada 5 min'], [15, 'Cada 15 min'], [30, 'Cada 30 min']])}</div>
           </div>
           ${interruptor('avisarCorreo', 'Avisar de los correos nuevos', 'Kitsune da un salto y aparece una notificación.')}
+          ${interruptor('avisarCitas', 'Avisar antes de las citas', 'Un cuarto de hora antes de cada evento de tu calendario.')}
         </section>
       </div>`;
 
     conectar();
     pintarRecordatorios();
+    pintarMemoria();
     if (seccion) contenedor.querySelector(`#seccion-${seccion}`)?.scrollIntoView({ block: 'start' });
   }
 
@@ -226,7 +247,43 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
     );
   }
 
+  async function pintarMemoria() {
+    const lista = contenedor.querySelector('#lista-memoria');
+    if (!lista || !api.memoria) return;
+    const datos = await api.memoria.listar().catch(() => []);
+    lista.innerHTML = datos.length
+      ? datos
+          .map(
+            (d) => `<li><span class="recordatorios__texto">${escapar(d.texto)}</span>
+              <button type="button" class="icono-boton" data-olvidar="${escapar(d.id)}" aria-label="Olvidar «${escapar(d.texto)}»" title="Olvidar">${icono('papelera', 16)}</button></li>`,
+          )
+          .join('')
+      : '<li class="recordatorios__vacio">Todavía no recuerda nada.</li>';
+    const todo = contenedor.querySelector('#olvidar-todo');
+    todo.hidden = datos.length === 0;
+    lista.querySelectorAll('[data-olvidar]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        await api.memoria.olvidar(b.dataset.olvidar).catch(() => {});
+        pintarMemoria();
+      }),
+    );
+  }
+
   function conectar() {
+    // Borrar toda la memoria pide un segundo toque para confirmar.
+    const olvidarTodo = contenedor.querySelector('#olvidar-todo');
+    olvidarTodo?.addEventListener('click', async () => {
+      if (olvidarTodo.dataset.confirmar !== 'si') {
+        olvidarTodo.dataset.confirmar = 'si';
+        olvidarTodo.textContent = '¿Seguro? Pulsa otra vez para olvidarlo todo';
+        return;
+      }
+      await api.memoria.olvidarTodo();
+      olvidarTodo.dataset.confirmar = '';
+      olvidarTodo.textContent = 'Olvidar todo';
+      pintarMemoria();
+    });
+
     contenedor.querySelector('#ajustes-volver').addEventListener('click', alCerrar);
 
     contenedor.querySelectorAll('[data-clave]').forEach((b) =>
@@ -305,8 +362,8 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
     contenedor.querySelector('#conectar-correo')?.addEventListener('click', async () => {
       const secreto = contenedor.querySelector('#google-secreto')?.value.trim();
       try {
-        const id = contenedor.querySelector('#google-id').value.trim();
-        if (id !== ajustes.googleClientId) await guardar({ googleClientId: id });
+        const id = contenedor.querySelector('#google-id')?.value.trim() ?? ajustes.googleClientId;
+        if (id && id !== ajustes.googleClientId) await guardar({ googleClientId: id });
         if (secreto) await api.correo.guardarSecretoCliente(secreto);
         mostrarMensaje('mensaje-correo', 'Inicia sesión en la ventana del navegador que se ha abierto…', true);
         await api.correo.conectar();

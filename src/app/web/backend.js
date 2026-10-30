@@ -1,6 +1,8 @@
 import { normalizarAjustes, aplicarCambios } from '../../compartido/ajustes.js';
 import { ClienteGmail } from '../../compartido/gmail.js';
 import { Recordatorios } from '../../compartido/recordatorios.js';
+import { Memoria } from '../../compartido/memoria.js';
+import { ClienteCalendario, PERMISO_CALENDARIO } from '../../compartido/calendario.js';
 import { leerSecreto, guardarSecreto, borrarSecreto } from './secretos.js';
 
 // Versión web (PWA): el mismo contrato que window.asistente en Electron,
@@ -10,7 +12,8 @@ import { leerSecreto, guardarSecreto, borrarSecreto } from './secretos.js';
 const CLAVE_AJUSTES = 'kitsune.ajustes';
 const CLAVE_EMAIL = 'kitsune.correo.email';
 const CLAVE_RECORDATORIOS = 'kitsune.recordatorios';
-const PERMISOS = 'https://www.googleapis.com/auth/gmail.modify';
+const CLAVE_ALCANCES = 'kitsune.google.alcances';
+const PERMISOS = `https://www.googleapis.com/auth/gmail.modify ${PERMISO_CALENDARIO}`;
 const OPCIONES_CLAUDE = { dangerouslyAllowBrowser: true };
 
 function leerLocal(clave) {
@@ -54,7 +57,7 @@ function errorReconectar() {
 
 export function crearBackendWeb() {
   let ajustes = normalizarAjustes(leerLocal(CLAVE_AJUSTES) ?? {});
-  const oyentes = { claude: [], nuevo: [], recordatorio: [] };
+  const oyentes = { claude: [], nuevo: [], recordatorio: [], cita: [] };
   const emitir = (lista, dato) => oyentes[lista].forEach((f) => f(dato));
   const escuchar = (lista, f) => {
     oyentes[lista].push(f);
@@ -71,7 +74,7 @@ export function crearBackendWeb() {
     return token;
   }
 
-  const gmail = new ClienteGmail({
+  const credenciales = {
     token: async () => {
       const vigente = await tokenGuardado();
       if (!vigente) throw errorReconectar();
@@ -81,12 +84,21 @@ export function crearBackendWeb() {
       token = null;
       borrarSecreto('googleToken');
     },
-  });
+  };
+  const gmail = new ClienteGmail(credenciales);
+  const calendario = new ClienteCalendario(credenciales);
 
   async function estadoCorreo() {
     const email = leerLocal(CLAVE_EMAIL);
     const vigente = email ? await tokenGuardado() : null;
-    return { conectado: Boolean(email), email, configurado: Boolean(ajustes.googleClientId), necesitaReconectar: Boolean(email && !vigente) };
+    return {
+      conectado: Boolean(email),
+      email,
+      configurado: Boolean(ajustes.googleClientId),
+      necesitaReconectar: Boolean(email && !vigente),
+      // Quien conectó antes de que Kitsune usara el calendario tiene que volver a conectar.
+      calendario: Boolean(email && (leerLocal(CLAVE_ALCANCES) ?? '').includes(PERMISO_CALENDARIO)),
+    };
   }
 
   // Debe llamarse desde un toque o clic: Google abre una ventana emergente.
@@ -106,10 +118,12 @@ export function crearBackendWeb() {
     });
     token = { acceso: respuesta.access_token, caduca: Date.now() + (Number(respuesta.expires_in) - 60) * 1000 };
     await guardarSecreto('googleToken', JSON.stringify(token));
+    guardarLocal(CLAVE_ALCANCES, respuesta.scope ?? '');
     const perfil = await gmail.perfil();
     guardarLocal(CLAVE_EMAIL, perfil.emailAddress);
     if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
     programarCorreo();
+    programarCitas();
     return estadoCorreo();
   }
 
@@ -119,6 +133,7 @@ export function crearBackendWeb() {
     token = null;
     await borrarSecreto('googleToken');
     guardarLocal(CLAVE_EMAIL, null);
+    guardarLocal(CLAVE_ALCANCES, null);
     gmail.olvidarVistos();
     return estadoCorreo();
   }
@@ -148,6 +163,42 @@ export function crearBackendWeb() {
       // Sin conexión o sesión caducada: se reintenta en la siguiente comprobación.
     }
   }
+
+  // Aviso unos minutos antes de cada cita, mientras la app está abierta.
+  let temporizadorCitas = null;
+  function programarCitas() {
+    clearInterval(temporizadorCitas);
+    temporizadorCitas = setInterval(comprobarCitas, 5 * 60 * 1000);
+    comprobarCitas();
+  }
+
+  async function comprobarCitas() {
+    const estado = await estadoCorreo();
+    if (!estado.calendario || estado.necesitaReconectar || !ajustes.avisarCitas) return;
+    try {
+      for (const cita of await calendario.proximas(15)) {
+        emitir('cita', cita);
+        const hora = new Date(cita.inicio).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        notificar(`A las ${hora}: ${cita.titulo}`, cita.lugar || 'Dentro de poco', `kitsune-cita-${cita.id}`);
+      }
+    } catch {
+      // Sin conexión o sesión caducada: se reintenta en la siguiente comprobación.
+    }
+  }
+
+  // ---------- Memoria ----------
+
+  // Lo que el usuario pide recordar es personal: va cifrado, como las claves.
+  const memoria = new Memoria({
+    leer: async () => {
+      try {
+        return JSON.parse((await leerSecreto('memoria')) ?? '[]');
+      } catch {
+        return [];
+      }
+    },
+    guardar: (lista) => guardarSecreto('memoria', JSON.stringify(lista)),
+  });
 
   // ---------- Recordatorios ----------
 
@@ -189,6 +240,15 @@ export function crearBackendWeb() {
       const guardada = await conversacionGuardada();
       conversacion = new ConversacionClaude({
         recordatorios,
+        memoria,
+        calendario: {
+          estado: async () => {
+            const e = await estadoCorreo();
+            return { conectado: e.calendario && !e.necesitaReconectar };
+          },
+          eventos: (opciones) => calendario.eventos(opciones),
+          crear: (evento) => calendario.crear(evento),
+        },
         alCambiarHistorial: (historial) => {
           if (!historial.length) {
             borrarSecreto('conversacion');
@@ -216,7 +276,10 @@ export function crearBackendWeb() {
     return conversacion;
   }
 
-  if (leerLocal(CLAVE_EMAIL)) programarCorreo();
+  if (leerLocal(CLAVE_EMAIL)) {
+    programarCorreo();
+    programarCitas();
+  }
 
   return {
     plataforma: 'web',
@@ -248,6 +311,7 @@ export function crearBackendWeb() {
       },
       enviar: async (texto) => (await obtenerConversacion()).enviar(String(texto).trim().slice(0, 20000)),
       cancelar: async () => conversacion?.cancelar(),
+      confirmar: async (id, acepta) => conversacion?.responderConfirmacion(id, acepta),
       async reiniciar() {
         conversacion?.reiniciar();
         await borrarSecreto('conversacion');
@@ -268,6 +332,14 @@ export function crearBackendWeb() {
       enviar: (datos) => gmail.enviar(datos),
       alNuevo: (f) => escuchar('nuevo', f),
     },
+    memoria: {
+      listar: () => memoria.listar(),
+      olvidar: (id) => memoria.olvidar(id),
+      olvidarTodo: () => memoria.olvidarTodo(),
+    },
+    calendario: {
+      alCita: (f) => escuchar('cita', f),
+    },
     recordatorios: {
       listar: () => recordatorios.listar(),
       borrar: (id) => recordatorios.borrar(id),
@@ -276,6 +348,8 @@ export function crearBackendWeb() {
     ventana: {
       alAlternar: () => () => {},
       alAbrirAjustes: () => () => {},
+      // En el móvil el texto llega con "Compartir"; no hay portapapeles que mirar.
+      alTexto: () => () => {},
       ocultar: () => {},
       ratonDentro: () => {},
       abrirEnlace: async (url) => {

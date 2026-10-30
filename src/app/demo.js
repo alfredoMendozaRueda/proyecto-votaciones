@@ -159,8 +159,48 @@ function recordatorioDe(texto) {
   return { texto: que ? que[0].toUpperCase() + que.slice(1) : 'Lo que me pediste', cuando: cuando.getTime() };
 }
 
+// Tren del correo de ejemplo, para "añádelo a mi calendario".
+function eventoTren() {
+  const anio = new Date().getFullYear() + (new Date().getMonth() === 11 && new Date().getDate() > 14 ? 1 : 0);
+  return { titulo: 'Tren Madrid → Valencia', inicio: new Date(anio, 10, 14, 8, 35).getTime(), fin: new Date(anio, 10, 14, 10, 21).getTime(), todoElDia: false, lugar: 'Madrid Atocha · coche 6, plaza 11A', descripcion: 'Localizador K7M2QX' };
+}
+
 function respuestaPara(texto) {
   const t = texto.toLowerCase();
+  if (/^(resume|traduce|mejora|expl[ií]ca)/.test(t) && /<texto>/.test(t)) {
+    const accion = t.slice(0, 6);
+    return {
+      texto:
+        accion.startsWith('traduc')
+          ? 'Here is the translation: *“Thanks for your message. I agree with the quote; let’s start on Monday the 17th.”*'
+          : accion.startsWith('mejora')
+            ? 'Gracias por tu mensaje. Me parece bien el presupuesto: empezamos el **lunes 17**. ¿Me pasas los datos para el adelanto?'
+            : 'En resumen: **aceptas el presupuesto** y propones empezar el **lunes 17**; falta pedir los datos para el adelanto.',
+    };
+  }
+  if (/recuerda que|acu[eé]rdate de que/.test(t)) {
+    const dato = texto.replace(/^.*?(recuerda|acu[eé]rdate de) que\s*/i, '').replace(/[.!]+$/, '');
+    return { herramienta: 'recordar', dato: dato[0].toUpperCase() + dato.slice(1), texto: 'Apuntado, lo tendré en cuenta.' };
+  }
+  if (/tiempo|llover|lluvia|noticias/.test(t)) {
+    return {
+      herramienta: 'web_search',
+      fuentes: [
+        { url: 'https://www.aemet.es/es/eltiempo/prediccion/municipios', titulo: 'AEMET · Predicción por municipios' },
+        { url: 'https://www.eltiempo.es/', titulo: 'eltiempo.es' },
+      ],
+      texto: 'Mañana en Madrid: **soleado por la mañana** y nubes por la tarde, entre **9 °C y 18 °C**. Probabilidad de lluvia baja (10 %). Para el viaje a Valencia del día 14, de momento se espera buen tiempo.',
+    };
+  }
+  if (/calendario|agenda/.test(t) && /a[ñn]ade|apunta|pon|crea/.test(t)) {
+    return { herramienta: 'crear_evento', evento: eventoTren(), texto: 'Listo, ya está en tu calendario: **Tren Madrid → Valencia**, 14 de noviembre a las 08:35.', textoNo: 'De acuerdo, no lo añado.' };
+  }
+  if (/agenda|calendario|citas?/.test(t)) {
+    return {
+      herramienta: 'ver_agenda',
+      texto: 'Esta semana tienes:\n\n- **Hoy 17:30** · Dentista (Clínica Sonrisas)\n- **Jueves 13:00** · Reunión con Marcos para el informe\n- **Sábado** · Cumpleaños de Ana (todo el día)',
+    };
+  }
   if (/recu[eé]rdame/.test(t)) {
     const recordatorio = recordatorioDe(texto);
     const hora = new Date(recordatorio.cuando).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -215,7 +255,7 @@ function respuestaPara(texto) {
 
 export function crearDemo() {
   const correos = CORREOS.map((c) => ({ ...c }));
-  const oyentes = { claude: [], nuevo: [], alternar: [], ajustes: [], aviso: [] };
+  const oyentes = { claude: [], nuevo: [], alternar: [], ajustes: [], aviso: [], cita: [], texto: [] };
   let ajustes = {
     atajo: 'Control+Alt+K',
     paleta: 'carmesi',
@@ -233,10 +273,20 @@ export function crearDemo() {
     avisarCorreo: true,
     googleClientId: '123456789-kitsune.apps.googleusercontent.com',
     pulsoDiario: true,
+    usarMemoria: true,
+    busquedaWeb: true,
+    avisarCitas: true,
+    ofrecerPortapapeles: true,
   };
   let cancelado = false;
   let recordatorios = [];
   let numRecordatorio = 0;
+  let memoria = [
+    { id: 'mdemo1', texto: 'Su hermana se llama Ana y cumple años el sábado', creado: ahora - 3 * DIA },
+    { id: 'mdemo2', texto: 'Le interesan la fotografía y los viajes a Japón', creado: ahora - DIA },
+  ];
+  let numMemoria = 2;
+  const confirmaciones = new Map();
 
   const emitir = (evento) => oyentes.claude.forEach((f) => f(evento));
   const escuchar = (lista, f) => {
@@ -262,10 +312,12 @@ export function crearDemo() {
       },
       reiniciar: async () => {},
       mensajes: async () => [],
+      confirmar: async (id, acepta) => confirmaciones.get(id)?.(acepta),
       alEvento: (f) => escuchar('claude', f),
       async enviar(texto) {
         cancelado = false;
-        const { herramienta, texto: respuesta, recordatorio } = respuestaPara(texto);
+        const { herramienta, texto: textoSi, textoNo, recordatorio, dato, evento, fuentes } = respuestaPara(texto);
+        let respuesta = textoSi;
         emitir({ tipo: 'pensando' });
         await espera(700);
         if (herramienta) {
@@ -275,6 +327,21 @@ export function crearDemo() {
             const nuevo = { id: `rdemo${++numRecordatorio}`, avisado: false, ...recordatorio };
             recordatorios.push(nuevo);
             emitir({ tipo: 'recordatorio', recordatorio: nuevo });
+          }
+          if (dato) {
+            const nuevo = { id: `mdemo${++numMemoria}`, texto: dato, creado: Date.now() };
+            memoria.push(nuevo);
+            emitir({ tipo: 'memoria', dato: nuevo });
+          }
+          if (evento) {
+            const id = `cdemo${Date.now()}`;
+            const acepta = await new Promise((resolver) => {
+              confirmaciones.set(id, resolver);
+              emitir({ tipo: 'confirmar', id, accion: { tipo: 'evento', ...evento } });
+            });
+            confirmaciones.delete(id);
+            if (acepta) emitir({ tipo: 'evento', evento: { id: 'edemo', ...evento } });
+            else respuesta = textoNo;
           }
           emitir({ tipo: 'nuevo-bloque' });
           emitir({ tipo: 'pensando' });
@@ -288,6 +355,7 @@ export function crearDemo() {
           emitir({ tipo: 'texto', delta: trozo });
           await espera(28);
         }
+        if (fuentes) emitir({ tipo: 'fuentes', fuentes });
         emitir({ tipo: 'fin' });
       },
       async redactarRespuesta(id) {
@@ -297,7 +365,7 @@ export function crearDemo() {
       },
     },
     correo: {
-      estado: async () => ({ conectado: true, email: 'tu.cuenta@gmail.com', configurado: true }),
+      estado: async () => ({ conectado: true, email: 'tu.cuenta@gmail.com', configurado: true, calendario: true }),
       guardarSecretoCliente: async () => {},
       conectar: async () => ({ conectado: true, email: 'tu.cuenta@gmail.com', configurado: true }),
       desconectar: async () => ({ conectado: false, email: null, configurado: true }),
@@ -331,6 +399,19 @@ export function crearDemo() {
       },
       alNuevo: (f) => escuchar('nuevo', f),
     },
+    memoria: {
+      listar: async () => [...memoria],
+      async olvidar(id) {
+        memoria = memoria.filter((d) => d.id !== id);
+        return { olvidado: id };
+      },
+      async olvidarTodo() {
+        memoria = [];
+      },
+    },
+    calendario: {
+      alCita: (f) => escuchar('cita', f),
+    },
     recordatorios: {
       listar: async () => recordatorios.filter((r) => !r.avisado).sort((a, b) => a.cuando - b.cuando),
       async borrar(id) {
@@ -342,6 +423,7 @@ export function crearDemo() {
     ventana: {
       alAlternar: (f) => escuchar('alternar', f),
       alAbrirAjustes: (f) => escuchar('ajustes', f),
+      alTexto: (f) => escuchar('texto', f),
       ocultar: () => {},
       ratonDentro: () => {},
       abrirEnlace: async (url) => window.open(url, '_blank', 'noopener'),
@@ -350,6 +432,15 @@ export function crearDemo() {
     simular: {
       alternar: (accion) => oyentes.alternar.forEach((f) => f(accion)),
       abrirAjustes: () => oyentes.ajustes.forEach((f) => f()),
+      textoCopiado(
+        texto = 'Hola, Lucía: gracias por el presupuesto, nos parece bien. Si os viene bien podemos empezar el lunes 17. ¿Nos pasas los datos para el adelanto? Un saludo.',
+      ) {
+        oyentes.texto.forEach((f) => f(texto));
+      },
+      cita() {
+        const inicio = Date.now() + 15 * MINUTO;
+        oyentes.cita.forEach((f) => f({ id: 'edemo-cita', titulo: 'Dentista', lugar: 'Clínica Sonrisas', inicio, fin: inicio + HORA, todoElDia: false }));
+      },
       recordatorio(texto = 'Llamar a Lucía por la cocina') {
         oyentes.aviso.forEach((f) => f({ id: 'rdemo-aviso', texto, cuando: Date.now(), avisado: true }));
       },

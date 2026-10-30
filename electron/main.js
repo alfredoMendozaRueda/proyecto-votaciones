@@ -1,10 +1,11 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, Notification, screen, shell, Tray } from 'electron';
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, Notification, screen, shell, Tray } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { obtenerAjustes, guardarAjustes, guardarSecreto, borrarSecreto, leerSecreto, leerDatos, guardarDatos } from './almacen.js';
 import { Gmail } from './gmail.js';
 import { ConversacionClaude, mensajeDeError } from '../src/compartido/claude.js';
 import { Recordatorios } from '../src/compartido/recordatorios.js';
+import { Memoria } from '../src/compartido/memoria.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const URL_DESARROLLO = process.env.KITSUNE_DEV_URL;
@@ -17,6 +18,9 @@ let ventana = null;
 let bandeja = null;
 let atajoActual = null;
 let temporizadorCorreo = null;
+let temporizadorCitas = null;
+// Último texto del portapapeles que se ofreció, para no proponerlo dos veces.
+let textoOfrecido = '';
 
 const gmail = new Gmail(obtenerAjustes);
 const recordatorios = new Recordatorios({
@@ -24,11 +28,28 @@ const recordatorios = new Recordatorios({
   guardar: (lista) => guardarDatos('recordatorios', lista),
   avisar: avisarRecordatorio,
 });
+// Lo que el usuario pide recordar es personal: va cifrado, como las claves.
+const memoria = new Memoria({
+  leer: () => {
+    try {
+      return JSON.parse(leerSecreto('memoria') ?? '[]');
+    } catch {
+      return [];
+    }
+  },
+  guardar: (lista) => guardarSecreto('memoria', JSON.stringify(lista)),
+});
 const claude = new ConversacionClaude({
   obtenerClave: async () => leerSecreto('claveClaude'),
   obtenerAjustes,
   gmail,
+  calendario: {
+    estado: async () => ({ conectado: gmail.conCalendario }),
+    eventos: (opciones) => gmail.calendario.eventos(opciones),
+    crear: (evento) => gmail.calendario.crear(evento),
+  },
   recordatorios,
+  memoria,
   emitir: (evento) => ventana?.webContents.send('claude:evento', evento),
 });
 
@@ -109,10 +130,23 @@ function mostrar() {
   ventana.webContents.send('ventana:alternar', 'mostrar');
 }
 
+// Al llamarlo con el atajo, si hay texto nuevo copiado, Kitsune ofrece
+// resumirlo, traducirlo… Solo se lee el portapapeles en ese momento.
+function ofrecerPortapapeles() {
+  if (!obtenerAjustes().ofrecerPortapapeles) return;
+  const texto = clipboard.readText().trim();
+  if (texto.length < 3 || texto === textoOfrecido) return;
+  textoOfrecido = texto;
+  ventana.webContents.send('ventana:texto', texto.slice(0, 8000));
+}
+
 function alternar() {
   if (!ventana) return;
   if (ventana.isVisible()) ventana.webContents.send('ventana:alternar', 'ocultar');
-  else mostrar();
+  else {
+    mostrar();
+    ofrecerPortapapeles();
+  }
 }
 
 function registrarAtajo(atajo) {
@@ -153,6 +187,30 @@ async function comprobarCorreo() {
     }
   } catch {
     // Sin conexión o token caducado: se reintenta en la siguiente comprobación.
+  }
+}
+
+// Aviso unos minutos antes de cada cita del calendario.
+function programarCitas() {
+  clearInterval(temporizadorCitas);
+  temporizadorCitas = setInterval(comprobarCitas, 5 * 60 * 1000);
+  comprobarCitas();
+}
+
+async function comprobarCitas() {
+  if (!gmail.conCalendario || !obtenerAjustes().avisarCitas) return;
+  try {
+    for (const cita of await gmail.calendario.proximas(15)) {
+      const hora = new Date(cita.inicio).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+      if (Notification.isSupported()) {
+        const notificacion = new Notification({ title: `A las ${hora}: ${cita.titulo}`, body: cita.lugar || 'Dentro de poco' });
+        notificacion.on('click', mostrar);
+        notificacion.show();
+      }
+      ventana?.webContents.send('calendario:cita', cita);
+    }
+  } catch {
+    // Sin conexión o sin permiso: se reintenta en la siguiente comprobación.
   }
 }
 
@@ -221,6 +279,11 @@ function registrarCanales() {
   manejar('claude:cancelar', () => claude.cancelar());
   manejar('claude:reiniciar', () => claude.reiniciar());
   manejar('claude:mensajes', () => claude.mensajesVisibles());
+  manejar('claude:confirmar', (id, acepta) => claude.responderConfirmacion(String(id), acepta === true));
+
+  manejar('memoria:listar', () => memoria.listar());
+  manejar('memoria:olvidar', (id) => memoria.olvidar(String(id ?? '')));
+  manejar('memoria:olvidarTodo', () => memoria.olvidarTodo());
   manejar('claude:redactar', async (id, indicaciones) => claude.redactarRespuesta(await gmail.leer(id), String(indicaciones ?? '')));
 
   manejar('correo:estado', () => gmail.estado());
@@ -228,6 +291,7 @@ function registrarCanales() {
   manejar('correo:conectar', async () => {
     const estado = await gmail.conectar();
     programarCorreo();
+    programarCitas();
     return estado;
   });
   manejar('correo:desconectar', () => gmail.desconectar());
@@ -260,6 +324,7 @@ if (!app.requestSingleInstanceLock()) {
     crearBandeja();
     if (!registrarAtajo(obtenerAjustes().atajo)) registrarAtajo('Control+Alt+K');
     programarCorreo();
+    programarCitas();
     recordatorios.programar();
   });
   // Vive en la bandeja del sistema: cerrar la ventana no cierra la app.

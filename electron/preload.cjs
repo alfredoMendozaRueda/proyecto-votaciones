@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('asistente', {
     cancelar: () => invocar('claude:cancelar'),
     reiniciar: () => invocar('claude:reiniciar'),
     mensajes: () => invocar('claude:mensajes'),
+    confirmar: (id, acepta) => invocar('claude:confirmar', id, acepta),
     redactarRespuesta: (id, indicaciones) => invocar('claude:redactar', id, indicaciones),
     alEvento: (callback) => escuchar('claude:evento', callback),
   },
@@ -41,6 +42,14 @@ contextBridge.exposeInMainWorld('asistente', {
     enviar: (datos) => invocar('correo:enviar', datos),
     alNuevo: (callback) => escuchar('correo:nuevo', callback),
   },
+  memoria: {
+    listar: () => invocar('memoria:listar'),
+    olvidar: (id) => invocar('memoria:olvidar', id),
+    olvidarTodo: () => invocar('memoria:olvidarTodo'),
+  },
+  calendario: {
+    alCita: (callback) => escuchar('calendario:cita', callback),
+  },
   recordatorios: {
     listar: () => invocar('recordatorios:listar'),
     borrar: (id) => invocar('recordatorios:borrar', id),
@@ -49,6 +58,7 @@ contextBridge.exposeInMainWorld('asistente', {
   ventana: {
     alAlternar: (callback) => escuchar('ventana:alternar', callback),
     alAbrirAjustes: (callback) => escuchar('ventana:ajustes', callback),
+    alTexto: (callback) => escuchar('ventana:texto', callback),
     ocultar: () => ipcRenderer.send('ventana:ocultar'),
     ratonDentro: (dentro) => ipcRenderer.send('ventana:raton', Boolean(dentro)),
     abrirEnlace: (url) => invocar('enlace:abrir', url),

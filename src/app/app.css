@@ -1475,6 +1475,180 @@ kbd {
   padding-left: 0;
 }
 
+/* ---------- Copiar, fuentes, confirmar y texto copiado ---------- */
+
+.burbuja--kitsune {
+  position: relative;
+}
+
+/* El botón de copiar aparece al pasar por encima (siempre visible en táctil). */
+.burbuja__copiar {
+  position: absolute;
+  right: -6px;
+  bottom: -10px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--linea);
+  background: var(--carbon-3);
+  color: var(--texto-2);
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.burbuja--kitsune:hover .burbuja__copiar,
+.burbuja__copiar:focus-visible {
+  opacity: 1;
+}
+
+.burbuja__copiar:hover {
+  color: var(--texto);
+}
+
+@media (hover: none) {
+  .burbuja__copiar {
+    position: static;
+    opacity: 0.8;
+    margin: 6px 0 -2px auto;
+    width: 32px;
+    height: 32px;
+  }
+}
+
+.fuentes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: 88%;
+  margin-top: -2px;
+  animation: entrar 0.28s ease-out both;
+}
+
+.fuentes__titulo {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--texto-3);
+}
+
+.fuentes__enlace {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--linea);
+  background: transparent;
+  color: var(--texto-2);
+  font-size: 12px;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.fuentes__enlace:hover {
+  border-color: var(--rojo);
+  color: var(--texto);
+}
+
+.confirmar {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px 12px;
+  align-self: stretch;
+  padding: 12px 14px;
+  border-radius: var(--radio-sm);
+  border: 1px solid var(--rojo-hondo);
+  background:
+    radial-gradient(140% 120% at 0% 0%, rgba(227, 52, 44, 0.12), transparent 60%),
+    var(--carbon-2);
+  animation: entrar 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.confirmar__icono {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--rojo-velo);
+  color: var(--rojo-vivo);
+}
+
+.confirmar__cuerpo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.confirmar__pregunta {
+  font-size: 12px;
+  color: var(--texto-3);
+}
+
+.confirmar__detalle {
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.confirmar__botones {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 6px;
+}
+
+.confirmar--hecho {
+  border-color: var(--linea);
+}
+
+.confirmar--hecho .confirmar__pregunta {
+  color: #7fd19a;
+  font-weight: 700;
+}
+
+.confirmar--no {
+  opacity: 0.6;
+  border-color: var(--linea);
+}
+
+.confirmar[data-estado] .confirmar__botones {
+  display: none;
+}
+
+.texto-ofrecido {
+  align-self: stretch;
+  padding: 10px 12px 12px;
+  border-radius: var(--radio-sm);
+  border: 1px dashed var(--rojo-hondo);
+  background: var(--carbon-2);
+  animation: entrar 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.texto-ofrecido__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--texto-3);
+}
+
+.texto-ofrecido__cabecera span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.texto-ofrecido__extracto {
+  margin: 4px 0 10px;
+  font-size: 13px;
+  color: var(--texto-2);
+  overflow-wrap: anywhere;
+}
+
+.texto-ofrecido__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

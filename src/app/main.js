@@ -187,6 +187,23 @@ async function iniciar() {
     mostrarVista('ajustes');
   });
 
+  // Texto copiado al llamarlo con el atajo (Windows): propone qué hacer con él.
+  api.ventana.alTexto?.((texto) => {
+    abrirDialogo();
+    mostrarVista('chat');
+    chat.ofrecerTexto(texto);
+  });
+
+  // Una cita del calendario empieza pronto.
+  api.calendario?.alCita((cita) => {
+    actividad();
+    abrirDialogo();
+    mostrarVista('chat');
+    chat.avisoCita(cita);
+    vibrar([30, 60, 30]);
+    setTimeout(() => kitsune.reproducir('alegria'), kitsune.accion?.nombre === 'aparecer' ? 1700 : 0);
+  });
+
   // Llega la hora de un recordatorio: el zorro avisa y lo deja escrito en el chat.
   api.recordatorios?.alAviso((r) => {
     actividad();
@@ -306,7 +323,7 @@ function atenderParametros() {
   else if (parametros.has('pulso')) chat.preguntar('Prepárame el pulso de hoy');
   else if (compartido.length) {
     mostrarVista('chat');
-    chat.rellenar(`Resúmeme esto:\n${[...new Set(compartido)].join('\n')}`.slice(0, 4000));
+    chat.ofrecerTexto([...new Set(compartido)].join('\n'), 'compartido');
   }
   // Que recargar no repita la acción.
   if ([...parametros.keys()].some((c) => ['correo', 'pulso', 'chat', 'titulo', 'texto', 'enlace'].includes(c))) {

@@ -21,6 +21,18 @@ historial ni código con `main`.
 - **Recordatorios**: «recuérdame llamar a Lucía mañana a las 10». Claude lo
   apunta con una herramienta y, a su hora, el zorro salta y llega una
   notificación. Se pueden deshacer desde el chat o borrar en Ajustes.
+- **Memoria**: «recuerda que mi hermana se llama Ana». Kitsune guarda datos y
+  preferencias (cifrados) y los tiene en cuenta en cada conversación. Se ven,
+  se borran o se pausan en Ajustes → Memoria.
+- **Búsqueda en internet**: tiempo, noticias, precios u horarios, con los
+  enlaces a las fuentes debajo de la respuesta. Usa la herramienta de búsqueda
+  de la API de Claude (cada búsqueda tiene un pequeño coste); se puede apagar.
+- **Google Calendar**: «¿qué tengo esta semana?», «añade el tren a mi
+  calendario». Antes de crear un evento aparece una tarjeta para confirmarlo;
+  sin tu «Añadir» no se crea nada. Avisa un cuarto de hora antes de cada cita.
+- **Acciones con texto**: en Windows, copia un texto y llama a Kitsune con el
+  atajo: te propone Resumir, Traducir, Mejorar o Explicar. En el móvil, lo
+  mismo con "Compartir → Kitsune". Cada respuesta tiene un botón para copiarla.
 - **Pulso del día**: la primera vez que lo abres cada día te ofrece un
   resumen de tu jornada: lo urgente del correo, recordatorios de hoy y mañana
   y una sugerencia. Solo se pide al pulsar el botón (no gasta sin permiso).
@@ -65,19 +77,21 @@ La clave se comprueba antes de guardarla y se guarda cifrada con el sistema
 (DPAPI en Windows). El modelo por defecto es Claude Opus 5.5; puedes cambiar a
 Sonnet 5.5 (más rápido) o Haiku 5.5 (más económico).
 
-### Conectar Gmail
+### Conectar Gmail y Google Calendar
 
 Google exige que cada instalación use su propio cliente OAuth:
 
 1. En [Google Cloud Console](https://console.cloud.google.com/), crea un proyecto
-   y activa la **Gmail API**.
+   y activa la **Gmail API** y la **Google Calendar API**.
 2. En "Pantalla de consentimiento de OAuth", añade tu cuenta como usuario de prueba.
 3. En Credenciales, crea un **ID de cliente OAuth** de tipo **App de escritorio**.
 4. En Kitsune: Ajustes → Correo → pega el ID y el secreto y pulsa
    "Conectar con Google". Se abre el navegador para que autorices el acceso.
 
 Kitsune pide el permiso `gmail.modify` (leer, marcar, archivar, mover a la
-papelera y enviar; nunca borrar para siempre). El token se guarda cifrado.
+papelera y enviar; nunca borrar para siempre) y `calendar.events` (ver y
+crear eventos). El token se guarda cifrado. Si conectaste la cuenta antes de
+que existiera el calendario, Ajustes muestra "Conectar también el calendario".
 
 ## En el móvil (app web instalable)
 
@@ -150,7 +164,13 @@ El zorro ajusta solo su coste:
   que el remitente no sepa cuándo abres su correo. Los enlaces se abren en el
   navegador del sistema.
 - Las herramientas de correo de Claude son de solo lectura, y el contenido de
-  los correos se le pasa como información, nunca como instrucciones.
+  correos, eventos y páginas web se le pasa como información, nunca como
+  instrucciones.
+- Lo único que Claude puede escribir fuera de Kitsune es un evento del
+  calendario, y solo después de que pulses "Añadir" en la tarjeta.
+- La memoria va cifrada (sistema en Windows, AES-GCM en el navegador). El
+  portapapeles solo se lee en el momento de llamar a Kitsune con el atajo, y
+  el texto no sale del equipo hasta que eliges una acción.
 
 ## Estructura
 

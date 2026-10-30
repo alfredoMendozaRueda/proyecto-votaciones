@@ -24,6 +24,10 @@ const TRAZOS = {
   campana: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>',
   microfono: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/>',
   pulso: '<path d="M3 12h4l2.5-6 4 12 2.5-6H21"/>',
+  calendario: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h3"/>',
+  memoria: '<path d="M6.5 3.5h11v17l-5.5-3.8-5.5 3.8z"/><path d="M9.5 8.5h5"/>',
+  copiar: '<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>',
+  hecho: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
 };
 
 export function icono(nombre, tam = 18) {
