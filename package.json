@@ -1,0 +1,19 @@
+{
+  "name": "kitsune-asistente",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Asistente personal de escritorio para Windows con un kitsune 3D de nueve colas.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "vite": "^7.3.7"
+  }
+}

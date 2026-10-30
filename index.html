@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Kitsune</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap"
+    />
+    <link rel="stylesheet" href="/src/preview/preview.css" />
+  </head>
+  <body>
+    <div class="app">
+      <section class="escenario" id="escenario" data-vista="estudio" aria-label="Vista del kitsune">
+        <div class="escritorio" aria-hidden="true">
+          <div class="dialogo-fantasma">
+            <span class="dialogo-fantasma__titulo">Diálogo del asistente</span>
+            <span>Chat con Claude y bandeja de correo. Llega en las fases 2 y 3.</span>
+          </div>
+          <div class="barra-tareas">
+            <span class="barra-tareas__inicio"></span>
+            <span class="barra-tareas__busqueda">Buscar</span>
+            <span class="barra-tareas__app"></span>
+            <span class="barra-tareas__app"></span>
+            <span class="barra-tareas__app"></span>
+            <span class="barra-tareas__reloj" id="reloj"></span>
+          </div>
+        </div>
+
+        <div class="lienzo" id="lienzo"></div>
+
+        <p class="etiqueta-estado">
+          <span>Estado</span> <strong id="etiqueta-estado">Reposo</strong>
+        </p>
+
+        <div class="vista" role="group" aria-label="Vista">
+          <button type="button" id="vista-estudio" data-vista="estudio" aria-pressed="true">Estudio</button>
+          <button type="button" id="vista-escritorio" data-vista="escritorio" aria-pressed="false">Escritorio</button>
+        </div>
+
+        <p class="atajo">
+          <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>K</kbd>
+          <span>muestra u oculta al kitsune</span>
+        </p>
+      </section>
+
+      <aside class="panel">
+        <header class="cabecera">
+          <p class="cabecera__kanji" lang="ja" title="Kyūbi: nueve colas">九尾</p>
+          <div>
+            <h1>Kitsune</h1>
+            <p class="cabecera__sub">Personaje del asistente de escritorio para Windows</p>
+          </div>
+        </header>
+
+        <section class="bloque" aria-labelledby="titulo-estado">
+          <h2 id="titulo-estado">Estado</h2>
+          <div class="estados" id="estados" role="group" aria-labelledby="titulo-estado"></div>
+          <p class="estados__desc" id="descripcion-estado"></p>
+        </section>
+
+        <section class="bloque" aria-labelledby="titulo-acciones">
+          <h2 id="titulo-acciones">Animaciones</h2>
+          <div class="acciones" id="acciones"></div>
+        </section>
+
+        <section class="bloque" aria-labelledby="titulo-pelaje">
+          <h2 id="titulo-pelaje">Pelaje</h2>
+          <div class="paletas" id="paletas" role="group" aria-labelledby="titulo-pelaje"></div>
+        </section>
+
+        <section class="bloque" aria-labelledby="titulo-opciones">
+          <h2 id="titulo-opciones">Opciones</h2>
+          <label class="interruptor" for="opcion-cursor">
+            <input type="checkbox" id="opcion-cursor" checked />
+            <span class="interruptor__pista" aria-hidden="true"></span>
+            Seguir el cursor con la mirada
+          </label>
+          <label class="interruptor" for="opcion-fuegos">
+            <input type="checkbox" id="opcion-fuegos" checked />
+            <span class="interruptor__pista" aria-hidden="true"></span>
+            Fuegos fatuos alrededor
+          </label>
+        </section>
+
+        <footer class="hoja-ruta">
+          <h2>Hoja de ruta</h2>
+          <ol>
+            <li class="hecho"><span><strong>Personaje</strong> y animaciones</span></li>
+            <li>Diálogo para hablar con Claude</li>
+            <li>Bandeja de correo en rojo y negro</li>
+            <li>Ajustes personalizables</li>
+          </ol>
+        </footer>
+      </aside>
+    </div>
+    <script type="module" src="/src/preview/main.js"></script>
+  </body>
+</html>
