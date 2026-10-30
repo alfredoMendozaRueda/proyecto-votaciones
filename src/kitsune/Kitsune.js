@@ -145,6 +145,8 @@ export class Kitsune {
       fuegos: true,
       visible: false,
       movimientoReducido: reducido,
+      // >1 acerca la cámara: en la app el zorro llena más su hueco.
+      zoom: 1,
       ...opciones,
     };
     this.contenedor = contenedor;
@@ -277,6 +279,23 @@ export class Kitsune {
     this.opciones[clave] = valor;
   }
 
+  // Menos capas de pelo = menos trabajo para la tarjeta gráfica.
+  setCalidadPelo(nivel) {
+    const fraccion = { baja: 0.45, media: 0.75, alta: 1 }[nivel] ?? 0.75;
+    for (const materiales of [this.mat.cuerpo, this.mat.colas]) {
+      const capas = Math.max(3, Math.round(materiales.capas * fraccion));
+      materiales.uniforms.uCapas.value = capas;
+      this.raiz.traverse((o) => {
+        if (o.isInstancedMesh && o.material === materiales.pelo) o.count = capas;
+      });
+    }
+  }
+
+  // ¿Hay zorro bajo este punto de la pantalla? (coordenadas de cliente)
+  tocaEn(x, y) {
+    return this.visible && this._tocaKitsune({ clientX: x, clientY: y });
+  }
+
   destruir() {
     cancelAnimationFrame(this._frame);
     this._observador.disconnect();
@@ -359,7 +378,7 @@ export class Kitsune {
     this.renderer.setSize(ancho, alto, false);
     this.camara.aspect = ancho / alto;
     // En marcos estrechos se aleja la cámara para que el abanico de colas quepa.
-    const distancia = 8.4 * Math.max(1, 0.82 / this.camara.aspect);
+    const distancia = (8.4 * Math.max(1, 0.82 / this.camara.aspect)) / this.opciones.zoom;
     this.camara.position.set(0, 2.0, distancia);
     this.camara.lookAt(0, 1.2, 0);
     this.camara.updateProjectionMatrix();

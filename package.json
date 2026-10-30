@@ -3,17 +3,47 @@
   "version": "0.1.0",
   "private": true,
   "description": "Asistente personal de escritorio para Windows con un kitsune 3D de nueve colas.",
+  "author": "Kitsune",
   "type": "module",
+  "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "app": "vite build && electron .",
+    "test": "node --test test/*.test.js",
+    "dist": "vite build && electron-builder --win"
   },
   "dependencies": {
-    "three": "^0.180.0"
+    "@anthropic-ai/sdk": "^1.3.0"
   },
   "devDependencies": {
+    "dompurify": "^3.4.17",
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2",
+    "three": "^0.180.0",
     "vite": "^7.3.7"
+  },
+  "build": {
+    "appId": "com.kitsune.asistente",
+    "productName": "Kitsune",
+    "directories": {
+      "output": "out"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "assets/**",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icono.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Kitsune"
+    }
   }
 }

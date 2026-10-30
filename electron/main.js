@@ -1,0 +1,244 @@
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeImage, Notification, screen, shell, Tray } from 'electron';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { obtenerAjustes, guardarAjustes, guardarSecreto, borrarSecreto, leerSecreto } from './almacen.js';
+import { Gmail } from './gmail.js';
+import { ConversacionClaude, mensajeDeError } from './claude.js';
+
+const aqui = path.dirname(fileURLToPath(import.meta.url));
+const URL_DESARROLLO = process.env.KITSUNE_DEV_URL;
+
+// Medidas del zorro según el tamaño elegido y del diálogo que aparece encima.
+const ZORRO = { pequeno: [210, 240], mediano: [260, 300], grande: [330, 380] };
+const DIALOGO = [430, 480];
+
+let ventana = null;
+let bandeja = null;
+let atajoActual = null;
+let temporizadorCorreo = null;
+
+const gmail = new Gmail(obtenerAjustes);
+const claude = new ConversacionClaude({
+  obtenerAjustes,
+  gmail,
+  emitir: (evento) => ventana?.webContents.send('claude:evento', evento),
+});
+
+function medidas(ajustes) {
+  const [anchoZorro, altoZorro] = ZORRO[ajustes.tamano];
+  const ancho = Math.max(DIALOGO[0] + 24, anchoZorro);
+  const alto = altoZorro + DIALOGO[1] - 50;
+  const { workArea } = screen.getPrimaryDisplay();
+  const x = ajustes.posicion === 'izquierda' ? workArea.x : workArea.x + workArea.width - ancho;
+  return { x, y: workArea.y + workArea.height - alto, width: ancho, height: alto };
+}
+
+function abrirEnlaceSeguro(url) {
+  try {
+    const { protocol } = new URL(url);
+    if (['https:', 'http:', 'mailto:'].includes(protocol)) shell.openExternal(url);
+  } catch {
+    // URL mal formada: se ignora.
+  }
+}
+
+function crearVentana() {
+  const ajustes = obtenerAjustes();
+  ventana = new BrowserWindow({
+    ...medidas(ajustes),
+    transparent: true,
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    show: false,
+    backgroundColor: '#00000000',
+    title: 'Kitsune',
+    webPreferences: {
+      preload: path.join(aqui, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  ventana.setAlwaysOnTop(true, 'floating');
+  // Las zonas transparentes dejan pasar el ratón al escritorio; el renderer
+  // avisa cuando el puntero está sobre el zorro o el diálogo.
+  ventana.setIgnoreMouseEvents(true, { forward: true });
+
+  ventana.webContents.setWindowOpenHandler(({ url }) => {
+    abrirEnlaceSeguro(url);
+    return { action: 'deny' };
+  });
+  ventana.webContents.on('will-navigate', (evento, url) => {
+    if (url !== ventana.webContents.getURL()) {
+      evento.preventDefault();
+      abrirEnlaceSeguro(url);
+    }
+  });
+
+  if (URL_DESARROLLO) ventana.loadURL(URL_DESARROLLO);
+  else ventana.loadFile(path.join(aqui, '..', 'dist', 'index.html'));
+  ventana.once('ready-to-show', () => mostrar());
+}
+
+function mostrar() {
+  if (!ventana) return;
+  ventana.show();
+  ventana.focus();
+  ventana.webContents.send('ventana:alternar', 'mostrar');
+}
+
+function alternar() {
+  if (!ventana) return;
+  if (ventana.isVisible()) ventana.webContents.send('ventana:alternar', 'ocultar');
+  else mostrar();
+}
+
+function registrarAtajo(atajo) {
+  if (atajoActual) globalShortcut.unregister(atajoActual);
+  let ok = false;
+  try {
+    ok = globalShortcut.register(atajo, alternar);
+  } catch {
+    ok = false;
+  }
+  if (ok) atajoActual = atajo;
+  else if (atajoActual) globalShortcut.register(atajoActual, alternar);
+  return ok;
+}
+
+function programarCorreo() {
+  clearInterval(temporizadorCorreo);
+  const { correoCadaMin } = obtenerAjustes();
+  temporizadorCorreo = setInterval(comprobarCorreo, correoCadaMin * 60 * 1000);
+  comprobarCorreo();
+}
+
+async function comprobarCorreo() {
+  if (!gmail.conectado) return;
+  try {
+    const nuevos = await gmail.nuevos();
+    if (!nuevos.length) return;
+    ventana?.webContents.send('correo:nuevo', { cantidad: nuevos.length, ultimo: nuevos[0] });
+    if (obtenerAjustes().avisarCorreo && Notification.isSupported()) {
+      const [primero] = nuevos;
+      const notificacion = new Notification({
+        title: nuevos.length === 1 ? `Correo de ${primero.de.nombre}` : `${nuevos.length} correos nuevos`,
+        body: primero.asunto,
+        silent: true,
+      });
+      notificacion.on('click', mostrar);
+      notificacion.show();
+    }
+  } catch {
+    // Sin conexión o token caducado: se reintenta en la siguiente comprobación.
+  }
+}
+
+function crearBandeja() {
+  const icono = nativeImage.createFromPath(path.join(aqui, '..', 'assets', 'icono.png')).resize({ width: 16, height: 16 });
+  bandeja = new Tray(icono);
+  bandeja.setToolTip('Kitsune');
+  bandeja.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Mostrar u ocultar', click: alternar },
+      { label: 'Ajustes', click: () => { mostrar(); ventana.webContents.send('ventana:ajustes'); } },
+      { type: 'separator' },
+      { label: 'Salir', click: () => app.quit() },
+    ]),
+  );
+  bandeja.on('click', alternar);
+}
+
+// Todos los canales responden { ok, datos } o { ok: false, error } y solo
+// atienden a la ventana del asistente.
+function manejar(canal, funcion) {
+  ipcMain.handle(canal, async (evento, ...args) => {
+    if (evento.sender !== ventana?.webContents) return { ok: false, error: 'Origen no permitido.' };
+    try {
+      return { ok: true, datos: await funcion(...args) };
+    } catch (error) {
+      return { ok: false, error: error.message || String(error) };
+    }
+  });
+}
+
+function registrarCanales() {
+  manejar('ajustes:obtener', () => obtenerAjustes());
+  manejar('ajustes:guardar', (cambios) => {
+    const anteriores = obtenerAjustes();
+    if (cambios.atajo && cambios.atajo !== anteriores.atajo && !registrarAtajo(cambios.atajo)) {
+      throw new Error('Ese atajo no está disponible: puede que lo use otro programa.');
+    }
+    const ajustes = guardarAjustes(cambios);
+    if (cambios.tamano || cambios.posicion) ventana.setBounds(medidas(ajustes));
+    if ('iniciarConWindows' in cambios) app.setLoginItemSettings({ openAtLogin: ajustes.iniciarConWindows });
+    if ('correoCadaMin' in cambios) programarCorreo();
+    return ajustes;
+  });
+
+  manejar('claude:estado', () => ({ configurado: Boolean(leerSecreto('claveClaude')) }));
+  manejar('claude:clave', async (clave) => {
+    if (!clave) {
+      borrarSecreto('claveClaude');
+      return { configurado: false };
+    }
+    const limpia = String(clave).trim();
+    try {
+      await ConversacionClaude.probarClave(limpia, obtenerAjustes().modelo);
+    } catch (error) {
+      throw new Error(mensajeDeError(error));
+    }
+    guardarSecreto('claveClaude', limpia);
+    return { configurado: true };
+  });
+  manejar('claude:enviar', (texto) => {
+    if (typeof texto !== 'string' || !texto.trim()) throw new Error('Escribe un mensaje.');
+    // Se resuelve al terminar el turno; el texto llega antes por 'claude:evento'.
+    return claude.enviar(texto.trim().slice(0, 20000));
+  });
+  manejar('claude:cancelar', () => claude.cancelar());
+  manejar('claude:reiniciar', () => claude.reiniciar());
+  manejar('claude:redactar', async (id, indicaciones) => claude.redactarRespuesta(await gmail.leer(id), String(indicaciones ?? '')));
+
+  manejar('correo:estado', () => gmail.estado());
+  manejar('correo:cliente', (secreto) => gmail.guardarCliente(String(secreto ?? '')));
+  manejar('correo:conectar', async () => {
+    const estado = await gmail.conectar();
+    programarCorreo();
+    return estado;
+  });
+  manejar('correo:desconectar', () => gmail.desconectar());
+  manejar('correo:listar', (opciones) => gmail.listar(opciones));
+  manejar('correo:leer', (id) => gmail.leer(id));
+  manejar('correo:modificar', (id, cambios) => gmail.modificar(id, cambios));
+  manejar('correo:enviar', (datos) => gmail.enviar(datos));
+
+  manejar('enlace:abrir', (url) => abrirEnlaceSeguro(url));
+
+  ipcMain.on('ventana:ocultar', (evento) => {
+    if (evento.sender === ventana?.webContents) ventana.hide();
+  });
+  ipcMain.on('ventana:raton', (evento, dentro) => {
+    if (evento.sender === ventana?.webContents) ventana.setIgnoreMouseEvents(!dentro, { forward: true });
+  });
+}
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', mostrar);
+  app.setAppUserModelId('com.kitsune.asistente');
+  app.whenReady().then(() => {
+    registrarCanales();
+    crearVentana();
+    crearBandeja();
+    if (!registrarAtajo(obtenerAjustes().atajo)) registrarAtajo('Control+Alt+K');
+    programarCorreo();
+  });
+  // Vive en la bandeja del sistema: cerrar la ventana no cierra la app.
+  app.on('window-all-closed', () => {});
+  app.on('will-quit', () => globalShortcut.unregisterAll());
+}

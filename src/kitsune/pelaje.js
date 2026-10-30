@@ -76,7 +76,7 @@ export function crearMaterialesPelaje({ largo, capas, densidad, gravedad = 0.5 }
         diffuseColor.rgb *= mix(0.66, 1.12, vCapa);`,
       );
   };
-  return { base, pelo, capas };
+  return { base, pelo, capas, uniforms };
 }
 
 // Pieza con pelo: malla base (proyecta sombra y recibe clics) + capas instanciadas.

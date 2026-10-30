@@ -2,7 +2,11 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net ws://localhost:*; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
     <title>Kitsune</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -10,93 +14,33 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap"
     />
-    <link rel="stylesheet" href="/src/preview/preview.css" />
+    <link rel="stylesheet" href="/src/app/app.css" />
   </head>
   <body>
-    <div class="app">
-      <section class="escenario" id="escenario" data-vista="estudio" aria-label="Vista del kitsune">
-        <div class="escritorio" aria-hidden="true">
-          <div class="dialogo-fantasma">
-            <span class="dialogo-fantasma__titulo">Diálogo del asistente</span>
-            <span>Chat con Claude y bandeja de correo. Llega en las fases 2 y 3.</span>
+    <div class="escena" id="escena" data-tamano="mediano" data-posicion="izquierda">
+      <section class="dialogo" id="dialogo" aria-label="Kitsune" hidden>
+        <header class="dialogo__cabecera">
+          <div class="marca">
+            <span class="marca__sello" lang="ja" aria-hidden="true">狐</span>
+            <span class="marca__nombre">Kitsune</span>
           </div>
-          <div class="barra-tareas">
-            <span class="barra-tareas__inicio"></span>
-            <span class="barra-tareas__busqueda">Buscar</span>
-            <span class="barra-tareas__app"></span>
-            <span class="barra-tareas__app"></span>
-            <span class="barra-tareas__app"></span>
-            <span class="barra-tareas__reloj" id="reloj"></span>
+          <div class="pestanas" role="tablist" aria-label="Secciones">
+            <button type="button" role="tab" id="pestana-chat" aria-selected="true" aria-controls="vista-chat">Chat</button>
+            <button type="button" role="tab" id="pestana-correo" aria-selected="false" aria-controls="vista-correo">
+              Correo <span class="insignia" id="insignia-correo" hidden></span>
+            </button>
           </div>
-        </div>
-
-        <div class="lienzo" id="lienzo"></div>
-
-        <p class="etiqueta-estado">
-          <span>Estado</span> <strong id="etiqueta-estado">Reposo</strong>
-        </p>
-
-        <div class="vista" role="group" aria-label="Vista">
-          <button type="button" id="vista-estudio" data-vista="estudio" aria-pressed="true">Estudio</button>
-          <button type="button" id="vista-escritorio" data-vista="escritorio" aria-pressed="false">Escritorio</button>
-        </div>
-
-        <p class="atajo">
-          <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>K</kbd>
-          <span>muestra u oculta al kitsune</span>
-        </p>
-      </section>
-
-      <aside class="panel">
-        <header class="cabecera">
-          <p class="cabecera__kanji" lang="ja" title="Kyūbi: nueve colas">九尾</p>
-          <div>
-            <h1>Kitsune</h1>
-            <p class="cabecera__sub">Personaje del asistente de escritorio para Windows</p>
-          </div>
+          <button type="button" class="icono-boton" id="boton-ajustes" aria-label="Ajustes" title="Ajustes"></button>
+          <button type="button" class="icono-boton" id="boton-cerrar" aria-label="Cerrar el diálogo" title="Cerrar"></button>
         </header>
-
-        <section class="bloque" aria-labelledby="titulo-estado">
-          <h2 id="titulo-estado">Estado</h2>
-          <div class="estados" id="estados" role="group" aria-labelledby="titulo-estado"></div>
-          <p class="estados__desc" id="descripcion-estado"></p>
-        </section>
-
-        <section class="bloque" aria-labelledby="titulo-acciones">
-          <h2 id="titulo-acciones">Animaciones</h2>
-          <div class="acciones" id="acciones"></div>
-        </section>
-
-        <section class="bloque" aria-labelledby="titulo-pelaje">
-          <h2 id="titulo-pelaje">Pelaje</h2>
-          <div class="paletas" id="paletas" role="group" aria-labelledby="titulo-pelaje"></div>
-        </section>
-
-        <section class="bloque" aria-labelledby="titulo-opciones">
-          <h2 id="titulo-opciones">Opciones</h2>
-          <label class="interruptor" for="opcion-cursor">
-            <input type="checkbox" id="opcion-cursor" checked />
-            <span class="interruptor__pista" aria-hidden="true"></span>
-            Seguir el cursor con la mirada
-          </label>
-          <label class="interruptor" for="opcion-fuegos">
-            <input type="checkbox" id="opcion-fuegos" checked />
-            <span class="interruptor__pista" aria-hidden="true"></span>
-            Fuegos fatuos alrededor
-          </label>
-        </section>
-
-        <footer class="hoja-ruta">
-          <h2>Hoja de ruta</h2>
-          <ol>
-            <li class="hecho"><span><strong>Personaje</strong> y animaciones</span></li>
-            <li>Diálogo para hablar con Claude</li>
-            <li>Bandeja de correo en rojo y negro</li>
-            <li>Ajustes personalizables</li>
-          </ol>
-        </footer>
-      </aside>
+        <div class="dialogo__cuerpo">
+          <section class="vista" id="vista-chat" role="tabpanel" aria-labelledby="pestana-chat"></section>
+          <section class="vista" id="vista-correo" role="tabpanel" aria-labelledby="pestana-correo" hidden></section>
+          <section class="vista" id="vista-ajustes" aria-label="Ajustes" hidden></section>
+        </div>
+      </section>
+      <div class="zorro" id="zorro"></div>
     </div>
-    <script type="module" src="/src/preview/main.js"></script>
+    <script type="module" src="/src/app/main.js"></script>
   </body>
 </html>
