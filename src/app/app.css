@@ -1,36 +1,41 @@
-/* Inari al anochecer: laca añil (yoru), blanco de concha (gofun), pan de
-   oro (kin) para lo que se pulsa y bermellón (shu) solo para el sello, lo
-   pendiente y lo que se borra. Las respuestas del zorro van en papel washi,
-   como los omikuji de los santuarios. La ventana es transparente; todo lo
-   que no es diálogo ni zorro deja pasar el ratón. */
+/* Laca negra y bermellón: el negro cálido del urushi, el rojo de la laca
+   shu para lo que se pulsa y lo activo, y un hilo de oro solo de filo y en
+   los títulos. Las respuestas del zorro van en papel washi, como los
+   omikuji de los santuarios. La ventana es transparente; todo lo que no es
+   diálogo ni zorro deja pasar el ratón. */
 :root {
-  --yoru: #0e1322;
-  --negro: #121829;
-  --carbon: #161d31;
-  --carbon-2: #1c2440;
-  --carbon-3: #263052;
-  --linea: #34405f;
-  --linea-suave: #252e49;
-  --texto: #ece6da;
-  --texto-2: #aeb2c3;
-  --texto-3: #7c839c;
-  /* Acento: oro. Los nombres «rojo» se quedan por compatibilidad con el resto de reglas. */
-  --kin: #c8a35f;
-  --kin-vivo: #dcbb7b;
-  --kin-hondo: #7d6334;
-  --kin-velo: rgba(200, 163, 95, 0.13);
-  --rojo: var(--kin);
-  --rojo-vivo: var(--kin-vivo);
-  --rojo-hondo: var(--kin-hondo);
-  --rojo-velo: var(--kin-velo);
-  --shu: #cf4a32;
-  --shu-vivo: #e8644c;
-  --shu-velo: rgba(207, 74, 50, 0.14);
+  --yoru: #0a0707;
+  --negro: #0f0a0a;
+  --carbon: #161010;
+  --carbon-2: #1f1615;
+  --carbon-3: #2b1e1c;
+  --linea: #432a26;
+  --linea-suave: #2c1d1b;
+  --texto: #f2e8e0;
+  --texto-2: #bba69f;
+  --texto-3: #8a726c;
+  /* Acento: el bermellón de la laca. Los nombres «rojo» se quedan por compatibilidad. */
+  --acento: #d23a2c;
+  --acento-vivo: #ec5040;
+  --acento-hondo: #7e1d18;
+  --acento-velo: rgba(210, 58, 44, 0.15);
+  --rojo: var(--acento);
+  --rojo-vivo: var(--acento-vivo);
+  --rojo-hondo: var(--acento-hondo);
+  --rojo-velo: var(--acento-velo);
+  --shu: var(--acento);
+  --shu-vivo: var(--acento-vivo);
+  --shu-velo: var(--acento-velo);
+  /* Oro: solo filos y títulos. */
+  --kin: #c9a35e;
+  --kin-vivo: #dfbd7c;
+  --kin-hondo: #7a5f31;
+  --kin-velo: rgba(201, 163, 94, 0.12);
   --oro: var(--kin);
-  --tinta: #141a2c;
-  --papel: #e9e1d0;
-  --papel-tinta: #231e18;
-  --papel-tinta-2: #6b6255;
+  --tinta: #fff3ec;
+  --papel: #ebe2d1;
+  --papel-tinta: #241c17;
+  --papel-tinta-2: #6d6155;
 
   --display: 'Shippori Mincho B1', 'Yu Mincho', 'Hiragino Mincho ProN', Georgia, serif;
   --ui: 'Zen Kaku Gothic New', 'Yu Gothic UI', 'Yu Gothic', 'Segoe UI', system-ui, sans-serif;
@@ -38,7 +43,7 @@
 
   --radio: 18px;
   --radio-sm: 10px;
-  --sombra: 0 30px 70px rgba(4, 6, 14, 0.6), 0 2px 0 rgba(255, 255, 255, 0.03) inset;
+  --sombra: 0 30px 70px rgba(0, 0, 0, 0.6), 0 2px 0 rgba(255, 255, 255, 0.03) inset;
   color-scheme: dark;
 }
 
@@ -606,7 +611,7 @@ textarea.campo {
 }
 
 .burbuja a {
-  color: var(--kin-vivo);
+  color: #f08a7c;
 }
 
 .chat__estado {
@@ -1087,7 +1092,7 @@ textarea.campo {
   margin-left: auto;
   border: 0;
   background: transparent;
-  color: var(--kin-vivo);
+  color: #f08a7c;
   font-weight: 700;
   font-size: 12.5px;
 }
@@ -3058,9 +3063,9 @@ html {
 }
 
 /* ==========================================================================
-   Tema: Inari al anochecer
-   Laca añil con un filo de oro, papel washi para lo que dice el zorro y
-   bermellón solo como sello. Va al final para mandar sobre lo anterior.
+   Tema: laca negra y bermellón
+   Negro de urushi con un filo de oro, bermellón para lo que se pulsa y
+   papel washi para lo que dice el zorro. Va al final para mandar sobre lo anterior.
    ========================================================================== */
 
 :root {
@@ -3071,20 +3076,20 @@ html {
 :root[data-plataforma='web'] body,
 :root[data-plataforma='demo'] body {
   background:
-    radial-gradient(90% 55% at 50% 0%, rgba(54, 70, 120, 0.42), transparent 70%),
-    radial-gradient(60% 40% at 50% 100%, rgba(200, 163, 95, 0.07), transparent 70%),
+    radial-gradient(80% 50% at 50% 100%, rgba(150, 28, 20, 0.28), transparent 70%),
+    radial-gradient(70% 45% at 50% 0%, rgba(201, 163, 94, 0.05), transparent 70%),
     var(--yoru);
 }
 
 /* El diálogo: una caja lacada con el filo dorado, como las de maki-e. */
 .dialogo {
-  background: linear-gradient(180deg, #1a223b 0%, #141b2e 100%);
+  background: linear-gradient(180deg, #1b1312 0%, #120c0c 100%);
   border-color: rgba(200, 163, 95, 0.22);
   box-shadow: var(--sombra), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .dialogo::after {
-  background: #141b2e;
+  background: #120c0c;
   border-color: rgba(200, 163, 95, 0.22);
 }
 
@@ -3110,31 +3115,31 @@ html {
 }
 
 .boton:hover {
-  border-color: var(--kin-hondo);
+  border-color: var(--acento-hondo);
   background: rgba(255, 255, 255, 0.02);
 }
 
 .boton--primario {
-  background: var(--kin);
-  border-color: var(--kin);
+  background: var(--acento);
+  border-color: var(--acento);
   color: var(--tinta);
   font-weight: 700;
 }
 
 .boton--primario:hover {
-  background: var(--kin-vivo);
-  border-color: var(--kin-vivo);
+  background: var(--acento-vivo);
+  border-color: var(--acento-vivo);
 }
 
 .campo,
 .buscador {
   border-radius: 12px;
-  background: rgba(8, 11, 22, 0.55);
+  background: rgba(5, 2, 2, 0.5);
 }
 
 .campo:focus,
 .buscador:focus-within {
-  border-color: var(--kin-hondo);
+  border-color: var(--acento-hondo);
 }
 
 .insignia,
@@ -3157,11 +3162,11 @@ html {
   bottom: -7px;
   height: 2px;
   border-radius: 2px;
-  background: var(--kin);
+  background: var(--acento);
 }
 
 .apartados button[aria-selected='true'] .apartado__icono {
-  color: var(--kin);
+  color: var(--acento);
 }
 
 /* ---------- Chat ---------- */
@@ -3179,7 +3184,7 @@ html {
   border: 0;
   border-radius: 4px 16px 16px 16px;
   color: var(--papel-tinta);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 10px 26px rgba(4, 6, 14, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 10px 26px rgba(0, 0, 0, 0.4);
 }
 
 .burbuja--kitsune strong {
@@ -3235,17 +3240,17 @@ html {
 }
 
 .sugerencias button:hover {
-  color: var(--kin-vivo);
+  color: var(--acento-vivo);
 }
 
 .sugerencias button .icono {
-  color: var(--kin);
+  color: var(--acento);
 }
 
 /* El pulso: una línea con un filo de oro, sin caja. */
 .pulso {
   border: 0;
-  border-left: 2px solid var(--kin);
+  border-left: 2px solid var(--acento);
   border-radius: 0;
   background: transparent;
   padding: 2px 0 2px 14px;
@@ -3260,20 +3265,20 @@ html {
 }
 
 .compositor {
-  background: rgba(8, 11, 22, 0.55);
+  background: rgba(5, 2, 2, 0.5);
 }
 
 .compositor:focus-within {
-  border-color: var(--kin-hondo);
+  border-color: var(--acento-hondo);
 }
 
 .boton-enviar {
-  background: var(--kin);
+  background: var(--acento);
   color: var(--tinta);
 }
 
 .boton-enviar:hover {
-  background: var(--kin-vivo);
+  background: var(--acento-vivo);
 }
 
 .boton-micro.escuchando {
@@ -3282,7 +3287,7 @@ html {
 }
 
 .puntos i {
-  background: var(--kin);
+  background: var(--acento);
 }
 
 .nota-recordatorio {
@@ -3295,11 +3300,11 @@ html {
 .filas .fila__icono,
 .hoja__icono {
   background: transparent;
-  color: var(--kin);
+  color: var(--acento);
 }
 
 .nota-recordatorio--aviso {
-  border-color: var(--kin-hondo);
+  border-color: var(--acento-hondo);
 }
 
 /* ---------- Correo ---------- */
@@ -3323,7 +3328,7 @@ html {
 
 .filtros button[aria-pressed='true'] {
   background: transparent;
-  border-bottom-color: var(--kin);
+  border-bottom-color: var(--acento);
   color: var(--texto);
 }
 
@@ -3341,7 +3346,7 @@ html {
 }
 
 .fila.no-leida .fila__fecha {
-  color: var(--kin);
+  color: var(--acento);
 }
 
 .fila + .fila {
@@ -3366,25 +3371,25 @@ html {
 }
 
 .calendario__celda.hoy .calendario__numero {
-  color: var(--shu-vivo);
-  box-shadow: inset 0 0 0 1.5px var(--shu);
+  color: var(--kin-vivo);
+  box-shadow: inset 0 0 0 1.5px var(--kin);
 }
 
 .calendario__celda[aria-pressed='true'] .calendario__numero {
-  background: var(--kin);
+  background: var(--acento);
   color: var(--tinta);
 }
 
 .calendario__puntos i {
-  background: var(--kin);
+  background: var(--acento);
 }
 
 .calendario__puntos i.todo-el-dia {
-  background: var(--texto-2);
+  background: var(--kin);
 }
 
 .filas .fila--evento {
-  border-left-color: var(--kin);
+  border-left-color: var(--acento);
 }
 
 .filas .fila--todo-el-dia {
@@ -3403,7 +3408,7 @@ html {
 /* ---------- Ajustes ---------- */
 
 .segmentado button[aria-pressed='true'] {
-  box-shadow: inset 0 0 0 1px var(--kin-hondo);
+  box-shadow: inset 0 0 0 1px var(--acento-hondo);
 }
 
 /* ---------- Móvil ---------- */
@@ -3415,7 +3420,7 @@ html {
 :root.movil .apartados button[aria-selected='true'] .apartado__icono,
 :root.movil .apartados button.activo .apartado__icono {
   background: transparent;
-  color: var(--kin);
+  color: var(--acento);
 }
 
 :root.movil .apartados button[aria-selected='true']::after,
@@ -3428,13 +3433,13 @@ html {
   right: 36%;
   height: 2px;
   border-radius: 2px;
-  background: var(--kin);
+  background: var(--acento);
 }
 
 :root.movil .apartados .insignia,
 :root.movil .apartados button[aria-selected='true'] .insignia {
   background: var(--shu);
-  box-shadow: 0 0 0 2px #141b2e;
+  box-shadow: 0 0 0 2px #120c0c;
 }
 
 :root.movil .sugerencias {
@@ -3451,7 +3456,7 @@ html {
 
 :root.movil .sugerencias button:active {
   background: transparent;
-  color: var(--kin-vivo);
+  color: var(--acento-vivo);
   transform: none;
 }
 
@@ -3518,7 +3523,7 @@ html {
 }
 
 .hoja {
-  background: rgba(22, 29, 49, 0.96);
+  background: rgba(27, 18, 17, 0.96);
   border-top-color: rgba(200, 163, 95, 0.22);
 }
 
@@ -3540,12 +3545,12 @@ html {
 }
 
 .filas .fila--hoy {
-  background: linear-gradient(90deg, var(--kin-velo), transparent 70%);
+  background: linear-gradient(90deg, var(--acento-velo), transparent 70%);
 }
 
 .filas .fila--evento,
 .filas .fila--todo-el-dia {
-  border-left: 2px solid var(--kin);
+  border-left: 2px solid var(--acento);
   padding-left: 12px;
 }
 
