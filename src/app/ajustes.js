@@ -136,8 +136,8 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
           </div>
           <div class="ajuste">
             <span class="ajuste__etiqueta">Estilo</span>
-            ${segmentado('estilo', [['realista', 'Realista'], ['anime', 'Anime'], ['kawaii', 'Kawaii'], ['tinta', 'Tinta']])}
-            <p class="ajuste__ayuda">Realista, con pelo; anime y kawaii, como dibujo animado; tinta, como un sumi-e. Los dibujados gastan menos batería.</p>
+            ${segmentado('estilo', [['ilustracion', 'Ilustración'], ['realista', 'Realista'], ['anime', 'Anime'], ['kawaii', 'Kawaii'], ['tinta', 'Tinta']])}
+            <p class="ajuste__ayuda">Ilustración, una cría de peluche con ojos grandes; realista, con pelo de zorro; anime y kawaii, como dibujo animado; tinta, como un sumi-e. Los dibujados gastan menos batería.</p>
           </div>
           ${
             escritorio

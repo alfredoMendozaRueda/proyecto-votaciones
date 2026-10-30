@@ -4,7 +4,8 @@ import * as THREE from 'three';
 // iris ámbar que llena la abertura y pupila en rendija vertical.
 const W = 0.064;
 const H = 0.04;
-export const PARCHE_OJO = { mitadU: W * 1.75, mitadV: H * 1.75 };
+// El parche deja sitio al ojo grande de la ilustración (el de zorro ocupa solo el centro).
+export const PARCHE_OJO = { mitadU: W * 1.9, mitadV: H * 2.6 };
 
 // lado: +1 para el ojo en +x, -1 para el de -x. Todo se dibuja en el shader:
 // parpadear, entornar, mirar o dilatar la pupila es cambiar un uniform.
@@ -22,6 +23,8 @@ export function crearMaterialOjo(lado) {
       uApertura: { value: 1 },
       uAlegria: { value: 0 },
       uDilatacion: { value: 0.25 },
+      // 0 = ojo de zorro (almendra y rendija); 1 = de ilustración (redondo, iris grande y brillos).
+      uCaricatura: { value: 0 },
       uMirada: { value: new THREE.Vector2() },
       uIris: { value: new THREE.Color() },
       uIrisClaro: { value: new THREE.Color() },
@@ -45,6 +48,7 @@ export function crearMaterialOjo(lado) {
       uniform float uApertura;
       uniform float uAlegria;
       uniform float uDilatacion;
+      uniform float uCaricatura;
       uniform vec2 uMirada;
       uniform vec3 uIris;
       uniform vec3 uIrisClaro;
@@ -63,17 +67,19 @@ export function crearMaterialOjo(lado) {
       }
 
       void main() {
-        float W = uMedio.x;
-        float H = uMedio.y;
+        // En la ilustración el ojo es bastante más grande.
+        float W = uMedio.x * mix(1.0, 1.32, uCaricatura);
+        float H = uMedio.y * mix(1.0, 1.32, uCaricatura);
         vec2 q = vQ;
         float xn = q.x * uLado / W;          // +1 = rabillo exterior
         float x = clamp(xn, -1.0, 1.0);
         float aa = max(fwidth(q.y), 1e-5);
 
         // Párpados: almendra oblicua, con el rabillo exterior más alto.
-        float incl = 0.32 * H * x;
-        float sup = incl + curva(x, 0.78 * H, 0.55);
-        float inf = incl - curva(x, 0.52 * H, 0.8);
+        float k = uCaricatura;
+        float incl = mix(0.32, 0.06, k) * H * x;
+        float sup = incl + curva(x, mix(0.78, 1.45, k) * H, mix(0.55, 0.42, k));
+        float inf = incl - curva(x, mix(0.52, 1.22, k) * H, mix(0.8, 0.5, k));
         float cerrado = inf + curva(x, 0.12 * H, 1.0);
         float abierto = clamp(uApertura, 0.0, 1.0);
         float supEf = mix(cerrado, sup, abierto) + max(uApertura - 1.0, 0.0) * curva(x, 0.6 * H, 0.55);
@@ -84,8 +90,8 @@ export function crearMaterialOjo(lado) {
         float dentro = banda(q.y, infEf, supEf, aa) * step(abs(xn), 1.0);
 
         // Iris: llena la abertura; aro oscuro, fibras y reflejo del cielo arriba.
-        float rI = 0.98 * H;
-        vec2 cI = vec2(uMirada.x * 0.016, uMirada.y * 0.01 + 0.1 * H);
+        float rI = mix(0.98, 1.3, k) * H;
+        vec2 cI = vec2(uMirada.x * 0.016, uMirada.y * 0.01 + mix(0.1, 0.08, k) * H);
         vec2 dI = q - cI;
         float t = length(dI) / rI;
         float aaT = max(fwidth(t), 1e-4);
@@ -97,23 +103,25 @@ export function crearMaterialOjo(lado) {
         iris += 0.12 * smoothstep(-0.2, 0.9, dI.y / rI) * (1.0 - t) * vec3(1.0, 0.95, 0.85);
 
         // Pupila en rendija vertical, más redonda al dilatarse.
-        float anchoP = rI * (0.12 + 0.3 * uDilatacion);
-        float altoP = rI * (0.82 - 0.1 * uDilatacion);
-        float pu = abs(dI.x) / anchoP + (dI.y / altoP) * (dI.y / altoP);
+        // En la ilustración, pupila redonda y grande.
+        float anchoP = rI * mix(0.12 + 0.3 * uDilatacion, 0.52 + 0.1 * uDilatacion, k);
+        float altoP = rI * mix(0.82 - 0.1 * uDilatacion, 0.52 + 0.1 * uDilatacion, k);
+        float pu = mix(abs(dI.x) / anchoP, (dI.x / anchoP) * (dI.x / anchoP), k) + (dI.y / altoP) * (dI.y / altoP);
         float aaP = max(fwidth(pu), 1e-4);
         iris = mix(iris, uPupila, 1.0 - smoothstep(1.0 - aaP, 1.0 + aaP, pu));
-        vec3 color = mix(uEsclera, iris, enIris);
+        vec3 color = mix(mix(uEsclera, vec3(0.97, 0.94, 0.9), k), iris, enIris);
 
         // Sombra que proyecta el párpado sobre el globo ocular.
         color *= mix(0.3, 1.0, smoothstep(0.0, 0.35 * H, supEf - q.y));
 
         // Brillos de la córnea: uno nítido de la luz principal y otro tenue.
-        float b1 = 1.0 - smoothstep(0.7, 1.0, length((q - cI - vec2(0.3 * rI, 0.38 * rI)) / vec2(0.17, 0.13) / rI));
-        float b2 = 1.0 - smoothstep(0.6, 1.0, length(q - cI - vec2(-0.32 * rI, -0.4 * rI)) / (0.07 * rI));
+        vec2 tamB1 = mix(vec2(0.17, 0.13), vec2(0.3, 0.3), k);
+        float b1 = 1.0 - smoothstep(0.7, 1.0, length((q - cI - mix(vec2(0.3, 0.38), vec2(0.26, 0.3), k) * rI) / tamB1 / rI));
+        float b2 = 1.0 - smoothstep(0.6, 1.0, length(q - cI - mix(vec2(-0.32, -0.4), vec2(-0.3, -0.32), k) * rI) / (mix(0.07, 0.13, k) * rI));
         color = mix(color, vec3(1.0), (0.95 * b1 + 0.6 * b2) * dentro);
 
         // Borde negro de los párpados, más grueso arriba.
-        float gs = (0.0045 + 0.004 * smoothstep(-0.5, 1.0, xn)) * smoothstep(-1.05, -0.8, xn);
+        float gs = (0.0045 + 0.004 * smoothstep(-0.5, 1.0, xn)) * smoothstep(-1.05, -0.8, xn) * mix(1.0, 1.35, k);
         float gi = 0.0035 * smoothstep(-1.0, -0.6, xn);
         float extra = max(xn - 1.0, 0.0);
         float baseSup = supEf + extra * 0.35 * H;
@@ -126,12 +134,12 @@ export function crearMaterialOjo(lado) {
         float tLag = clamp((-0.85 - xn) / 0.55, 0.0, 1.0);
         float yLag = incl * 0.0 - 0.32 * H - tLag * 0.85 * H;
         float gLag = 0.006 * (1.0 - tLag);
-        float lagrimal = banda(q.y, yLag - gLag, yLag + gLag, aa) * step(xn, -0.85) * step(-1.4, xn);
+        float lagrimal = banda(q.y, yLag - gLag, yLag + gLag, aa) * step(xn, -0.85) * step(-1.4, xn) * (1.0 - k);
 
         // Pincelada roja de kitsune sobre el rabillo.
         float baseMarca = baseSup + gs + 0.004 + extra * 0.3 * H;
         float gm = 0.0042 * smoothstep(0.35, 0.75, xn) * (1.0 - smoothstep(1.15, 1.6, xn));
-        float marca = banda(q.y, baseMarca, baseMarca + gm, aa);
+        float marca = banda(q.y, baseMarca, baseMarca + gm, aa) * (1.0 - k);
 
         float linea = max(max(bordeSup, bordeInf), lagrimal);
         vec4 c = vec4(color, dentro);

@@ -59,7 +59,8 @@ function pintorCabeza(p, n, u, v, pal, c) {
   pelo = THREE.MathUtils.lerp(pelo, 0.3, smoothstep(0.22, 0.4, p.z));
   // Gorguera: el pelo de las mejillas sale largo hacia los lados.
   pelo += 1.3 * blanco * smoothstep(0.12, -0.08, p.z) * smoothstep(0.5, 0.95, Math.abs(n.x));
-  for (const ojo of OJOS) pelo *= smoothstep(0.05, 0.085, p.distanceTo(ojo.centro));
+  // Sin pelo sobre el ojo (ni sobre el ojo grande de la ilustración).
+  for (const ojo of OJOS) pelo *= smoothstep(0.06, 0.1, p.distanceTo(ojo.centro));
   return pelo * (1 - smoothstep(0.47, 0.5, p.z));
 }
 
@@ -109,6 +110,22 @@ function pintorPata(p, n, u, v, pal, c) {
 }
 
 // ---------- Montaje ----------
+
+// Un trazo pegado a la cabeza: cada punto se proyecta sobre la superficie
+// siguiendo una dirección y se separa un poco para que no se hunda.
+function trazoSobre(geometria, puntos, direccion, { radio, color }) {
+  const malla = new THREE.Mesh(geometria, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  const rayo = new THREE.Raycaster();
+  const dir = direccion.clone().normalize();
+  const pegados = puntos.map((p) => {
+    rayo.set(p.clone().addScaledVector(dir, 0.4), dir.clone().negate());
+    const golpe = rayo.intersectObject(malla, false)[0];
+    return golpe ? golpe.point.addScaledVector(dir, 0.004) : p;
+  });
+  const curva = new THREE.CatmullRomCurve3(pegados);
+  const tubo = new THREE.TubeGeometry(curva, 24, radio, 6, false);
+  return new THREE.Mesh(tubo, new THREE.MeshBasicMaterial({ color }));
+}
 
 export function construirZorro(materialesCuerpo) {
   const piezas = [];
@@ -383,6 +400,36 @@ export function construirZorro(materialesCuerpo) {
   mallaMarca.renderOrder = 2;
   cabeza.add(mallaMarca);
 
+  // Rasgos de ilustración (cejas y sonrisa): solo en los estilos que los usan.
+  const rasgos = new THREE.Group();
+  rasgos.visible = false;
+  cabeza.add(rasgos);
+  for (const lado of [-1, 1]) {
+    const ceja = [
+      [0.05, 0.222],
+      [0.08, 0.243],
+      [0.115, 0.249],
+      [0.152, 0.234],
+    ].map(([x, y]) => new THREE.Vector3(x * lado, y, 0.2));
+    rasgos.add(trazoSobre(geoCabeza, ceja, new THREE.Vector3(0.4 * lado, 0.45, 0.8), { radio: 0.0058, color: '#3a1d12' }));
+  }
+  const sonrisa = [
+    [-0.062, -0.006],
+    [-0.042, -0.026],
+    [-0.018, -0.032],
+    [0, -0.024],
+    [0.018, -0.032],
+    [0.042, -0.026],
+    [0.062, -0.006],
+  ].map(([x, y]) => new THREE.Vector3(x, y, 0.5));
+  rasgos.add(trazoSobre(geoCabeza, sonrisa, new THREE.Vector3(0, -0.15, 1), { radio: 0.0042, color: '#2a1610' }));
+  rasgos.add(
+    trazoSobre(geoCabeza, [new THREE.Vector3(0, 0.002, 0.53), new THREE.Vector3(0, -0.012, 0.52), new THREE.Vector3(0, -0.024, 0.51)], new THREE.Vector3(0, -0.1, 1), {
+      radio: 0.0038,
+      color: '#2a1610',
+    }),
+  );
+
   // Bigotes: líneas finas que salen del labio superior.
   const materialBigotes = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.7 });
   for (const lado of [-1, 1]) {
@@ -411,6 +458,8 @@ export function construirZorro(materialesCuerpo) {
     patas,
     ojos,
     marca,
+    mallaMarca,
+    rasgos,
     colasBase,
     mallas,
     materialesSueltos: { boca: boca.material, nariz: nariz.material, bigotes: materialBigotes },

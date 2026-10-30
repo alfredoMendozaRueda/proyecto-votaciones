@@ -38,6 +38,8 @@ export class Cola {
     this.k = (indice - centro) / centro;
     this.longitud = 2.15 - 0.3 * Math.abs(this.k);
     this.radioMax = 0.155 - 0.025 * Math.abs(this.k);
+    this.grosor = 1;
+    this.inicioPunta = 0.86;
     this.fase = indice * 1.37;
 
     const vertices = ANILLOS * (LADOS + 1);
@@ -100,7 +102,8 @@ export class Cola {
       const s = j / (ANILLOS - 1);
       _c.set(paleta.flanco).lerp(new THREE.Color(paleta.lomo), smoothstep(0.0, 0.35, s) * 0.6);
       _c.lerp(new THREE.Color(paleta.bandaCola), smoothstep(0.66, 0.8, s) * 0.7);
-      _c.lerp(new THREE.Color(paleta.puntaCola), smoothstep(0.86, 0.92, s));
+      // La punta clara empieza donde diga el estilo (más larga en la ilustración).
+      _c.lerp(new THREE.Color(paleta.puntaCola), smoothstep(this.inicioPunta, this.inicioPunta + 0.08, s));
       const largo = 0.7 + 0.6 * Math.sqrt(Math.sin(Math.PI * Math.min(s * 1.1, 1)));
       for (let l = 0; l <= LADOS; l++) {
         const i = j * (LADOS + 1) + l;
@@ -137,7 +140,8 @@ export class Cola {
     const largo = this.longitud * (0.12 + 0.88 * d) * (1 + 0.03 * Math.sin(tOnda * 0.9 + this.fase));
     const seg = largo / (ANILLOS - 1);
     const rizoTotal = 1.45 * p.rizo * (0.35 + 0.65 * d);
-    const escalaRadio = this.radioMax * (0.35 + 0.65 * d);
+    // grosor: lo pone el estilo (colas más gruesas y esponjosas en la ilustración).
+    const escalaRadio = this.radioMax * this.grosor * (0.35 + 0.65 * d);
 
     _p.set(0, 0, 0);
     for (let j = 0; j < ANILLOS; j++) {

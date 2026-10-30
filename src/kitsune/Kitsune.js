@@ -188,7 +188,7 @@ export class Kitsune {
       movimientoReducido: reducido,
       // >1 acerca la cámara: en la app el zorro llena más su hueco.
       zoom: 1,
-      estilo: 'realista',
+      estilo: 'ilustracion',
       ...opciones,
     };
     this.contenedor = contenedor;
@@ -337,8 +337,9 @@ export class Kitsune {
   }
 
   setPaleta(nombre) {
-    const pal = PALETAS[nombre];
-    if (!pal) return;
+    if (!PALETAS[nombre]) return;
+    // El estilo puede retocar algunos colores del pelaje (p. ej., la cola sin banda oscura).
+    const pal = { ...PALETAS[nombre], ...(this._estilo?.retoques?.(PALETAS[nombre]) ?? {}) };
     this.paleta = nombre;
     const colores = Object.fromEntries(
       Object.entries(pal)
@@ -398,6 +399,16 @@ export class Kitsune {
       }
     }
     this.coloretes.visible = Boolean(estilo.coloretes);
+    this.zorro.rasgos.visible = estilo.rasgos;
+    this.zorro.mallaMarca.visible = estilo.marca;
+    for (const ojo of this.zorro.ojos) ojo.uniforms.uCaricatura.value = estilo.caricatura;
+    for (const oreja of this.orejas) oreja.pivote.scale.set(estilo.orejas[0], estilo.orejas[1], estilo.orejas[0]);
+    for (const pata of this.patas) pata.hombro.scale.set(estilo.patas, 1, estilo.patas);
+    for (const cola of this.colas) {
+      cola.grosor = estilo.colas;
+      cola.inicioPunta = estilo.punta;
+    }
+    if (this.paleta) this.setPaleta(this.paleta);
     this.zorro.materialesSueltos.bigotes.opacity = estilo.bigotes;
     this._pendientePintar = true;
     this._emitir('estilo', this.estilo);
@@ -628,7 +639,8 @@ export class Kitsune {
     // Cabeza
     const habla = this._habla(dt, p.habla);
     this.cabeza.position.set(0, 1.37 - 0.12 * p.agachado + respiracion * 0.006 + 0.05 * bebe, 0.17 + 0.05 * p.agachado);
-    this.cabeza.scale.setScalar(1 + 0.42 * bebe);
+    const escalaCabeza = (1 + 0.42 * bebe) * this._estilo.cabeza;
+    this.cabeza.scale.set(escalaCabeza, escalaCabeza, escalaCabeza * this._estilo.hocico);
     this.cabeza.rotation.set(
       p.cabeceo + o.cabeceo + this.mirada.y * -0.28 + p.habla * 0.04 * Math.sin(t * 6.8) - 0.05 * habla,
       this.mirada.x * 0.55 + o.giro,
@@ -672,7 +684,7 @@ export class Kitsune {
 
     // Colas
     const pc = Object.assign(this._pc, p);
-    pc.abanico = p.abanico + o.abanico;
+    pc.abanico = p.abanico + o.abanico + this._estilo.abanico;
     pc.ondaAmp = p.ondaAmp * reducido;
     pc.remolino = p.remolino * reducido;
     this.colas.forEach((cola, i) => {

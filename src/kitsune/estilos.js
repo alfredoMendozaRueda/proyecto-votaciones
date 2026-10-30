@@ -8,9 +8,59 @@ import * as THREE from 'three';
 //   kawaii:   cría, colores pastel, contorno suave, pupilas grandes y coloretes.
 //   tinta:    sumi-e: grises de tinta sobre papel con trazo negro; las marcas
 //             y los fuegos siguen en rojo.
+// Valores comunes; cada estilo cambia solo lo suyo.
+const BASE = {
+  pelo: true,
+  toon: null,
+  contorno: null,
+  bebe: 0,
+  dilatacion: 0,
+  apertura: 1,
+  bigotes: 0.7,
+  caricatura: 0, // ojos de ilustración (redondos, iris marrón y brillos)
+  rasgos: false, // cejas y sonrisa
+  marca: true, // marca roja de la frente
+  orejas: [1, 1], // ancho y alto de las orejas
+  cabeza: 1, // tamaño extra de la cabeza
+  patas: 1, // grosor de las patas
+  hocico: 1,
+  abanico: 0, // colas más abiertas en abanico
+  colas: 1, // grosor de las colas
+  punta: 0.86, // dónde empieza la punta clara de las colas (0 = raíz, 1 = punta)
+  retoques: null, // ajustes de color sobre el pelaje elegido
+};
+
 export const ESTILOS = {
-  realista: { nombre: 'Realista', pelo: true, toon: null, contorno: null, bebe: 0, dilatacion: 0, apertura: 1, bigotes: 0.7 },
+  // Como la ilustración de referencia: cría de peluche, ojos grandes y
+  // redondos, cejas, sonrisa, calcetines chocolate y nueve colas en abanico
+  // que pasan del naranja al crema sin banda oscura.
+  ilustracion: {
+    ...BASE,
+    nombre: 'Ilustración',
+    bebe: 1,
+    colas: 1.45,
+    punta: 0.62,
+    dilatacion: 0.35,
+    apertura: 1.15,
+    bigotes: 0,
+    caricatura: 1,
+    rasgos: true,
+    marca: false,
+    orejas: [1.4, 1.12],
+    cabeza: 1.12,
+    patas: 1.35,
+    hocico: 0.74,
+    abanico: 0.45,
+    retoques: (p) => ({
+      bandaCola: p.flanco,
+      iris: '#6e3d1c',
+      medias: mezclar(p.medias, '#4a2414', 0.7),
+      orejaDorso: mezclar(p.orejaDorso, '#3a1d12', 0.6),
+    }),
+  },
+  realista: { ...BASE, nombre: 'Realista' },
   anime: {
+    ...BASE,
     nombre: 'Anime',
     pelo: false,
     toon: { rampa: [0.5, 1], saturacion: 1.18 },
@@ -21,7 +71,12 @@ export const ESTILOS = {
     bigotes: 0.9,
   },
   kawaii: {
+    ...BASE,
     nombre: 'Kawaii',
+    caricatura: 1,
+    rasgos: true,
+    hocico: 0.88,
+    retoques: (p) => ({ iris: '#6e3d1c' }),
     pelo: false,
     toon: { rampa: [0.7, 0.88, 1], pastel: 0.08, saturacion: 1.08 },
     contorno: { color: '#5b2c22', grosor: 0.013 },
@@ -32,6 +87,7 @@ export const ESTILOS = {
     bigotes: 0.3,
   },
   tinta: {
+    ...BASE,
     nombre: 'Tinta',
     pelo: false,
     toon: { rampa: [0.38, 0.78, 1], tinta: true },
@@ -42,6 +98,11 @@ export const ESTILOS = {
     bigotes: 1,
   },
 };
+
+// Mezcla dos colores hexadecimales (t = 0, el primero; 1, el segundo).
+function mezclar(a, b, t) {
+  return `#${new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString()}`;
+}
 
 // Escalera de luz del sombreado: pocos tonos, sin degradado entre ellos.
 function crearRampa(valores) {

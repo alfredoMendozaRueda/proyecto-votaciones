@@ -310,7 +310,7 @@ export function crearDemo() {
   let ajustes = {
     atajo: 'Control+Alt+K',
     paleta: 'carmesi',
-    estilo: 'realista',
+    estilo: 'ilustracion',
     tamano: 'mediano',
     posicion: 'izquierda',
     calidadPelo: 'auto',
