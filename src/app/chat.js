@@ -251,11 +251,33 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     restaurado = true;
     const anteriores = (await api.claude.mensajes?.().catch(() => [])) ?? [];
     if (!anteriores.length || mensajes.querySelector('.burbuja')) return false;
-    for (const m of anteriores) {
-      if (m.rol === 'usuario') añadir('burbuja--usuario', m.texto.replace(/\n*<texto>[\s\S]*<\/texto>/, ' (texto)'), true);
+    pintarMensajes(anteriores);
+    return true;
+  }
+
+  function pintarMensajes(lista) {
+    for (const m of lista) {
+      if (m.rol === 'usuario') añadir('burbuja--usuario', m.texto, true);
       else ponerCopiar(añadir('burbuja--kitsune', markdownAHtml(m.texto)), m.texto);
     }
-    return true;
+  }
+
+  // Abre una conversación del historial en el chat.
+  function cargar(lista) {
+    if (ocupado) return;
+    cerrarBloque();
+    quitarEstado();
+    mensajes.innerHTML = '';
+    if (lista.length) pintarMensajes(lista);
+    else vacio();
+    mensajes.scrollTop = mensajes.scrollHeight;
+  }
+
+  async function nueva() {
+    await api.claude.reiniciar();
+    cerrarBloque();
+    quitarEstado();
+    vacio();
   }
 
   function sinClave() {
@@ -465,10 +487,7 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     if (!ocupado && !entrada.value.trim()) alEstado('reposo');
   });
   contenedor.querySelector('#chat-nueva').addEventListener('click', async () => {
-    await api.claude.reiniciar();
-    cerrarBloque();
-    quitarEstado();
-    vacio();
+    await nueva();
     // En táctil, enfocar abriría el teclado sin pedirlo.
     if (!matchMedia('(pointer: coarse)').matches) entrada.focus();
   });
@@ -551,5 +570,7 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
         aviso: true,
       }),
     ofrecerTexto,
+    cargar,
+    nueva,
   };
 }

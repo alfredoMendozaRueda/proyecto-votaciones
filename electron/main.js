@@ -1,11 +1,23 @@
 import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, Notification, screen, shell, Tray } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { obtenerAjustes, guardarAjustes, guardarSecreto, borrarSecreto, leerSecreto, leerDatos, guardarDatos } from './almacen.js';
+import {
+  obtenerAjustes,
+  guardarAjustes,
+  guardarSecreto,
+  borrarSecreto,
+  leerSecreto,
+  leerDatos,
+  guardarDatos,
+  leerCifrado,
+  guardarCifrado,
+  borrarCifrado,
+} from './almacen.js';
 import { Gmail } from './gmail.js';
 import { ConversacionClaude, mensajeDeError } from '../src/compartido/claude.js';
 import { Recordatorios } from '../src/compartido/recordatorios.js';
 import { Memoria } from '../src/compartido/memoria.js';
+import { Conversaciones, ID_CONVERSACION } from '../src/compartido/conversaciones.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const URL_DESARROLLO = process.env.KITSUNE_DEV_URL;
@@ -39,6 +51,13 @@ const memoria = new Memoria({
   },
   guardar: (lista) => guardarSecreto('memoria', JSON.stringify(lista)),
 });
+const conversaciones = new Conversaciones({
+  leerIndice: () => leerCifrado('indice') ?? [],
+  guardarIndice: (lista) => guardarCifrado('indice', lista),
+  leer: (id) => leerCifrado(id),
+  guardar: (id, datos) => guardarCifrado(id, datos),
+  borrar: (id) => borrarCifrado(id),
+});
 const claude = new ConversacionClaude({
   obtenerClave: async () => leerSecreto('claveClaude'),
   obtenerAjustes,
@@ -51,7 +70,23 @@ const claude = new ConversacionClaude({
   recordatorios,
   memoria,
   emitir: (evento) => ventana?.webContents.send('claude:evento', evento),
+  alCambiarHistorial: (historial, id) => conversaciones.guardar(id, historial).catch(() => {}),
 });
+
+// Un evento creado desde la Agenda: se valida lo que llega del renderer.
+function eventoValido(e) {
+  const texto = (v, max) => (v === undefined ? '' : typeof v === 'string' && v.length <= max ? v : null);
+  if (!e || typeof e.titulo !== 'string' || !e.titulo.trim() || e.titulo.length > 200) return null;
+  if (!Number.isFinite(e.inicio) || !Number.isFinite(e.fin) || e.fin < e.inicio || typeof (e.todoElDia ?? false) !== 'boolean') return null;
+  const lugar = texto(e.lugar, 200);
+  const descripcion = texto(e.descripcion, 2000);
+  if (lugar === null || descripcion === null) return null;
+  return { titulo: e.titulo.trim(), inicio: e.inicio, fin: e.fin, todoElDia: e.todoElDia ?? false, lugar, descripcion };
+}
+
+function exigirCalendario() {
+  if (!gmail.conCalendario) throw new Error('Conecta tu calendario de Google en Ajustes.');
+}
 
 // A su hora: notificación del sistema y el zorro aparece con el aviso.
 function avisarRecordatorio(recordatorio) {
@@ -279,9 +314,43 @@ function registrarCanales() {
   manejar('claude:cancelar', () => claude.cancelar());
   manejar('claude:reiniciar', () => claude.reiniciar());
   manejar('claude:mensajes', () => claude.mensajesVisibles());
+  manejar('conversaciones:listar', async () => ({ lista: await conversaciones.listar(), actual: claude.id }));
+  manejar('conversaciones:abrir', async (id) => {
+    if (claude.controlador) throw new Error('Espera a que termine la respuesta.');
+    const datos = await conversaciones.cargar(String(id ?? ''));
+    if (!datos || !claude.restaurar(datos.historial, id)) throw new Error('No se ha podido abrir esa conversación.');
+    return claude.mensajesVisibles();
+  });
+  manejar('conversaciones:borrar', async (id) => {
+    if (!ID_CONVERSACION.test(String(id))) throw new Error('Identificador de conversación no válido.');
+    if (id === claude.id) claude.reiniciar();
+    return conversaciones.borrar(id);
+  });
+  manejar('conversaciones:borrarTodo', async () => {
+    claude.reiniciar();
+    await conversaciones.borrarTodo();
+  });
+
+  manejar('calendario:estado', () => ({ conectado: gmail.conectado, calendario: gmail.conCalendario }));
+  manejar('calendario:eventos', (desde, hasta) => {
+    exigirCalendario();
+    if (!Number.isFinite(desde) || !Number.isFinite(hasta) || hasta <= desde) throw new Error('Fechas no válidas.');
+    return gmail.calendario.eventos({ desde, hasta, maximo: 50 });
+  });
+  manejar('calendario:crear', (evento) => {
+    exigirCalendario();
+    const valido = eventoValido(evento);
+    if (!valido) throw new Error('Revisa los datos del evento.');
+    return gmail.calendario.crear(valido);
+  });
+  manejar('calendario:borrar', (id) => {
+    exigirCalendario();
+    return gmail.calendario.borrar(String(id ?? ''));
+  });
   manejar('claude:confirmar', (id, acepta) => claude.responderConfirmacion(String(id), acepta === true));
 
   manejar('memoria:listar', () => memoria.listar());
+  manejar('memoria:recordar', (texto) => memoria.recordar(String(texto ?? '')));
   manejar('memoria:olvidar', (id) => memoria.olvidar(String(id ?? '')));
   manejar('memoria:olvidarTodo', () => memoria.olvidarTodo());
   manejar('claude:redactar', async (id, indicaciones) => claude.redactarRespuesta(await gmail.leer(id), String(indicaciones ?? '')));
@@ -301,6 +370,7 @@ function registrarCanales() {
   manejar('correo:enviar', (datos) => gmail.enviar(datos));
 
   manejar('recordatorios:listar', () => recordatorios.listar());
+  manejar('recordatorios:crear', (datos) => recordatorios.crear({ texto: String(datos?.texto ?? ''), cuando: Number(datos?.cuando) }));
   manejar('recordatorios:borrar', (id) => recordatorios.borrar(String(id ?? '')));
 
   manejar('enlace:abrir', (url) => abrirEnlaceSeguro(url));
@@ -326,6 +396,11 @@ if (!app.requestSingleInstanceLock()) {
     programarCorreo();
     programarCitas();
     recordatorios.programar();
+    // Si la última conversación es de hace poco, se sigue con ella.
+    conversaciones.reciente().then(async (ultima) => {
+      const datos = ultima && (await conversaciones.cargar(ultima.id));
+      if (datos) claude.restaurar(datos.historial, ultima.id);
+    });
   });
   // Vive en la bandeja del sistema: cerrar la ventana no cierra la app.
   app.on('window-all-closed', () => {});

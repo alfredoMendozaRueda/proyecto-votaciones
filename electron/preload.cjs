@@ -31,6 +31,12 @@ contextBridge.exposeInMainWorld('asistente', {
     redactarRespuesta: (id, indicaciones) => invocar('claude:redactar', id, indicaciones),
     alEvento: (callback) => escuchar('claude:evento', callback),
   },
+  conversaciones: {
+    listar: () => invocar('conversaciones:listar'),
+    abrir: (id) => invocar('conversaciones:abrir', id),
+    borrar: (id) => invocar('conversaciones:borrar', id),
+    borrarTodo: () => invocar('conversaciones:borrarTodo'),
+  },
   correo: {
     estado: () => invocar('correo:estado'),
     guardarSecretoCliente: (secreto) => invocar('correo:cliente', secreto),
@@ -44,14 +50,20 @@ contextBridge.exposeInMainWorld('asistente', {
   },
   memoria: {
     listar: () => invocar('memoria:listar'),
+    recordar: (texto) => invocar('memoria:recordar', texto),
     olvidar: (id) => invocar('memoria:olvidar', id),
     olvidarTodo: () => invocar('memoria:olvidarTodo'),
   },
   calendario: {
+    estado: () => invocar('calendario:estado'),
+    eventos: (desde, hasta) => invocar('calendario:eventos', desde, hasta),
+    crear: (evento) => invocar('calendario:crear', evento),
+    borrar: (id) => invocar('calendario:borrar', id),
     alCita: (callback) => escuchar('calendario:cita', callback),
   },
   recordatorios: {
     listar: () => invocar('recordatorios:listar'),
+    crear: (datos) => invocar('recordatorios:crear', datos),
     borrar: (id) => invocar('recordatorios:borrar', id),
     alAviso: (callback) => escuchar('recordatorio:aviso', callback),
   },

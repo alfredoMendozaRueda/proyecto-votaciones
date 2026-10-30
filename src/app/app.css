@@ -200,30 +200,82 @@ button {
   letter-spacing: 0.01em;
 }
 
-.pestanas {
+/* Apartados: iconos; el activo muestra también su nombre. Si no caben
+   (pantallas muy estrechas), la barra se desplaza en horizontal. */
+.apartados {
   display: flex;
-  padding: 3px;
-  border-radius: 999px;
-  background: var(--negro);
-  border: 1px solid var(--linea-suave);
+  justify-content: space-between;
+  gap: 2px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--linea-suave);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
-.pestanas button {
+.apartados::-webkit-scrollbar {
+  display: none;
+}
+
+.apartados button {
+  position: relative;
+  flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  min-width: 36px;
+  height: 34px;
+  padding: 0 9px;
   border: 0;
-  background: transparent;
-  padding: 4px 12px;
   border-radius: 999px;
+  background: transparent;
   color: var(--texto-2);
-  font-size: 13px;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.pestanas button[aria-selected='true'] {
+.apartados button:hover:not([aria-selected='true']) {
+  background: var(--carbon-3);
+  color: var(--texto);
+}
+
+.apartados button[aria-selected='true'] {
   background: var(--rojo);
   color: #fff;
+}
+
+.apartado__icono {
+  display: grid;
+  place-items: center;
+}
+
+.apartado__nombre {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  font-size: 13px;
+  font-weight: 500;
+  transition: max-width 0.28s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.2s ease, margin 0.28s ease;
+}
+
+.apartados button[aria-selected='true'] .apartado__nombre {
+  max-width: 120px;
+  margin-left: 6px;
+  opacity: 1;
+}
+
+.apartados .insignia {
+  position: absolute;
+  top: -1px;
+  right: -2px;
+  min-width: 16px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.apartados button[aria-selected='true'] .insignia {
+  position: static;
+  margin-left: 6px;
 }
 
 .insignia {
@@ -239,7 +291,7 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-.pestanas button[aria-selected='true'] .insignia {
+.apartados button[aria-selected='true'] .insignia {
   background: #fff;
   color: var(--rojo-hondo);
 }
@@ -1438,7 +1490,51 @@ kbd {
   color: var(--texto-3);
 }
 
-.recordatorios {
+/* ---------- Apartados: agenda, recordatorios, memoria e historial ---------- */
+
+.apartado {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 14px 16px;
+}
+
+/* El apartado se desplaza; lo de dentro nunca se encoge para caber. */
+.apartado > * {
+  flex-shrink: 0;
+}
+
+/* El buscador crece a lo ancho en la barra del correo; aquí, en columna, no. */
+.apartado > .buscador {
+  flex: none;
+}
+
+.apartado__cabecera {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.apartado__cabecera h2 {
+  margin: 0 auto 0 0;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 19px;
+}
+
+.apartado__grupo h3 {
+  margin: 4px 0 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--texto-3);
+}
+
+.filas {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1447,32 +1543,245 @@ kbd {
   gap: 6px;
 }
 
-.recordatorios li {
-  display: grid;
-  grid-template-columns: 1fr auto;
+.fila {
+  display: flex;
   align-items: center;
-  column-gap: 8px;
-  padding: 8px 6px 8px 12px;
+  gap: 10px;
+  padding: 9px 6px 9px 12px;
   border-radius: var(--radio-sm);
+  border: 1px solid transparent;
   background: var(--carbon-2);
+  animation: entrar 0.25s ease-out both;
 }
 
-.recordatorios time {
-  grid-row: 2;
+.fila--hoy,
+.fila--actual {
+  border-color: var(--rojo-hondo);
+}
+
+.fila__hora {
+  flex: none;
+  width: 64px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--rojo-vivo);
+}
+
+.fila__icono {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--rojo-velo);
+  color: var(--rojo-vivo);
+}
+
+.fila__cuerpo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fila__titulo {
+  overflow-wrap: anywhere;
+}
+
+.fila__detalle {
   font-size: 12px;
   color: var(--texto-3);
 }
 
-.recordatorios .icono-boton {
-  grid-row: 1 / span 2;
-  grid-column: 2;
+.fila__detalle:empty {
+  display: none;
 }
 
-.recordatorios .recordatorios__vacio {
-  display: block;
+.fila--conversacion {
+  padding: 0 6px 0 0;
+}
+
+.fila__abrir {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--radio-sm);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.fila--conversacion .fila__titulo {
+  font-weight: 600;
+  transition: color 0.15s ease;
+}
+
+.fila__abrir:hover .fila__titulo {
+  color: var(--rojo-vivo);
+}
+
+.fila__resumen {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--texto-2);
+}
+
+.fila__resumen:empty {
+  display: none;
+}
+
+.boton-borrar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
   color: var(--texto-3);
+  font-size: 12px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.boton-borrar:hover {
+  background: var(--carbon-3);
+  color: var(--texto);
+}
+
+.boton-borrar.confirmando {
+  background: var(--rojo);
+  color: #fff;
+  font-weight: 700;
+}
+
+.formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radio-sm);
+  border: 1px solid var(--linea);
+  background: var(--carbon-2);
+  animation: entrar 0.25s ease-out both;
+}
+
+.formulario[hidden],
+.formulario__fila[hidden] {
+  display: none;
+}
+
+.formulario--linea {
+  flex-direction: row;
+  padding: 0;
+  border: 0;
   background: none;
-  padding-left: 0;
+  animation: none;
+}
+
+.formulario--linea .campo {
+  flex: 1;
+  min-width: 0;
+}
+
+.formulario__fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.formulario__fila > .campo {
+  flex: 1;
+  min-width: 120px;
+}
+
+.formulario__hora {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 120px;
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.formulario__hora .campo {
+  flex: 1;
+  min-width: 0;
+}
+
+.formulario__botones,
+.apartado__pie,
+.rapidos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.casilla {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.casilla input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--rojo);
+}
+
+.chip {
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--linea);
+  background: var(--carbon);
+  color: var(--texto-2);
+  font-size: 12.5px;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.chip:hover {
+  border-color: var(--rojo);
+  color: var(--texto);
+}
+
+.apartado__vacio {
+  padding: 18px 4px;
+  text-align: center;
+  color: var(--texto-3);
+}
+
+.apartado__cargando {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--texto-3);
+}
+
+.apartado__mensaje {
+  margin: 0;
+  font-size: 13px;
+  color: var(--rojo-vivo);
+}
+
+.apartado__nota {
+  margin-top: auto;
 }
 
 /* ---------- Copiar, fuentes, confirmar y texto copiado ---------- */
@@ -1785,8 +2094,9 @@ html {
     height: 44px;
   }
 
-  :root:not([data-plataforma='electron']) .pestanas button {
-    padding: 8px 14px;
+  :root:not([data-plataforma='electron']) .apartados button {
+    min-width: 40px;
+    height: 40px;
   }
 
   :root:not([data-plataforma='electron']) .filtros button,
@@ -1844,8 +2154,3 @@ html {
   }
 }
 
-@media (max-width: 380px) {
-  :root:not([data-plataforma='electron']) .marca__nombre {
-    display: none;
-  }
-}

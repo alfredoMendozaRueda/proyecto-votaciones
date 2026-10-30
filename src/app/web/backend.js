@@ -3,6 +3,7 @@ import { ClienteGmail } from '../../compartido/gmail.js';
 import { Recordatorios } from '../../compartido/recordatorios.js';
 import { Memoria } from '../../compartido/memoria.js';
 import { ClienteCalendario, PERMISO_CALENDARIO } from '../../compartido/calendario.js';
+import { Conversaciones, nuevoIdConversacion } from '../../compartido/conversaciones.js';
 import { leerSecreto, guardarSecreto, borrarSecreto } from './secretos.js';
 
 // Versión web (PWA): el mismo contrato que window.asistente en Electron,
@@ -222,22 +223,47 @@ export function crearBackendWeb() {
 
   // ---------- Claude ----------
 
-  // La conversación se guarda cifrada para que sobreviva a que el móvil
-  // cierre la app. Incluye lo que Claude leyó del correo, por eso va cifrada.
-  async function conversacionGuardada() {
+  // Historial de conversaciones, cifrado: incluye lo que Claude leyó del correo.
+  const leerJsonSecreto = async (nombre) => {
     try {
-      return JSON.parse((await leerSecreto('conversacion')) ?? 'null');
+      return JSON.parse((await leerSecreto(nombre)) ?? 'null');
     } catch {
       return null;
     }
-  }
+  };
+  const conversaciones = new Conversaciones({
+    leerIndice: async () => (await leerJsonSecreto('conversaciones')) ?? [],
+    guardarIndice: (lista) => guardarSecreto('conversaciones', JSON.stringify(lista)),
+    leer: (id) => leerJsonSecreto(`conv:${id}`),
+    guardar: (id, datos) => guardarSecreto(`conv:${id}`, JSON.stringify(datos)),
+    borrar: (id) => borrarSecreto(`conv:${id}`),
+  });
+
+  // Las versiones anteriores guardaban una sola conversación: pasa al historial.
+  const migrada = (async () => {
+    const antigua = await leerJsonSecreto('conversacion');
+    if (antigua?.historial) await conversaciones.guardar(nuevoIdConversacion(), antigua.historial).catch(() => {});
+    if (antigua) await borrarSecreto('conversacion');
+  })();
 
   let conversacion = null;
+  // Id y mensajes de la conversación en curso antes de cargar el SDK (al abrir la app).
+  let pendiente = null;
+  async function conversacionInicial() {
+    await migrada;
+    pendiente ??= (async () => {
+      const ultima = await conversaciones.reciente();
+      const datos = ultima && (await conversaciones.cargar(ultima.id));
+      return datos ? { id: ultima.id, ...datos } : { id: nuevoIdConversacion(), historial: [], visibles: [] };
+    })();
+    return pendiente;
+  }
+
   async function obtenerConversacion() {
     if (!conversacion) {
       // El SDK se carga solo cuando hace falta: la app abre antes.
-      const { ConversacionClaude, recortarHistorial, mensajesVisibles } = await import('../../compartido/claude.js');
-      const guardada = await conversacionGuardada();
+      const { ConversacionClaude } = await import('../../compartido/claude.js');
+      const inicial = await conversacionInicial();
       conversacion = new ConversacionClaude({
         recordatorios,
         memoria,
@@ -249,14 +275,7 @@ export function crearBackendWeb() {
           eventos: (opciones) => calendario.eventos(opciones),
           crear: (evento) => calendario.crear(evento),
         },
-        alCambiarHistorial: (historial) => {
-          if (!historial.length) {
-            borrarSecreto('conversacion');
-            return;
-          }
-          const recortado = recortarHistorial(historial);
-          guardarSecreto('conversacion', JSON.stringify({ historial: recortado, visibles: mensajesVisibles(recortado) })).catch(() => {});
-        },
+        alCambiarHistorial: (historial, id) => conversaciones.guardar(id, historial).catch(() => {}),
         obtenerClave: () => leerSecreto('claveClaude'),
         obtenerAjustes: () => ajustes,
         // Las herramientas de correo solo se ofrecen con una sesión de Gmail vigente.
@@ -271,7 +290,8 @@ export function crearBackendWeb() {
         emitir: (evento) => emitir('claude', evento),
         opcionesCliente: OPCIONES_CLAUDE,
       });
-      if (guardada?.historial) conversacion.restaurar(guardada.historial);
+      if (inicial.historial.length) conversacion.restaurar(inicial.historial, inicial.id);
+      else conversacion.id = inicial.id;
     }
     return conversacion;
   }
@@ -281,7 +301,7 @@ export function crearBackendWeb() {
     programarCitas();
   }
 
-  return {
+  const api = {
     plataforma: 'web',
     ajustes: {
       obtener: async () => ({ ...ajustes }),
@@ -312,12 +332,13 @@ export function crearBackendWeb() {
       enviar: async (texto) => (await obtenerConversacion()).enviar(String(texto).trim().slice(0, 20000)),
       cancelar: async () => conversacion?.cancelar(),
       confirmar: async (id, acepta) => conversacion?.responderConfirmacion(id, acepta),
+      // Nueva conversación: la anterior queda en el historial.
       async reiniciar() {
-        conversacion?.reiniciar();
-        await borrarSecreto('conversacion');
+        if (conversacion) conversacion.reiniciar();
+        else pendiente = Promise.resolve({ id: nuevoIdConversacion(), historial: [], visibles: [] });
       },
       // Sin cargar el SDK: lo guardado ya trae lo que se ve en el chat.
-      mensajes: async () => (conversacion ? conversacion.mensajesVisibles() : ((await conversacionGuardada())?.visibles ?? [])),
+      mensajes: async () => (conversacion ? conversacion.mensajesVisibles() : (await conversacionInicial()).visibles),
       redactarRespuesta: async (id, indicaciones) => (await obtenerConversacion()).redactarRespuesta(await gmail.leer(id), indicaciones ?? ''),
       alEvento: (f) => escuchar('claude', f),
     },
@@ -332,15 +353,44 @@ export function crearBackendWeb() {
       enviar: (datos) => gmail.enviar(datos),
       alNuevo: (f) => escuchar('nuevo', f),
     },
+    conversaciones: {
+      listar: async () => ({ lista: await conversaciones.listar(), actual: conversacion?.id ?? (await conversacionInicial()).id }),
+      async abrir(id) {
+        const datos = await conversaciones.cargar(id);
+        if (!datos) throw new Error('No se ha podido abrir esa conversación.');
+        const c = await obtenerConversacion();
+        if (c.controlador) throw new Error('Espera a que termine la respuesta.');
+        c.restaurar(datos.historial, id);
+        return c.mensajesVisibles();
+      },
+      async borrar(id) {
+        const actual = conversacion?.id ?? (await conversacionInicial()).id;
+        if (id === actual) await api.claude.reiniciar();
+        return conversaciones.borrar(id);
+      },
+      async borrarTodo() {
+        await api.claude.reiniciar();
+        await conversaciones.borrarTodo();
+      },
+    },
     memoria: {
+      recordar: (texto) => memoria.recordar(texto),
       listar: () => memoria.listar(),
       olvidar: (id) => memoria.olvidar(id),
       olvidarTodo: () => memoria.olvidarTodo(),
     },
     calendario: {
+      estado: async () => {
+        const e = await estadoCorreo();
+        return { conectado: e.conectado, calendario: e.calendario, necesitaReconectar: e.necesitaReconectar };
+      },
+      eventos: (desde, hasta) => calendario.eventos({ desde, hasta, maximo: 50 }),
+      crear: (evento) => calendario.crear(evento),
+      borrar: (id) => calendario.borrar(id),
       alCita: (f) => escuchar('cita', f),
     },
     recordatorios: {
+      crear: (datos) => recordatorios.crear(datos),
       listar: () => recordatorios.listar(),
       borrar: (id) => recordatorios.borrar(id),
       alAviso: (f) => escuchar('recordatorio', f),
@@ -357,4 +407,5 @@ export function crearBackendWeb() {
       },
     },
   };
+  return api;
 }

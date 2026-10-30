@@ -159,6 +159,57 @@ function recordatorioDe(texto) {
   return { texto: que ? que[0].toUpperCase() + que.slice(1) : 'Lo que me pediste', cuando: cuando.getTime() };
 }
 
+// Agenda de ejemplo, relativa a hoy.
+function eventosDeEjemplo() {
+  const dia = (desplazamiento, h = 0, m = 0) => {
+    const d = new Date();
+    d.setDate(d.getDate() + desplazamiento);
+    d.setHours(h, m, 0, 0);
+    return d.getTime();
+  };
+  return [
+    { id: 'ev1', titulo: 'Dentista', inicio: dia(0, 17, 30), fin: dia(0, 18, 15), todoElDia: false, lugar: 'Clínica Sonrisas' },
+    { id: 'ev2', titulo: 'Llamada con Lucía (obra)', inicio: dia(1, 10), fin: dia(1, 10, 30), todoElDia: false, lugar: '' },
+    { id: 'ev3', titulo: 'Reunión con Marcos · informe', inicio: dia(2, 13), fin: dia(2, 14), todoElDia: false, lugar: 'Estudio Lumen' },
+    { id: 'ev4', titulo: 'Cumpleaños de Ana', inicio: dia(4), fin: dia(5), todoElDia: true, lugar: '' },
+    { id: 'ev5', titulo: 'Clase de fotografía', inicio: dia(6, 19), fin: dia(6, 21), todoElDia: false, lugar: 'Centro cultural' },
+  ];
+}
+
+// Conversaciones de ejemplo para el historial.
+const CONVERSACIONES = [
+  {
+    id: 'cdemo1',
+    titulo: '¿Qué llevo para el viaje a Valencia?',
+    resumen: 'Para dos días en noviembre: chaqueta ligera, paraguas plegable y el cargador del móvil.',
+    actualizada: ahora - 3 * HORA,
+    mensajes: [
+      { rol: 'usuario', texto: '¿Qué llevo para el viaje a Valencia?' },
+      { rol: 'kitsune', texto: 'Para dos días en noviembre: **chaqueta ligera**, paraguas plegable y el cargador del móvil. El tren sale a las 08:35 de Atocha.' },
+    ],
+  },
+  {
+    id: 'cdemo2',
+    titulo: 'Ideas para el cumpleaños de Ana',
+    resumen: 'Un álbum con las fotos de Kioto, una clase de cerámica para dos o una cena japonesa.',
+    actualizada: ahora - 1 * DIA - 2 * HORA,
+    mensajes: [
+      { rol: 'usuario', texto: 'Ideas para el cumpleaños de Ana' },
+      { rol: 'kitsune', texto: 'Tres ideas: un **álbum con las fotos de Kioto**, una clase de cerámica para dos o una cena japonesa.' },
+    ],
+  },
+  {
+    id: 'cdemo3',
+    titulo: 'Resume el correo de Marcos',
+    resumen: 'Pide actualizar la gráfica de ventas con septiembre y revisar el resumen para el jueves a las 12.',
+    actualizada: ahora - 4 * DIA,
+    mensajes: [
+      { rol: 'usuario', texto: 'Resume el correo de Marcos' },
+      { rol: 'kitsune', texto: 'Pide actualizar la gráfica de ventas con septiembre y revisar el resumen para el **jueves a las 12**.' },
+    ],
+  },
+];
+
 // Tren del correo de ejemplo, para "añádelo a mi calendario".
 function eventoTren() {
   const anio = new Date().getFullYear() + (new Date().getMonth() === 11 && new Date().getDate() > 14 ? 1 : 0);
@@ -279,7 +330,10 @@ export function crearDemo() {
     ofrecerPortapapeles: true,
   };
   let cancelado = false;
-  let recordatorios = [];
+  let recordatorios = [
+    { id: 'rdemo-a', texto: 'Confirmar a Lucía el presupuesto', cuando: (() => { const d = new Date(); d.setHours(d.getHours() + 2, 0, 0, 0); return d.getTime(); })(), avisado: false },
+    { id: 'rdemo-b', texto: 'Comprar el regalo de Ana', cuando: (() => { const d = new Date(); d.setDate(d.getDate() + 2); d.setHours(18, 0, 0, 0); return d.getTime(); })(), avisado: false },
+  ];
   let numRecordatorio = 0;
   let memoria = [
     { id: 'mdemo1', texto: 'Su hermana se llama Ana y cumple años el sábado', creado: ahora - 3 * DIA },
@@ -287,6 +341,9 @@ export function crearDemo() {
   ];
   let numMemoria = 2;
   const confirmaciones = new Map();
+  let eventos = eventosDeEjemplo();
+  let conversaciones = CONVERSACIONES.map((c) => ({ ...c, creada: c.actualizada }));
+  let conversacionActual = 'cdemo-actual';
 
   const emitir = (evento) => oyentes.claude.forEach((f) => f(evento));
   const escuchar = (lista, f) => {
@@ -310,7 +367,9 @@ export function crearDemo() {
       cancelar: async () => {
         cancelado = true;
       },
-      reiniciar: async () => {},
+      reiniciar: async () => {
+        conversacionActual = `cdemo${Date.now()}`;
+      },
       mensajes: async () => [],
       confirmar: async (id, acepta) => confirmaciones.get(id)?.(acepta),
       alEvento: (f) => escuchar('claude', f),
@@ -340,7 +399,10 @@ export function crearDemo() {
               emitir({ tipo: 'confirmar', id, accion: { tipo: 'evento', ...evento } });
             });
             confirmaciones.delete(id);
-            if (acepta) emitir({ tipo: 'evento', evento: { id: 'edemo', ...evento } });
+            if (acepta) {
+              eventos.push({ id: `ev${Date.now()}`, ...evento });
+              emitir({ tipo: 'evento', evento: { id: 'edemo', ...evento } });
+            }
             else respuesta = textoNo;
           }
           emitir({ tipo: 'nuevo-bloque' });
@@ -399,7 +461,29 @@ export function crearDemo() {
       },
       alNuevo: (f) => escuchar('nuevo', f),
     },
+    conversaciones: {
+      listar: async () => ({ lista: conversaciones.map(({ mensajes, ...c }) => ({ ...c, mensajes: mensajes.length })), actual: conversacionActual }),
+      async abrir(id) {
+        const c = conversaciones.find((x) => x.id === id);
+        if (!c) throw new Error('No se ha podido abrir esa conversación.');
+        conversacionActual = id;
+        return c.mensajes;
+      },
+      async borrar(id) {
+        conversaciones = conversaciones.filter((c) => c.id !== id);
+        return { borrada: id };
+      },
+      async borrarTodo() {
+        conversaciones = [];
+      },
+    },
     memoria: {
+      async recordar(texto) {
+        const dato = { id: `mdemo${++numMemoria}`, texto: texto.trim(), creado: Date.now() };
+        if (!dato.texto) throw new Error('No hay nada que recordar.');
+        memoria.push(dato);
+        return dato;
+      },
       listar: async () => [...memoria],
       async olvidar(id) {
         memoria = memoria.filter((d) => d.id !== id);
@@ -410,9 +494,30 @@ export function crearDemo() {
       },
     },
     calendario: {
+      estado: async () => ({ conectado: true, calendario: true }),
+      async eventos(desde, hasta) {
+        await espera(200);
+        return eventos.filter((e) => e.fin > desde && e.inicio < hasta).sort((a, b) => a.inicio - b.inicio);
+      },
+      async crear(evento) {
+        const nuevo = { id: `ev${Date.now()}`, ...evento };
+        eventos.push(nuevo);
+        return nuevo;
+      },
+      async borrar(id) {
+        eventos = eventos.filter((e) => e.id !== id);
+        return { borrado: id };
+      },
       alCita: (f) => escuchar('cita', f),
     },
     recordatorios: {
+      async crear({ texto, cuando }) {
+        if (!texto?.trim()) throw new Error('El recordatorio necesita un texto.');
+        if (!(cuando > Date.now() - 60_000)) throw new Error('Esa hora ya ha pasado.');
+        const nuevo = { id: `rdemo${++numRecordatorio}`, texto: texto.trim(), cuando, avisado: false };
+        recordatorios.push(nuevo);
+        return nuevo;
+      },
       listar: async () => recordatorios.filter((r) => !r.avisado).sort((a, b) => a.cuando - b.cuando),
       async borrar(id) {
         recordatorios = recordatorios.filter((r) => r.id !== id);

@@ -1,6 +1,5 @@
 import { icono } from './iconos.js';
 import { PALETAS } from '../kitsune/paletas.js';
-import { cuandoLegible } from './fechas.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -138,21 +137,6 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
           ${interruptor('pulsoDiario', 'Pulso del día', 'La primera vez que abres Kitsune cada día te ofrece un resumen de correo y recordatorios.')}
         </section>
 
-        <section class="grupo" id="seccion-recordatorios" aria-label="Recordatorios">
-          <h3>Recordatorios</h3>
-          <ul class="recordatorios" id="lista-recordatorios" aria-live="polite"></ul>
-          <p class="ajuste__ayuda">Pídeselos a Kitsune en el chat: «recuérdame llamar a Lucía mañana a las 10».${
-            escritorio ? '' : ' En el móvil suenan con la app abierta o en segundo plano; si estaba cerrada, te avisa al abrirla.'
-          }</p>
-        </section>
-
-        <section class="grupo" id="seccion-memoria" aria-label="Memoria">
-          <h3>Memoria</h3>
-          ${interruptor('usarMemoria', 'Usar la memoria', 'Kitsune recuerda lo que le cuentes («recuerda que mi hermana se llama Ana») y lo tiene en cuenta. Si la apagas, ni la usa ni guarda nada nuevo.')}
-          <ul class="recordatorios" id="lista-memoria" aria-live="polite"></ul>
-          <div><button type="button" class="boton" id="olvidar-todo" hidden>Olvidar todo</button></div>
-        </section>
-
         <section class="grupo" id="seccion-claude" aria-label="Claude">
           <h3>Claude</h3>
           <div class="estado-cuenta ${estadoClaude.configurado ? 'ok' : ''}"><span class="punto"></span>${
@@ -222,68 +206,10 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
       </div>`;
 
     conectar();
-    pintarRecordatorios();
-    pintarMemoria();
     if (seccion) contenedor.querySelector(`#seccion-${seccion}`)?.scrollIntoView({ block: 'start' });
   }
 
-  async function pintarRecordatorios() {
-    const lista = contenedor.querySelector('#lista-recordatorios');
-    if (!lista || !api.recordatorios) return;
-    const pendientes = await api.recordatorios.listar().catch(() => []);
-    lista.innerHTML = pendientes.length
-      ? pendientes
-          .map(
-            (r) => `<li><span class="recordatorios__texto">${escapar(r.texto)}</span><time datetime="${new Date(r.cuando).toISOString()}">${escapar(cuandoLegible(r.cuando))}</time>
-              <button type="button" class="icono-boton" data-borrar="${escapar(r.id)}" aria-label="Borrar «${escapar(r.texto)}»" title="Borrar">${icono('papelera', 16)}</button></li>`,
-          )
-          .join('')
-      : '<li class="recordatorios__vacio">No tienes recordatorios pendientes.</li>';
-    lista.querySelectorAll('[data-borrar]').forEach((b) =>
-      b.addEventListener('click', async () => {
-        await api.recordatorios.borrar(b.dataset.borrar).catch(() => {});
-        pintarRecordatorios();
-      }),
-    );
-  }
-
-  async function pintarMemoria() {
-    const lista = contenedor.querySelector('#lista-memoria');
-    if (!lista || !api.memoria) return;
-    const datos = await api.memoria.listar().catch(() => []);
-    lista.innerHTML = datos.length
-      ? datos
-          .map(
-            (d) => `<li><span class="recordatorios__texto">${escapar(d.texto)}</span>
-              <button type="button" class="icono-boton" data-olvidar="${escapar(d.id)}" aria-label="Olvidar «${escapar(d.texto)}»" title="Olvidar">${icono('papelera', 16)}</button></li>`,
-          )
-          .join('')
-      : '<li class="recordatorios__vacio">Todavía no recuerda nada.</li>';
-    const todo = contenedor.querySelector('#olvidar-todo');
-    todo.hidden = datos.length === 0;
-    lista.querySelectorAll('[data-olvidar]').forEach((b) =>
-      b.addEventListener('click', async () => {
-        await api.memoria.olvidar(b.dataset.olvidar).catch(() => {});
-        pintarMemoria();
-      }),
-    );
-  }
-
   function conectar() {
-    // Borrar toda la memoria pide un segundo toque para confirmar.
-    const olvidarTodo = contenedor.querySelector('#olvidar-todo');
-    olvidarTodo?.addEventListener('click', async () => {
-      if (olvidarTodo.dataset.confirmar !== 'si') {
-        olvidarTodo.dataset.confirmar = 'si';
-        olvidarTodo.textContent = '¿Seguro? Pulsa otra vez para olvidarlo todo';
-        return;
-      }
-      await api.memoria.olvidarTodo();
-      olvidarTodo.dataset.confirmar = '';
-      olvidarTodo.textContent = 'Olvidar todo';
-      pintarMemoria();
-    });
-
     contenedor.querySelector('#ajustes-volver').addEventListener('click', alCerrar);
 
     contenedor.querySelectorAll('[data-clave]').forEach((b) =>

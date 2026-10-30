@@ -11,6 +11,20 @@ historial ni código con `main`.
 
 ## Qué hace
 
+El diálogo tiene seis apartados en una barra bajo la cabecera (con el teclado,
+las flechas pasan de uno a otro):
+
+| Apartado          | Qué hay                                                                                   |
+| ----------------- | ----------------------------------------------------------------------------------------- |
+| **Chat**          | La conversación con Kitsune.                                                              |
+| **Correo**        | La bandeja de Gmail.                                                                      |
+| **Agenda**        | Google Calendar por días (14 días, ampliable), crear eventos a mano y borrarlos.          |
+| **Recordatorios** | Los pendientes, alta rápida («en 1 hora», «mañana a las 9») y borrar. Insignia con los de hoy. |
+| **Memoria**       | Lo que Kitsune sabe de ti: añadir, olvidar, olvidarlo todo y apagarla.                    |
+| **Historial**     | Las últimas 50 conversaciones, con buscador: ábrelas para seguir donde lo dejaste.        |
+
+Todo lo que se borra pide un segundo toque para confirmar.
+
 - **Atajo global** (`Ctrl + Alt + K`, configurable): el zorro aparece con su
   animación; pulsarlo otra vez o `Esc` lo oculta. Vive en la bandeja del
   sistema y puede arrancar con Windows.
@@ -36,8 +50,9 @@ historial ni código con `main`.
 - **Pulso del día**: la primera vez que lo abres cada día te ofrece un
   resumen de tu jornada: lo urgente del correo, recordatorios de hoy y mañana
   y una sugerencia. Solo se pide al pulsar el botón (no gasta sin permiso).
-- **Conversación guardada** (versión web): si el móvil cierra la app, al
-  volver la conversación sigue donde estaba, guardada cifrada.
+- **Historial de conversaciones**: cada conversación se guarda cifrada (en
+  Windows con el sistema; en el navegador con AES-GCM). Si la última es de
+  hace menos de 12 horas, al abrir Kitsune sigue con ella.
 - **Compartir y atajos** (móvil instalado): "Compartir → Kitsune" desde
   cualquier app deja el texto o enlace listo para que lo resuma; manteniendo
   pulsado el icono aparecen "Pulso del día" y "Correo".
@@ -177,8 +192,8 @@ El zorro ajusta solo su coste:
 | Carpeta             | Qué contiene                                                                   |
 | ------------------- | ------------------------------------------------------------------------------ |
 | `electron/`         | Proceso principal: ventana, atajo, bandeja, OAuth de Gmail, ajustes cifrados.  |
-| `src/compartido/`   | Lógica común a escritorio y web: Claude, cliente de Gmail, MIME y ajustes.     |
-| `src/app/`          | Interfaz: diálogo, chat, correo, ajustes y modo de ejemplo.                    |
+| `src/compartido/`   | Lógica común a escritorio y web: Claude, Gmail, Calendar, memoria, recordatorios, historial, MIME y ajustes. |
+| `src/app/`          | Interfaz: diálogo, chat, correo, apartados (`vistas.js`), ajustes y modo de ejemplo. |
 | `src/app/web/`      | Versión web: almacenamiento cifrado, Google Identity y service worker.         |
 | `public/`           | Manifiesto e iconos de la PWA.                                                 |
 | `src/kitsune/`      | El personaje 3D.                                                               |

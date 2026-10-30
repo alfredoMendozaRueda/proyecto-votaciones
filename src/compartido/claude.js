@@ -1,4 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { historialValido, mensajesVisibles } from './historial.js';
+import { nuevoIdConversacion } from './conversaciones.js';
+
+export { mensajesVisibles, recortarHistorial } from './historial.js';
 
 const MAX_VUELTAS = 8;
 const DIA = 24 * 60 * 60 * 1000;
@@ -154,7 +158,6 @@ function herramientaBusqueda(modelo) {
   };
 }
 
-const ETIQUETA_CONTEXTO = /^<contexto>[\s\S]*<\/contexto>$/;
 const SOLO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 // Fecha y hora local con la diferencia horaria, para que Claude pueda calcular "mañana a las 9".
@@ -281,38 +284,6 @@ function promptSistema({ ajustes, correo, calendario, conRecordatorios, memoria,
     .join('\n\n');
 }
 
-// Lo que se ve en el chat: preguntas y respuestas, sin herramientas ni contexto.
-export function mensajesVisibles(historial) {
-  const visibles = [];
-  for (const m of historial) {
-    if (m.role === 'user') {
-      if (typeof m.content === 'string') visibles.push({ rol: 'usuario', texto: m.content });
-      else if (!m.content.some((b) => b.type === 'tool_result')) {
-        const texto = m.content.filter((b) => b.type === 'text' && !ETIQUETA_CONTEXTO.test(b.text)).map((b) => b.text).join('\n');
-        if (texto) visibles.push({ rol: 'usuario', texto });
-      }
-    } else {
-      const texto = m.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
-      if (texto) visibles.push({ rol: 'kitsune', texto });
-    }
-  }
-  return visibles;
-}
-
-// Para guardar la conversación: quita turnos enteros del principio hasta que
-// quepa. Un turno empieza en una pregunta del usuario (no en resultados de herramientas).
-export function recortarHistorial(historial, maxCaracteres = 300_000, maxMensajes = 80) {
-  let inicio = 0;
-  const empiezaTurno = (m) => m.role === 'user' && !(Array.isArray(m.content) && m.content.some((b) => b.type === 'tool_result'));
-  const tamano = (desde) => JSON.stringify(historial.slice(desde)).length;
-  while (inicio < historial.length && (historial.length - inicio > maxMensajes || tamano(inicio) > maxCaracteres)) {
-    let siguiente = inicio + 1;
-    while (siguiente < historial.length && !empiezaTurno(historial[siguiente])) siguiente++;
-    inicio = siguiente;
-  }
-  return historial.slice(inicio);
-}
-
 // Páginas que Claude citó en su respuesta (búsqueda web), sin repetir.
 function fuentesDe(contenido, vistas) {
   const fuentes = [];
@@ -364,6 +335,8 @@ export class ConversacionClaude {
     // Solo se añade al final (nunca se editan turnos anteriores): así los
     // bloques de razonamiento que devuelve el modelo siguen siendo válidos.
     this.historial = [];
+    // Cada conversación tiene su id para guardarla en el historial.
+    this.id = nuevoIdConversacion();
     this.controlador = null;
     this.confirmaciones = new Map();
     this.numConfirmacion = 0;
@@ -420,10 +393,11 @@ export class ConversacionClaude {
     return { sistema, herramientas };
   }
 
+  // Empieza otra conversación; la anterior queda en el historial.
   reiniciar() {
     this.cancelar();
     this.historial = [];
-    this.alCambiarHistorial(this.historial);
+    this.id = nuevoIdConversacion();
   }
 
   mensajesVisibles() {
@@ -432,14 +406,10 @@ export class ConversacionClaude {
 
   // Recupera una conversación guardada. Solo se acepta si empieza por una
   // pregunta del usuario y alterna turnos, como exige la API.
-  restaurar(historial) {
-    if (this.controlador || !Array.isArray(historial)) return false;
-    const valido =
-      historial.length > 0 &&
-      historial.length % 2 === 0 &&
-      historial.every((m, i) => m && m.role === (i % 2 ? 'assistant' : 'user') && (typeof m.content === 'string' || Array.isArray(m.content)));
-    if (!valido) return false;
+  restaurar(historial, id = this.id) {
+    if (this.controlador || !historialValido(historial)) return false;
     this.historial = historial;
+    this.id = id;
     return true;
   }
 
@@ -542,7 +512,7 @@ export class ConversacionClaude {
 
         const usos = mensaje.content.filter((b) => b.type === 'tool_use');
         if (usos.length === 0) {
-          this.alCambiarHistorial(this.historial);
+          this.alCambiarHistorial(this.historial, this.id);
           this.emitir({ tipo: 'fin', recortado: mensaje.stop_reason === 'max_tokens' });
           return;
         }

@@ -4,6 +4,7 @@ import { crearBackendWeb } from './web/backend.js';
 import { crearChat } from './chat.js';
 import { crearCorreo } from './correo.js';
 import { crearAjustes } from './ajustes.js';
+import { crearAgenda, crearRecordatorios, crearMemoria, crearHistorial } from './vistas.js';
 import { icono } from './iconos.js';
 
 // Electron trae window.asistente (preload). En el navegador se usa la versión
@@ -20,12 +21,12 @@ api.ventana.alAlternar((accion) => (manejarAlternar ? manejarAlternar(accion) : 
 const escena = document.getElementById('escena');
 const dialogo = document.getElementById('dialogo');
 const insignia = document.getElementById('insignia-correo');
-const vistas = {
-  chat: document.getElementById('vista-chat'),
-  correo: document.getElementById('vista-correo'),
-  ajustes: document.getElementById('vista-ajustes'),
-};
-const pestanas = { chat: document.getElementById('pestana-chat'), correo: document.getElementById('pestana-correo') };
+const insigniaRecordatorios = document.getElementById('insignia-recordatorios');
+const vistas = Object.fromEntries(
+  ['chat', 'correo', 'agenda', 'recordatorios', 'memoria', 'historial', 'ajustes'].map((v) => [v, document.getElementById(`vista-${v}`)]),
+);
+const pestanas = Object.fromEntries([...document.querySelectorAll('.apartados [data-vista]')].map((b) => [b.dataset.vista, b]));
+for (const span of document.querySelectorAll('.apartado__icono')) span.innerHTML = icono(span.dataset.icono, 18);
 document.getElementById('boton-ajustes').innerHTML = icono('ajustes');
 document.getElementById('boton-cerrar').innerHTML = icono('cerrar');
 
@@ -34,6 +35,8 @@ let kitsune;
 let chat;
 let correo;
 let panelAjustes;
+// Apartados que se vuelven a pintar cada vez que se abren.
+const apartados = {};
 let vistaActual = 'chat';
 let noLeidos = 0;
 let ultimaActividad = Date.now();
@@ -56,10 +59,26 @@ function aplicarAjustes(a) {
 function mostrarVista(nombre, seccionAjustes = null) {
   vistaActual = nombre;
   for (const [clave, vista] of Object.entries(vistas)) vista.hidden = clave !== nombre;
-  for (const [clave, pestana] of Object.entries(pestanas)) pestana.setAttribute('aria-selected', String(clave === nombre));
+  for (const [clave, pestana] of Object.entries(pestanas)) {
+    pestana.setAttribute('aria-selected', String(clave === nombre));
+    pestana.tabIndex = clave === nombre ? 0 : -1;
+  }
+  // El apartado activo, a la vista si la barra se ha desplazado (pantallas estrechas).
+  pestanas[nombre]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   document.getElementById('boton-ajustes').setAttribute('aria-pressed', String(nombre === 'ajustes'));
   if (nombre === 'ajustes') panelAjustes.abrir(seccionAjustes);
   if (nombre === 'chat') enfocarChat();
+  apartados[nombre]?.mostrar();
+}
+
+// Insignia de Recordatorios: los que quedan para hoy.
+async function contarRecordatoriosDeHoy() {
+  const pendientes = await api.recordatorios?.listar().catch(() => []);
+  const fin = new Date();
+  fin.setHours(23, 59, 59, 999);
+  const hoy = (pendientes ?? []).filter((r) => r.cuando <= fin.getTime()).length;
+  insigniaRecordatorios.hidden = hoy === 0;
+  insigniaRecordatorios.textContent = String(hoy);
 }
 
 function abrirDialogo() {
@@ -159,8 +178,58 @@ async function iniciar() {
     },
   });
 
-  pestanas.chat.addEventListener('click', () => mostrarVista('chat'));
-  pestanas.correo.addEventListener('click', () => mostrarVista('correo'));
+  apartados.agenda = crearAgenda({
+    contenedor: vistas.agenda,
+    api,
+    abrirAjustes: (seccion) => mostrarVista('ajustes', seccion),
+    preguntar: (texto) => {
+      mostrarVista('chat');
+      chat.preguntar(texto);
+    },
+  });
+  apartados.recordatorios = crearRecordatorios({
+    contenedor: vistas.recordatorios,
+    api,
+    web: api.plataforma === 'web',
+    alCambiar: contarRecordatoriosDeHoy,
+  });
+  apartados.memoria = crearMemoria({
+    contenedor: vistas.memoria,
+    api,
+    obtenerAjustes: () => ajustes,
+    guardarAjustes: async (cambios) => {
+      ajustes = await api.ajustes.guardar(cambios);
+    },
+  });
+  apartados.historial = crearHistorial({
+    contenedor: vistas.historial,
+    api,
+    alAbrir: (mensajesConversacion) => {
+      chat.cargar(mensajesConversacion);
+      mostrarVista('chat');
+    },
+    alNueva: async ({ irAlChat = true } = {}) => {
+      await chat.nueva();
+      if (irAlChat) mostrarVista('chat');
+    },
+  });
+
+  for (const [nombre, pestana] of Object.entries(pestanas)) pestana.addEventListener('click', () => mostrarVista(nombre));
+  // Flechas para moverse entre apartados, como en cualquier lista de pestañas.
+  document.querySelector('.apartados').addEventListener('keydown', (e) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    const orden = Object.keys(pestanas);
+    const actual = orden.indexOf(document.activeElement?.dataset.vista);
+    if (actual < 0) return;
+    e.preventDefault();
+    const siguiente =
+      e.key === 'Home' ? 0 : e.key === 'End' ? orden.length - 1 : (actual + (e.key === 'ArrowRight' ? 1 : -1) + orden.length) % orden.length;
+    mostrarVista(orden[siguiente]);
+    pestanas[orden[siguiente]].focus();
+  });
+  contarRecordatoriosDeHoy();
+  setInterval(contarRecordatoriosDeHoy, 60_000);
+  api.claude.alEvento((e) => e.tipo === 'recordatorio' && contarRecordatoriosDeHoy());
   document.getElementById('boton-ajustes').addEventListener('click', () =>
     mostrarVista(vistaActual === 'ajustes' ? 'chat' : 'ajustes'),
   );
@@ -210,6 +279,7 @@ async function iniciar() {
     abrirDialogo();
     mostrarVista('chat');
     chat.avisoRecordatorio(r);
+    contarRecordatoriosDeHoy();
     vibrar([30, 60, 30]);
     // Si acaba de aparecer (Electron lo muestra para avisar), primero termina de aparecer.
     setTimeout(() => kitsune.reproducir('alegria'), kitsune.accion?.nombre === 'aparecer' ? 1700 : 0);

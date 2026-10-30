@@ -1,5 +1,5 @@
 import { app, safeStorage } from 'electron';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { normalizarAjustes, aplicarCambios } from '../src/compartido/ajustes.js';
 
@@ -39,6 +39,29 @@ export function leerDatos(nombre) {
 
 export function guardarDatos(nombre, datos) {
   escribirJson(path.join(carpeta(), `${nombre}.json`), datos);
+}
+
+// Conversaciones guardadas: un archivo cifrado por conversación (pueden
+// incluir lo que Claude leyó de tu correo) y un índice cifrado con los títulos.
+const rutaConversacion = (nombre) => path.join(carpeta(), 'conversaciones', `${nombre}.bin`);
+
+export function leerCifrado(nombre) {
+  try {
+    return JSON.parse(safeStorage.decryptString(readFileSync(rutaConversacion(nombre))));
+  } catch {
+    return null;
+  }
+}
+
+export function guardarCifrado(nombre, datos) {
+  // Sin cifrado del sistema no se guarda: la conversación vive solo en memoria.
+  if (!safeStorage.isEncryptionAvailable()) return;
+  mkdirSync(path.dirname(rutaConversacion(nombre)), { recursive: true });
+  writeFileSync(rutaConversacion(nombre), safeStorage.encryptString(JSON.stringify(datos)), { mode: 0o600 });
+}
+
+export function borrarCifrado(nombre) {
+  rmSync(rutaConversacion(nombre), { force: true });
 }
 
 // Secretos (clave de Claude, tokens de Google): cifrados con la API del
