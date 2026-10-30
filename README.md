@@ -108,19 +108,45 @@ Sonnet 5.5 (más rápido) o Haiku 5.5 (más económico).
 
 ### Conectar Gmail y Google Calendar
 
-Google exige que cada instalación use su propio cliente OAuth:
+Kitsune trae su propio proyecto de Google: cada persona solo pulsa
+**Ajustes → Google → Conectar con Google**, elige su cuenta y acepta. Una vez.
+Cada uno ve únicamente su correo y su agenda; nada pasa por ningún servidor
+de Kitsune.
 
-1. En [Google Cloud Console](https://console.cloud.google.com/), crea un proyecto
-   y activa la **Gmail API** y la **Google Calendar API**.
-2. En "Pantalla de consentimiento de OAuth", añade tu cuenta como usuario de prueba.
-3. En Credenciales, crea un **ID de cliente OAuth** de tipo **App de escritorio**.
-4. En Kitsune: Ajustes → Correo → pega el ID y el secreto y pulsa
-   "Conectar con Google". Se abre el navegador para que autorices el acceso.
+Mientras la app no esté verificada por Google, la pantalla de permisos avisa
+de que «Google no ha verificado esta aplicación»: hay que pulsar
+**Configuración avanzada → Ir a Kitsune**. Google permite hasta 100 personas
+en una app sin verificar.
 
-Kitsune pide el permiso `gmail.modify` (leer, marcar, archivar, mover a la
-papelera y enviar; nunca borrar para siempre) y `calendar.events` (ver y
-crear eventos). El token se guarda cifrado. Si conectaste la cuenta antes de
-que existiera el calendario, Ajustes muestra "Conectar también el calendario".
+Kitsune pide `gmail.modify` (leer, marcar, archivar, mover a la papelera y
+enviar; nunca borrar para siempre) y `calendar.events` (ver y crear eventos).
+En Windows el token se guarda cifrado y no caduca; en la versión web Google
+da sesiones de una hora, que Kitsune renueva sola al tocar Correo, Agenda o
+enviar un mensaje (la ventana de Google se abre y se cierra sola).
+
+Quien prefiera su propio proyecto de Google Cloud puede ponerlo en
+**Ajustes → Google → Usar mi propio proyecto de Google**.
+
+### Configurar el proyecto de Google (una sola vez, quien publica la app)
+
+1. En [Google Cloud Console](https://console.cloud.google.com/) crea un
+   proyecto «Kitsune» y activa **Gmail API** y **Google Calendar API**.
+2. En **Google Auth Platform**: nombre «Kitsune», público **Externo**. En
+   **Data Access** añade los permisos
+   `https://www.googleapis.com/auth/gmail.modify` y
+   `https://www.googleapis.com/auth/calendar.events`. En **Audience**, pulsa
+   **Publish app** (en modo «Testing» las sesiones caducan cada 7 días).
+3. En **Clients** crea dos clientes OAuth:
+   - **Aplicación web**, con el origen autorizado `https://alfredomendozarueda.github.io`.
+   - **App de escritorio**.
+4. En GitHub, **Settings → Secrets and variables → Actions**:
+   - Variables: `GOOGLE_WEB_CLIENT_ID` y `GOOGLE_DESKTOP_CLIENT_ID`.
+   - Secret: `GOOGLE_DESKTOP_CLIENT_SECRET`.
+5. Vuelve a lanzar los flujos «Kitsune web» y «Kitsune para Windows»: los
+   identificadores quedan dentro de la web y del instalador
+   (`scripts/google.mjs`). La web nunca recibe el secreto del cliente de
+   escritorio; ese va dentro del instalador, como en cualquier app instalada
+   (Google no lo trata como confidencial y el inicio de sesión usa PKCE).
 
 ## En el móvil (app web instalable)
 
@@ -147,15 +173,13 @@ dirección se abre el modo de ejemplo.
 - **Claude**: la clave se pega en Ajustes igual que en escritorio. El navegador
   llama a la API directamente y la clave se guarda cifrada (AES-GCM) con una
   llave no exportable del propio navegador.
-- **Gmail**: crea en Google Cloud un ID de cliente OAuth de tipo
-  **Aplicación web** y añade como "Orígenes autorizados de JavaScript" la
-  dirección donde está publicada la app (Ajustes la muestra). No hace falta
-  secreto: solo se pega el ID.
+- **Gmail y Calendar**: igual que en escritorio, «Conectar con Google» y
+  elegir la cuenta.
 
 Diferencias con la versión de escritorio:
 
-- Google da a las aplicaciones web sesiones de una hora; después Kitsune pide
-  "Reconectar" con un toque (sin volver a dar permisos).
+- Google da a las aplicaciones web sesiones de una hora; Kitsune la renueva
+  al tocar Correo, Agenda o enviar un mensaje, sin volver a pedir permisos.
 - Los avisos de correo nuevo llegan como notificaciones mientras la app está
   abierta o en segundo plano reciente; con la app cerrada el sistema no la
   despierta (haría falta un servidor propio).

@@ -4,6 +4,7 @@ import { Recordatorios } from '../../compartido/recordatorios.js';
 import { Memoria } from '../../compartido/memoria.js';
 import { ClienteCalendario, PERMISO_CALENDARIO } from '../../compartido/calendario.js';
 import { Conversaciones, nuevoIdConversacion } from '../../compartido/conversaciones.js';
+import { GOOGLE } from '../../compartido/google.js';
 import { leerSecreto, guardarSecreto, borrarSecreto } from './secretos.js';
 
 // Versión web (PWA): el mismo contrato que window.asistente en Electron,
@@ -58,7 +59,9 @@ function errorReconectar() {
 
 export function crearBackendWeb() {
   let ajustes = normalizarAjustes(leerLocal(CLAVE_AJUSTES) ?? {});
-  const oyentes = { claude: [], nuevo: [], recordatorio: [], cita: [] };
+  const oyentes = { claude: [], nuevo: [], recordatorio: [], cita: [], renovado: [] };
+  // El cliente propio (Ajustes) manda; si no hay, el que trae la app.
+  const idCliente = () => ajustes.googleClientId || GOOGLE.web;
   const emitir = (lista, dato) => oyentes[lista].forEach((f) => f(dato));
   const escuchar = (lista, f) => {
     oyentes[lista].push(f);
@@ -95,37 +98,84 @@ export function crearBackendWeb() {
     return {
       conectado: Boolean(email),
       email,
-      configurado: Boolean(ajustes.googleClientId),
+      configurado: Boolean(idCliente()),
+      integrado: Boolean(GOOGLE.web),
       necesitaReconectar: Boolean(email && !vigente),
       // Quien conectó antes de que Kitsune usara el calendario tiene que volver a conectar.
       calendario: Boolean(email && (leerLocal(CLAVE_ALCANCES) ?? '').includes(PERMISO_CALENDARIO)),
     };
   }
 
-  // Debe llamarse desde un toque o clic: Google abre una ventana emergente.
-  async function conectar() {
-    if (!ajustes.googleClientId) throw new Error('Falta el ID de cliente de Google en Ajustes.');
+  // Cliente de Google Identity preparado de antemano: así renovar() puede
+  // pedir el token sin esperas, dentro del mismo toque del usuario.
+  let clienteToken = null;
+  let clienteTokenId = null;
+  let esperando = null;
+  async function prepararCliente() {
     const oauth2 = await cargarGoogle();
-    const yaConsintio = Boolean(leerLocal(CLAVE_EMAIL));
-    const respuesta = await new Promise((resolver, rechazar) => {
-      const cliente = oauth2.initTokenClient({
-        client_id: ajustes.googleClientId,
+    if (!clienteToken || clienteTokenId !== idCliente()) {
+      clienteTokenId = idCliente();
+      clienteToken = oauth2.initTokenClient({
+        client_id: clienteTokenId,
         scope: PERMISOS,
-        callback: (r) => (r.error ? rechazar(new Error(r.error_description || r.error)) : resolver(r)),
-        error_callback: (e) =>
-          rechazar(new Error(e.type === 'popup_closed' ? 'Se cerró la ventana de Google antes de terminar.' : 'No se pudo abrir el inicio de sesión de Google.')),
+        callback: (r) => esperando?.(r),
+        error_callback: (e) => esperando?.({ error: e.type }),
       });
-      cliente.requestAccessToken({ prompt: yaConsintio ? '' : 'consent' });
+    }
+    return clienteToken;
+  }
+
+  function pedirToken(cliente, opciones) {
+    return new Promise((resolver, rechazar) => {
+      esperando = (r) => {
+        esperando = null;
+        if (!r.error) return resolver(r);
+        rechazar(
+          new Error(
+            r.error === 'popup_closed'
+              ? 'Se cerró la ventana de Google antes de terminar.'
+              : r.error === 'popup_failed_to_open'
+                ? 'El navegador bloqueó la ventana de Google. Permite las ventanas emergentes para esta página.'
+                : r.error_description || 'No se pudo iniciar sesión en Google.',
+          ),
+        );
+      };
+      cliente.requestAccessToken(opciones);
     });
+  }
+
+  async function guardarToken(respuesta) {
     token = { acceso: respuesta.access_token, caduca: Date.now() + (Number(respuesta.expires_in) - 60) * 1000 };
     await guardarSecreto('googleToken', JSON.stringify(token));
     guardarLocal(CLAVE_ALCANCES, respuesta.scope ?? '');
+  }
+
+  // Debe llamarse desde un toque o clic: Google abre una ventana emergente.
+  async function conectar() {
+    if (!idCliente()) throw new Error('Falta el ID de cliente de Google en Ajustes.');
+    const cliente = await prepararCliente();
+    const email = leerLocal(CLAVE_EMAIL);
+    await guardarToken(await pedirToken(cliente, { prompt: email ? '' : 'consent', ...(email ? { login_hint: email } : {}) }));
     const perfil = await gmail.perfil();
     guardarLocal(CLAVE_EMAIL, perfil.emailAddress);
     if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
     programarCorreo();
     programarCitas();
     return estadoCorreo();
+  }
+
+  // Google da sesiones de una hora a las apps web. Al tocar Correo, Agenda o
+  // enviar un mensaje, si la sesión caducó se renueva: la ventana de Google
+  // se abre y se cierra sola (ya diste permiso). Sin esperas antes de pedir
+  // el token: el navegador solo deja abrir la ventana dentro del toque.
+  function renovar() {
+    const email = leerLocal(CLAVE_EMAIL);
+    if (!clienteToken || !email || esperando || (token && Date.now() < token.caduca)) return false;
+    pedirToken(clienteToken, { prompt: '', login_hint: email })
+      .then(guardarToken)
+      .then(() => emitir('renovado'))
+      .catch(() => {});
+    return true;
   }
 
   async function desconectar() {
@@ -299,6 +349,9 @@ export function crearBackendWeb() {
   if (leerLocal(CLAVE_EMAIL)) {
     programarCorreo();
     programarCitas();
+    // Para poder renovar la sesión al primer toque: token en memoria y Google cargado.
+    tokenGuardado();
+    prepararCliente().catch(() => {});
   }
 
   const api = {
@@ -347,6 +400,8 @@ export function crearBackendWeb() {
       guardarSecretoCliente: async () => {},
       conectar,
       desconectar,
+      renovar,
+      alRenovado: (f) => escuchar('renovado', f),
       listar: (opciones) => gmail.listar(opciones),
       leer: (id) => gmail.leer(id),
       modificar: (id, cambios) => gmail.modificar(id, cambios),

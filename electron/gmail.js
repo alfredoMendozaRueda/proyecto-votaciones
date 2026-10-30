@@ -4,6 +4,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { leerSecreto, guardarSecreto, borrarSecreto } from './almacen.js';
 import { ClienteGmail } from '../src/compartido/gmail.js';
 import { ClienteCalendario, PERMISO_CALENDARIO } from '../src/compartido/calendario.js';
+import { GOOGLE } from '../src/compartido/google.js';
 
 const AUTORIZAR = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN = 'https://oauth2.googleapis.com/token';
@@ -37,6 +38,12 @@ export class Gmail {
     return this.conectado && (leerSecreto('googleAlcances') ?? '').includes(PERMISO_CALENDARIO);
   }
 
+  // El cliente propio (Ajustes) manda; si no hay, el que trae la app.
+  #cliente() {
+    const propio = this.obtenerAjustes().googleClientId;
+    return propio ? { id: propio, secreto: leerSecreto('googleSecreto') ?? '' } : { id: GOOGLE.escritorio, secreto: GOOGLE.secretoEscritorio };
+  }
+
   get conectado() {
     return Boolean(leerSecreto('googleRefresco'));
   }
@@ -45,7 +52,9 @@ export class Gmail {
     return {
       conectado: this.conectado,
       email: leerSecreto('googleEmail'),
-      configurado: Boolean(this.obtenerAjustes().googleClientId && leerSecreto('googleSecreto')),
+      configurado: Boolean(this.#cliente().id && this.#cliente().secreto),
+      // La app trae su propio proyecto de Google: basta con pulsar Conectar.
+      integrado: Boolean(GOOGLE.escritorio && GOOGLE.secretoEscritorio),
       calendario: this.conCalendario,
     };
   }
@@ -58,8 +67,7 @@ export class Gmail {
   // servidor local efímero (127.0.0.1). PKCE evita que otro programa pueda
   // canjear el código interceptado.
   async conectar() {
-    const clientId = this.obtenerAjustes().googleClientId;
-    const secreto = leerSecreto('googleSecreto');
+    const { id: clientId, secreto } = this.#cliente();
     if (!clientId || !secreto) throw new Error('Falta el ID de cliente o el secreto de Google en Ajustes.');
 
     const verificador = base64Url(randomBytes(48));
@@ -142,8 +150,8 @@ export class Gmail {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: this.obtenerAjustes().googleClientId,
-        client_secret: leerSecreto('googleSecreto') ?? '',
+        client_id: this.#cliente().id,
+        client_secret: this.#cliente().secreto,
         ...campos,
       }),
     });

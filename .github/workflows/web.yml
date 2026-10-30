@@ -29,6 +29,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # Proyecto de Google de Kitsune (Settings → Secrets and variables → Actions).
+      # La web solo necesita el ID público del cliente web.
+      - run: node scripts/google.mjs
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
       - run: npm run build
       - uses: actions/upload-pages-artifact@v4
         with:

@@ -72,6 +72,25 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
     const dondeSeGuarda = escritorio ? 'en este equipo' : 'en este navegador';
     const [estadoClaude, estadoCorreo] = await Promise.all([api.claude.estado(), api.correo.estado()]);
 
+    // Pasos para quien prefiera su propio proyecto de Google Cloud.
+    const pasosPropios = `
+            <ol class="pasos">
+              <li>En Google Cloud Console, crea un proyecto y activa la API de Gmail y la de Google Calendar.</li>
+              ${
+                escritorio
+                  ? '<li>Crea un ID de cliente OAuth de tipo <strong>App de escritorio</strong>.</li><li>Pega aquí el ID y el secreto, y pulsa Conectar.</li>'
+                  : `<li>Crea un ID de cliente OAuth de tipo <strong>Aplicación web</strong> con este origen autorizado: <code>${escapar(location.origin)}</code></li><li>Pega aquí el ID y pulsa Conectar.</li>`
+              }
+            </ol>
+            <div class="ajuste"><label class="ajuste__etiqueta" for="google-id">ID de cliente</label>
+              <input class="campo" id="google-id" type="text" value="${escapar(ajustes.googleClientId)}" placeholder="…apps.googleusercontent.com" spellcheck="false"></div>
+            ${
+              escritorio
+                ? `<div class="ajuste"><label class="ajuste__etiqueta" for="google-secreto">Secreto del cliente</label>
+              <input class="campo" id="google-secreto" type="password" placeholder="GOCSPX-…" autocomplete="off" spellcheck="false"></div>`
+                : ''
+            }`;
+
     contenedor.innerHTML = `
       <div class="ajustes desplazable">
         <div class="ajustes__titulo">
@@ -169,30 +188,28 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
           }</div>
           ${
             estadoCorreo.conectado && !estadoCorreo.calendario
-              ? `<p class="ajuste__ayuda">Para que Kitsune vea tu agenda y cree eventos, activa la API de Google Calendar en tu proyecto de Google Cloud y vuelve a conectar la cuenta.</p>
+              ? `<p class="ajuste__ayuda">${
+                  estadoCorreo.integrado
+                    ? 'Para que Kitsune vea tu agenda y cree eventos, vuelve a conectar la cuenta y acepta también el permiso del calendario.'
+                    : 'Para que Kitsune vea tu agenda y cree eventos, activa la API de Google Calendar en tu proyecto de Google Cloud y vuelve a conectar la cuenta.'
+                }</p>
             <div><button type="button" class="boton boton--primario" id="conectar-correo">${icono('calendario', 15)} Conectar también el calendario</button></div>`
               : ''
           }
           ${
             estadoCorreo.conectado
               ? '<div><button type="button" class="boton" id="desconectar-correo">Desconectar la cuenta</button></div>'
-              : `
-            <ol class="pasos">
-              <li>En Google Cloud Console, crea un proyecto y activa la API de Gmail y la de Google Calendar.</li>
-              ${
-                escritorio
-                  ? '<li>Crea un ID de cliente OAuth de tipo <strong>App de escritorio</strong>.</li><li>Pega aquí el ID y el secreto, y pulsa Conectar.</li>'
-                  : `<li>Crea un ID de cliente OAuth de tipo <strong>Aplicación web</strong> con este origen autorizado: <code>${escapar(location.origin)}</code></li><li>Pega aquí el ID y pulsa Conectar.</li>`
-              }
-            </ol>
-            <div class="ajuste"><label class="ajuste__etiqueta" for="google-id">ID de cliente</label>
-              <input class="campo" id="google-id" type="text" value="${escapar(ajustes.googleClientId)}" placeholder="…apps.googleusercontent.com" spellcheck="false"></div>
-            ${
-              escritorio
-                ? `<div class="ajuste"><label class="ajuste__etiqueta" for="google-secreto">Secreto del cliente</label>
-              <input class="campo" id="google-secreto" type="password" placeholder="GOCSPX-…" autocomplete="off" spellcheck="false"></div>`
-                : ''
-            }
+              : estadoCorreo.integrado
+                ? `
+            <p class="ajuste__ayuda">Conecta tu cuenta de Google para que Kitsune lea tu correo y tu agenda. Solo hace falta una vez.</p>
+            <div><button type="button" class="boton boton--primario" id="conectar-correo">${icono('sobre', 15)} Conectar con Google</button></div>
+            <p class="ajuste__ayuda">Si Google avisa de que «no ha verificado esta aplicación», pulsa <strong>Configuración avanzada</strong> → <strong>Ir a Kitsune</strong> y acepta los permisos.</p>
+            <details class="avanzado">
+              <summary>Usar mi propio proyecto de Google</summary>
+              ${pasosPropios}
+            </details>`
+                : `
+            ${pasosPropios}
             <div><button type="button" class="boton boton--primario" id="conectar-correo">${icono('sobre', 15)} Conectar con Google</button></div>`
           }
           <p class="mensaje-ajuste" id="mensaje-correo" role="status"></p>

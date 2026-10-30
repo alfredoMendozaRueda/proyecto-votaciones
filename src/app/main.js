@@ -214,7 +214,17 @@ async function iniciar() {
     },
   });
 
-  for (const [nombre, pestana] of Object.entries(pestanas)) pestana.addEventListener('click', () => mostrarVista(nombre));
+  for (const [nombre, pestana] of Object.entries(pestanas)) {
+    pestana.addEventListener('click', () => {
+      // En la web, la sesión de Google dura una hora: se renueva con este mismo toque.
+      if (nombre === 'correo' || nombre === 'agenda') api.correo.renovar?.();
+      mostrarVista(nombre);
+    });
+  }
+  api.correo.alRenovado?.(() => {
+    correo.recargar();
+    if (vistaActual === 'agenda') apartados.agenda.mostrar();
+  });
   // Flechas para moverse entre apartados, como en cualquier lista de pestañas.
   document.querySelector('.apartados').addEventListener('keydown', (e) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;

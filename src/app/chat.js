@@ -469,6 +469,8 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
 
   formulario.addEventListener('submit', (e) => {
     e.preventDefault();
+    // Para que Claude pueda mirar tu correo y tu agenda, la sesión de Google se renueva con este toque.
+    if (!ocupado) api.correo.renovar?.();
     if (ocupado) api.claude.cancelar();
     else preguntar(entrada.value);
   });
