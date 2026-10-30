@@ -324,6 +324,8 @@ export function crearDemo() {
     avisarCorreo: true,
     googleClientId: '123456789-kitsune.apps.googleusercontent.com',
     pulsoDiario: true,
+    proveedor: 'groq',
+    modeloGroq: 'openai/gpt-oss-120b',
     usarMemoria: true,
     busquedaWeb: true,
     avisarCitas: true,

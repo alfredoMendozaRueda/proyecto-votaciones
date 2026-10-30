@@ -58,8 +58,20 @@ const conversaciones = new Conversaciones({
   guardar: (id, datos) => guardarCifrado(id, datos),
   borrar: (id) => borrarCifrado(id),
 });
+// Cada IA tiene su clave, cifrada con el sistema.
+const SECRETO_CLAVE = { claude: 'claveClaude', groq: 'claveGroq' };
+const proveedorValido = (p) => (p === 'groq' || p === 'claude' ? p : obtenerAjustes().proveedor);
+const estadoIA = () => {
+  const proveedor = obtenerAjustes().proveedor;
+  return {
+    proveedor,
+    configurado: Boolean(leerSecreto(SECRETO_CLAVE[proveedor])),
+    claves: { claude: Boolean(leerSecreto('claveClaude')), groq: Boolean(leerSecreto('claveGroq')) },
+  };
+};
+
 const claude = new ConversacionClaude({
-  obtenerClave: async () => leerSecreto('claveClaude'),
+  obtenerClave: async (proveedor) => leerSecreto(SECRETO_CLAVE[proveedorValido(proveedor)]),
   obtenerAjustes,
   gmail,
   calendario: {
@@ -294,20 +306,21 @@ function registrarCanales() {
     return ajustes;
   });
 
-  manejar('claude:estado', () => ({ configurado: Boolean(leerSecreto('claveClaude')) }));
-  manejar('claude:clave', async (clave) => {
+  manejar('claude:estado', () => estadoIA());
+  manejar('claude:clave', async (clave, proveedor) => {
+    const ia = proveedorValido(proveedor);
     if (!clave) {
-      borrarSecreto('claveClaude');
-      return { configurado: false };
+      borrarSecreto(SECRETO_CLAVE[ia]);
+      return estadoIA();
     }
-    const limpia = String(clave).trim();
+    const limpia = String(clave).trim().slice(0, 300);
     try {
-      await ConversacionClaude.probarClave(limpia, obtenerAjustes().modelo);
+      await ConversacionClaude.probarClave(limpia, obtenerAjustes().modelo, {}, ia);
     } catch (error) {
       throw new Error(mensajeDeError(error));
     }
-    guardarSecreto('claveClaude', limpia);
-    return { configurado: true };
+    guardarSecreto(SECRETO_CLAVE[ia], limpia);
+    return estadoIA();
   });
   manejar('claude:enviar', (texto) => {
     if (typeof texto !== 'string' || !texto.trim()) throw new Error('Escribe un mensaje.');

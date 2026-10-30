@@ -9,6 +9,26 @@ const MODELOS = [
   ['claude-haiku-5-5', 'Claude Haiku 5.5 · el más económico'],
 ];
 
+const MODELOS_GROQ = [
+  ['openai/gpt-oss-120b', 'GPT-OSS 120B · el más capaz (recomendado)'],
+  ['llama-3.3-70b-versatile', 'Llama 3.3 70B'],
+  ['openai/gpt-oss-20b', 'GPT-OSS 20B · el más rápido'],
+];
+
+// Lo que cambia según la IA elegida.
+const IA = {
+  groq: {
+    nombre: 'Groq',
+    marcador: 'gsk_…',
+    ayuda: 'Créala gratis, sin tarjeta, en <strong>console.groq.com</strong> → API Keys → Create API Key.',
+  },
+  claude: {
+    nombre: 'Claude',
+    marcador: 'sk-ant-…',
+    ayuda: 'De pago por uso: créala en <strong>console.anthropic.com</strong> → API Keys.',
+  },
+};
+
 const NOMBRES_TECLA = { Control: 'Ctrl', Super: 'Win', Space: 'Espacio' };
 
 const teclasDe = (atajo) => atajo.split('+').map((t) => `<kbd>${escapar(NOMBRES_TECLA[t] ?? t)}</kbd>`).join('');
@@ -71,6 +91,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
     const tactil = matchMedia('(pointer: coarse)').matches;
     const dondeSeGuarda = escritorio ? 'en este equipo' : 'en este navegador';
     const [estadoClaude, estadoCorreo] = await Promise.all([api.claude.estado(), api.correo.estado()]);
+    const ia = IA[ajustes.proveedor] ?? IA.claude;
 
     // Pasos para quien prefiera su propio proyecto de Google Cloud.
     const pasosPropios = `
@@ -156,25 +177,41 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
           ${interruptor('pulsoDiario', 'Pulso del día', 'La primera vez que abres Kitsune cada día te ofrece un resumen de correo y recordatorios.')}
         </section>
 
-        <section class="grupo" id="seccion-claude" aria-label="Claude">
-          <h3>Claude</h3>
+        <section class="grupo" id="seccion-claude" aria-label="Inteligencia artificial">
+          <h3>Inteligencia artificial</h3>
+          <div class="ajuste">
+            <span class="ajuste__etiqueta">Qué IA usa Kitsune</span>
+            ${segmentado('proveedor', [['groq', 'Groq · gratis'], ['claude', 'Claude · de pago']])}
+            <p class="ajuste__ayuda">${
+              ajustes.proveedor === 'groq'
+                ? 'Gratis, con un límite de mensajes por minuto y por día que da de sobra para el uso personal. No busca en internet.'
+                : 'Más lista y con búsqueda en internet; pagas lo que usas con tu cuenta de Anthropic.'
+            }</p>
+          </div>
           <div class="estado-cuenta ${estadoClaude.configurado ? 'ok' : ''}"><span class="punto"></span>${
-            estadoClaude.configurado ? `Clave guardada y cifrada ${dondeSeGuarda}` : 'Sin clave: añádela para poder chatear'
+            estadoClaude.configurado ? `Clave de ${ia.nombre} guardada y cifrada ${dondeSeGuarda}` : `Sin clave de ${ia.nombre}: añádela para poder chatear`
           }</div>
           <div class="ajuste">
-            <label class="ajuste__etiqueta" for="clave-claude">${estadoClaude.configurado ? 'Cambiar la clave de API' : 'Clave de API'}</label>
+            <label class="ajuste__etiqueta" for="clave-claude">${estadoClaude.configurado ? 'Cambiar la clave' : `Clave de ${ia.nombre}`}</label>
             <div style="display:flex;gap:6px">
-              <input class="campo" id="clave-claude" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+              <input class="campo" id="clave-claude" type="password" placeholder="${ia.marcador}" autocomplete="off" spellcheck="false">
               <button type="button" class="boton boton--primario" id="guardar-clave">Guardar</button>
             </div>
-            <p class="ajuste__ayuda">Créala en console.anthropic.com, en API Keys.${estadoClaude.configurado ? ' <button type="button" class="boton" id="quitar-clave" style="margin-left:6px;padding:2px 10px">Quitar clave</button>' : ''}</p>
+            <p class="ajuste__ayuda">${ia.ayuda}${estadoClaude.configurado ? ' <button type="button" class="boton" id="quitar-clave" style="margin-left:6px;padding:2px 10px">Quitar clave</button>' : ''}</p>
             <p class="mensaje-ajuste" id="mensaje-claude" role="status"></p>
           </div>
-          ${interruptor('busquedaWeb', 'Buscar en internet', 'Para el tiempo, noticias, precios u horarios. Cada búsqueda suma un pequeño coste en tu cuenta de Claude.')}
+          ${
+            ajustes.proveedor === 'claude'
+              ? `${interruptor('busquedaWeb', 'Buscar en internet', 'Para el tiempo, noticias, precios u horarios. Cada búsqueda suma un pequeño coste en tu cuenta de Claude.')}
           <div class="ajuste">
             <label class="ajuste__etiqueta" for="ajuste-modelo">Modelo</label>
             ${selector('modelo', 'ajuste-modelo', MODELOS)}
-          </div>
+          </div>`
+              : `<div class="ajuste">
+            <label class="ajuste__etiqueta" for="ajuste-modelo-groq">Modelo</label>
+            ${selector('modeloGroq', 'ajuste-modelo-groq', MODELOS_GROQ)}
+          </div>`
+          }
           <div class="ajuste">
             <label class="ajuste__etiqueta" for="ajuste-personalidad">Cómo quieres que te hable</label>
             <textarea class="campo" id="ajuste-personalidad" rows="3" maxlength="2000" placeholder="Por ejemplo: tutéame, sé breve y avísame primero de lo urgente.">${escapar(ajustes.personalidad)}</textarea>
@@ -234,6 +271,11 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
         const { clave, valor } = b.dataset;
         if (await guardar({ [clave]: valor })) {
           contenedor.querySelectorAll(`[data-clave="${clave}"]`).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+          // Al cambiar de IA cambian la clave, el modelo y lo que ofrece el chat.
+          if (clave === 'proveedor') {
+            await pintar('claude');
+            alCambiar(ajustes, { claveClaude: true });
+          }
         }
       }),
     );
@@ -286,7 +328,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
       if (!campo.value.trim()) return mostrarMensaje('mensaje-claude', 'Pega primero la clave.', false);
       mostrarMensaje('mensaje-claude', 'Comprobando la clave…', true);
       try {
-        await api.claude.guardarClave(campo.value.trim());
+        await api.claude.guardarClave(campo.value.trim(), ajustes.proveedor);
         campo.value = '';
         await pintar('claude');
         mostrarMensaje('mensaje-claude', 'Clave válida y guardada.', true);
@@ -296,7 +338,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
       }
     });
     contenedor.querySelector('#quitar-clave')?.addEventListener('click', async () => {
-      await api.claude.guardarClave('');
+      await api.claude.guardarClave('', ajustes.proveedor);
       await pintar('claude');
       alCambiar(ajustes, { claveClaude: false });
     });

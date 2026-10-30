@@ -17,6 +17,8 @@ const CLAVE_RECORDATORIOS = 'kitsune.recordatorios';
 const CLAVE_ALCANCES = 'kitsune.google.alcances';
 const PERMISOS = `https://www.googleapis.com/auth/gmail.modify ${PERMISO_CALENDARIO}`;
 const OPCIONES_CLAUDE = { dangerouslyAllowBrowser: true };
+// Cada IA tiene su clave, cifrada en el navegador.
+const SECRETO_CLAVE = { claude: 'claveClaude', groq: 'claveGroq' };
 
 function leerLocal(clave) {
   try {
@@ -271,7 +273,14 @@ export function crearBackendWeb() {
   });
   recordatorios.programar();
 
-  // ---------- Claude ----------
+  // ---------- Claude / Groq ----------
+
+  const proveedorValido = (p) => (p === 'groq' || p === 'claude' ? p : ajustes.proveedor);
+  async function estadoIA() {
+    const [claude, groq] = await Promise.all([leerSecreto('claveClaude'), leerSecreto('claveGroq')]);
+    const claves = { claude: Boolean(claude), groq: Boolean(groq) };
+    return { proveedor: ajustes.proveedor, configurado: claves[ajustes.proveedor], claves };
+  }
 
   // Historial de conversaciones, cifrado: incluye lo que Claude leyó del correo.
   const leerJsonSecreto = async (nombre) => {
@@ -326,7 +335,7 @@ export function crearBackendWeb() {
           crear: (evento) => calendario.crear(evento),
         },
         alCambiarHistorial: (historial, id) => conversaciones.guardar(id, historial).catch(() => {}),
-        obtenerClave: () => leerSecreto('claveClaude'),
+        obtenerClave: (proveedor) => leerSecreto(SECRETO_CLAVE[proveedorValido(proveedor)]),
         obtenerAjustes: () => ajustes,
         // Las herramientas de correo solo se ofrecen con una sesión de Gmail vigente.
         gmail: {
@@ -367,20 +376,22 @@ export function crearBackendWeb() {
       },
     },
     claude: {
-      estado: async () => ({ configurado: Boolean(await leerSecreto('claveClaude')) }),
-      async guardarClave(clave) {
+      estado: estadoIA,
+      async guardarClave(clave, proveedor) {
+        const ia = proveedorValido(proveedor);
         if (!clave) {
-          await borrarSecreto('claveClaude');
-          return { configurado: false };
+          await borrarSecreto(SECRETO_CLAVE[ia]);
+          return estadoIA();
         }
+        const limpia = clave.trim().slice(0, 300);
         const { ConversacionClaude, mensajeDeError } = await import('../../compartido/claude.js');
         try {
-          await ConversacionClaude.probarClave(clave.trim(), ajustes.modelo, OPCIONES_CLAUDE);
+          await ConversacionClaude.probarClave(limpia, ajustes.modelo, OPCIONES_CLAUDE, ia);
         } catch (error) {
           throw new Error(mensajeDeError(error));
         }
-        await guardarSecreto('claveClaude', clave.trim());
-        return { configurado: true };
+        await guardarSecreto(SECRETO_CLAVE[ia], limpia);
+        return estadoIA();
       },
       enviar: async (texto) => (await obtenerConversacion()).enviar(String(texto).trim().slice(0, 20000)),
       cancelar: async () => conversacion?.cancelar(),

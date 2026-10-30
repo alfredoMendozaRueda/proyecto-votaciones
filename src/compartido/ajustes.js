@@ -1,4 +1,7 @@
 // Ajustes por defecto y validación, compartidos por Electron y la web.
+import { MODELOS_GROQ } from './groq.js';
+
+export const PROVEEDORES = ['groq', 'claude'];
 export const MODELOS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
 
 export const AJUSTES_POR_DEFECTO = {
@@ -17,6 +20,9 @@ export const AJUSTES_POR_DEFECTO = {
   busquedaWeb: true,
   avisarCitas: true,
   ofrecerPortapapeles: true,
+  // La IA gratuita por defecto; Claude, para quien tenga clave de pago.
+  proveedor: 'groq',
+  modeloGroq: MODELOS_GROQ[0],
   modelo: 'claude-opus-5-5',
   personalidad: '',
   correoCadaMin: 5,
@@ -30,6 +36,8 @@ const OPCIONES = {
   posicion: ['izquierda', 'derecha'],
   calidadPelo: ['auto', 'alta', 'media', 'baja'],
   modelo: MODELOS,
+  proveedor: PROVEEDORES,
+  modeloGroq: MODELOS_GROQ,
 };
 const RANGOS = { dormirTrasMin: [0, 120], correoCadaMin: [1, 120] };
 const LARGOS = { atajo: 60, personalidad: 2000, googleClientId: 200 };

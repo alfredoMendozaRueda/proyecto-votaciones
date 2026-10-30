@@ -97,14 +97,31 @@ npm run dist
 respuestas inventados), útil para trabajar en el diseño sin cuentas reales.
 La vista del personaje y sus animaciones está en `personaje.html`.
 
-### Conectar Claude
+### Conectar la IA
+
+Kitsune funciona con dos IA; se elige en Ajustes → Inteligencia artificial.
+
+**Groq (gratis, la opción por defecto)**
+
+1. Crea una clave gratis, sin tarjeta, en [console.groq.com](https://console.groq.com) → API Keys → Create API Key.
+2. En Kitsune: Ajustes → Inteligencia artificial → Groq → pega la clave y pulsa Guardar.
+
+Usa modelos abiertos (GPT-OSS 120B por defecto; también Llama 3.3 70B y
+GPT-OSS 20B) con las mismas herramientas: correo, agenda, recordatorios y
+memoria. No tiene búsqueda web, y la capa gratuita limita las peticiones por
+minuto y por día: si se llega al límite, Kitsune lo avisa. En conversaciones
+largas solo se envía la parte reciente.
+
+**Claude (de pago)**
 
 1. Crea una clave en [console.anthropic.com](https://console.anthropic.com), en API Keys.
-2. En Kitsune: Ajustes → Claude → pega la clave y pulsa Guardar.
+2. En Kitsune: Ajustes → Inteligencia artificial → Claude → pega la clave y pulsa Guardar.
 
-La clave se comprueba antes de guardarla y se guarda cifrada con el sistema
-(DPAPI en Windows). El modelo por defecto es Claude Opus 5.5; puedes cambiar a
-Sonnet 5.5 (más rápido) o Haiku 5.5 (más económico).
+El modelo por defecto es Claude Opus 5.5; puedes cambiar a Sonnet 5.5 (más
+rápido) o Haiku 5.5 (más económico). Incluye búsqueda web.
+
+Las claves se comprueban antes de guardarlas y se guardan cifradas con el
+sistema (DPAPI en Windows), cada una por separado.
 
 ### Conectar Gmail y Google Calendar
 

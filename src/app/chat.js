@@ -283,8 +283,8 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
   function sinClave() {
     mensajes.innerHTML = `
       <div class="tarjeta-aviso">
-        <h2>Conecta a Claude</h2>
-        <p>Para hablar conmigo necesito tu clave de la API de Claude. Se guarda cifrada ${api.plataforma === 'web' ? 'en este navegador' : 'en este equipo'}.</p>
+        <h2>Conecta una IA</h2>
+        <p>Para hablar conmigo necesito una clave. La de <strong>Groq es gratis</strong> y se saca en un minuto, sin tarjeta; también puedes usar Claude. Se guarda cifrada ${api.plataforma === 'web' ? 'en este navegador' : 'en este equipo'}.</p>
         <button type="button" class="boton boton--primario" id="chat-ir-ajustes">${icono('llave', 16)} Añadir la clave</button>
       </div>`;
     mensajes.querySelector('#chat-ir-ajustes').addEventListener('click', () => abrirAjustes('claude'));

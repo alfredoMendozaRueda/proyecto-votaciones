@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld('asistente', {
   },
   claude: {
     estado: () => invocar('claude:estado'),
-    guardarClave: (clave) => invocar('claude:clave', clave),
+    guardarClave: (clave, proveedor) => invocar('claude:clave', clave, proveedor),
     enviar: (texto) => invocar('claude:enviar', texto),
     cancelar: () => invocar('claude:cancelar'),
     reiniciar: () => invocar('claude:reiniciar'),
