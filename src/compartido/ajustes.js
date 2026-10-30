@@ -7,6 +7,7 @@ export const MODELOS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-
 export const AJUSTES_POR_DEFECTO = {
   atajo: 'Control+Alt+K',
   paleta: 'carmesi',
+  estilo: 'realista',
   tamano: 'mediano',
   posicion: 'izquierda',
   calidadPelo: 'auto',
@@ -32,6 +33,7 @@ export const AJUSTES_POR_DEFECTO = {
 
 const OPCIONES = {
   paleta: ['carmesi', 'sombra', 'nieve'],
+  estilo: ['realista', 'anime', 'kawaii', 'tinta'],
   tamano: ['pequeno', 'mediano', 'grande'],
   posicion: ['izquierda', 'derecha'],
   calidadPelo: ['auto', 'alta', 'media', 'baja'],

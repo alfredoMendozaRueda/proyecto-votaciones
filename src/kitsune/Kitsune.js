@@ -6,6 +6,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { construirZorro } from './anatomia.js';
 import { crearMaterialesPelaje } from './pelaje.js';
 import { colorearOjo } from './ojo.js';
+import { ESTILOS, crearMaterialDibujo, crearMaterialContorno, crearColoretes } from './estilos.js';
 import { GestorCalidad, indiceNivel } from './rendimiento.js';
 import {
   clamp01,
@@ -183,6 +184,7 @@ export class Kitsune {
       movimientoReducido: reducido,
       // >1 acerca la cámara: en la app el zorro llena más su hueco.
       zoom: 1,
+      estilo: 'realista',
       ...opciones,
     };
     this.contenedor = contenedor;
@@ -234,6 +236,7 @@ export class Kitsune {
 
     this.fuegos = new FuegosFatuos(this.escena);
     this.setPaleta(this.opciones.paleta);
+    this.setEstilo(this.opciones.estilo);
 
     this.gestorCalidad = new GestorCalidad({
       inicial: this._ligero ? indiceNivel('media') : 0,
@@ -364,6 +367,38 @@ export class Kitsune {
     this._emitir('paleta', nombre);
   }
 
+  // Estilo de dibujo: realista, anime, kawaii o tinta (ver estilos.js).
+  setEstilo(nombre) {
+    const estilo = ESTILOS[nombre] ?? ESTILOS.realista;
+    this.estilo = ESTILOS[nombre] ? nombre : 'realista';
+    this._estilo = estilo;
+    this._materialesEstilo ??= {};
+    const cache = (this._materialesEstilo[this.estilo] ??= {
+      dibujo: estilo.toon ? crearMaterialDibujo(estilo.toon) : null,
+      contorno: estilo.contorno ? crearMaterialContorno(estilo.contorno) : null,
+    });
+    for (const malla of this._mallasCuerpo) {
+      malla.userData.materialReal ??= malla.material;
+      malla.material = cache.dibujo ?? malla.userData.materialReal;
+      for (const hijo of malla.children) if (hijo.isInstancedMesh) hijo.visible = estilo.pelo;
+      if (cache.contorno && !malla.userData.contorno) {
+        // El contorno comparte geometría: en las colas se mueve con ellas.
+        const contorno = new THREE.Mesh(malla.geometry, cache.contorno);
+        contorno.frustumCulled = false;
+        malla.add(contorno);
+        malla.userData.contorno = contorno;
+      }
+      if (malla.userData.contorno) {
+        malla.userData.contorno.visible = Boolean(cache.contorno);
+        if (cache.contorno) malla.userData.contorno.material = cache.contorno;
+      }
+    }
+    this.coloretes.visible = Boolean(estilo.coloretes);
+    this.zorro.materialesSueltos.bigotes.opacity = estilo.bigotes;
+    this._pendientePintar = true;
+    this._emitir('estilo', this.estilo);
+  }
+
   // En pequeño (en la esquina del móvil) el zorro pasa a ser una cría.
   setBebe(activo) {
     this.bebe.objetivo = activo ? 1 : 0;
@@ -490,6 +525,9 @@ export class Kitsune {
     this.corazones3d = particulas(5);
 
     this._mallasCuerpo = [...z.mallas, ...this.colas.map((c) => c.malla)];
+
+    this.coloretes = crearColoretes();
+    this.cabeza.add(this.coloretes);
   }
 
   // ---------- Bucle ----------
@@ -576,7 +614,8 @@ export class Kitsune {
     this.pecho.rotation.x = 0.1 * p.agachado;
     // Cría: el pecho y las colas encogen y la cabeza (con sus ojos) crece.
     this.bebe.valor += (this.bebe.objetivo - this.bebe.valor) * Math.min(1, dt * 5);
-    const bebe = this.bebe.valor;
+    // Cría al encogerse en la esquina, o siempre en el estilo kawaii.
+    const bebe = Math.max(this.bebe.valor, this._estilo.bebe);
     this.pecho.scale.multiplyScalar(1 - 0.12 * bebe);
     this.colasBase.scale.setScalar(1 - 0.3 * bebe);
     this.cuerpo.rotation.z = 0.015 * Math.sin(t * 0.7) * reducido;
@@ -597,11 +636,11 @@ export class Kitsune {
     this.boca.scale.y = 0.013 + 0.03 * abertura;
     this.boca.position.y = -0.03 - 0.03 * abertura;
 
-    const apertura = Math.max(0, Math.min(1.2, p.apertura * o.apertura * micro.parpadeo));
+    const apertura = Math.max(0, Math.min(1.25, p.apertura * o.apertura * micro.parpadeo * this._estilo.apertura));
     for (const ojo of this.zorro.ojos) {
       ojo.uniforms.uApertura.value = apertura;
       ojo.uniforms.uAlegria.value = clamp01(o.alegria);
-      ojo.uniforms.uDilatacion.value = clamp01(p.dilatacion + 0.4 * o.alegria);
+      ojo.uniforms.uDilatacion.value = clamp01(p.dilatacion + 0.4 * o.alegria + this._estilo.dilatacion);
       ojo.uniforms.uMirada.value.set(
         Math.max(-1, Math.min(1, p.miradaX + this.mirada.x * 0.8 + o.giro * 0.7)),
         Math.max(-1, Math.min(1, p.miradaY + this.mirada.y * 0.8)),

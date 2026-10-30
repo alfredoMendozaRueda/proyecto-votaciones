@@ -55,6 +55,7 @@ function aplicarAjustes(a) {
   escena.dataset.tamano = a.tamano;
   escena.dataset.posicion = a.posicion;
   kitsune.setPaleta(a.paleta);
+  kitsune.setEstilo(a.estilo);
   kitsune.setOpcion('seguirCursor', a.seguirCursor);
   kitsune.setOpcion('fuegos', a.fuegos);
   kitsune.setCalidad(a.calidadPelo);
@@ -166,6 +167,7 @@ async function iniciar() {
   ajustes = await api.ajustes.obtener();
   kitsune = new Kitsune(document.getElementById('zorro'), {
     paleta: ajustes.paleta,
+    estilo: ajustes.estilo,
     seguirCursor: ajustes.seguirCursor,
     fuegos: ajustes.fuegos,
     zoom: 1.22,

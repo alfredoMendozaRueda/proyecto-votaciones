@@ -1,0 +1,119 @@
+import * as THREE from 'three';
+
+// Estilos de dibujo del zorro. No cambian la geometría: cambian el material
+// (pelo por capas o sombreado de dibujo animado), el contorno, las
+// proporciones (la cría de cabeza grande) y el tamaño de la pupila.
+//   realista: pelo por capas y luz suave (el de siempre).
+//   anime:    sombreado en dos tonos, colores vivos y contorno marcado.
+//   kawaii:   cría, colores pastel, contorno suave, pupilas grandes y coloretes.
+//   tinta:    sumi-e: grises de tinta sobre papel con trazo negro; las marcas
+//             y los fuegos siguen en rojo.
+export const ESTILOS = {
+  realista: { nombre: 'Realista', pelo: true, toon: null, contorno: null, bebe: 0, dilatacion: 0, apertura: 1, bigotes: 0.7 },
+  anime: {
+    nombre: 'Anime',
+    pelo: false,
+    toon: { rampa: [0.5, 1], saturacion: 1.18 },
+    contorno: { color: '#160b09', grosor: 0.011 },
+    bebe: 0.25,
+    dilatacion: 0.12,
+    apertura: 1.1,
+    bigotes: 0.9,
+  },
+  kawaii: {
+    nombre: 'Kawaii',
+    pelo: false,
+    toon: { rampa: [0.7, 0.88, 1], pastel: 0.08, saturacion: 1.08 },
+    contorno: { color: '#5b2c22', grosor: 0.013 },
+    bebe: 1,
+    dilatacion: 0.8,
+    apertura: 1.25,
+    coloretes: true,
+    bigotes: 0.3,
+  },
+  tinta: {
+    nombre: 'Tinta',
+    pelo: false,
+    toon: { rampa: [0.38, 0.78, 1], tinta: true },
+    contorno: { color: '#0a0706', grosor: 0.02 },
+    bebe: 0,
+    dilatacion: 0,
+    apertura: 1,
+    bigotes: 1,
+  },
+};
+
+// Escalera de luz del sombreado: pocos tonos, sin degradado entre ellos.
+function crearRampa(valores) {
+  const datos = new Uint8Array(valores.map((v) => Math.round(v * 255)));
+  const textura = new THREE.DataTexture(datos, valores.length, 1, THREE.RedFormat);
+  textura.minFilter = THREE.NearestFilter;
+  textura.magFilter = THREE.NearestFilter;
+  textura.generateMipmaps = false;
+  textura.needsUpdate = true;
+  return textura;
+}
+
+export function crearMaterialDibujo({ rampa, pastel = 0, saturacion = 1, tinta = false }) {
+  const material = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: crearRampa(rampa) });
+  const ajustes = [];
+  if (saturacion !== 1) {
+    ajustes.push(`diffuseColor.rgb = max(mix(vec3(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114))), diffuseColor.rgb, ${saturacion.toFixed(2)}), 0.0);`);
+  }
+  if (pastel) ajustes.push(`diffuseColor.rgb = mix(diffuseColor.rgb * 1.1, vec3(1.0, 0.97, 0.95), ${pastel.toFixed(2)});`);
+  if (tinta) {
+    // Del color a la tinta: lo oscuro, negro de sumi; lo claro, papel.
+    ajustes.push(`float l = smoothstep(0.04, 0.8, dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)));
+      diffuseColor.rgb = mix(vec3(0.05, 0.045, 0.045), vec3(0.9, 0.87, 0.81), l * l);`);
+  }
+  material.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>\n${ajustes.join('\n')}`);
+  };
+  material.customProgramCacheKey = () => JSON.stringify({ rampa, pastel, saturacion, tinta });
+  return material;
+}
+
+// Contorno de casco invertido: la misma malla, hinchada y vista por detrás.
+export function crearMaterialContorno({ color, grosor }) {
+  const material = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
+  material.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>\ntransformed += normalize(normal) * ${grosor.toFixed(4)};`,
+    );
+  };
+  material.customProgramCacheKey = () => `contorno-${grosor}`;
+  return material;
+}
+
+// Coloretes de la versión kawaii: dos manchas rosadas y difusas en las mejillas.
+export function crearColoretes() {
+  const lienzo = document.createElement('canvas');
+  lienzo.width = lienzo.height = 64;
+  const ctx = lienzo.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255, 110, 130, 1)');
+  g.addColorStop(1, 'rgba(255, 120, 140, 0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  const textura = new THREE.CanvasTexture(lienzo);
+  textura.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.MeshBasicMaterial({
+    map: textura,
+    transparent: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3,
+  });
+  const grupo = new THREE.Group();
+  for (const lado of [-1, 1]) {
+    const mancha = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.075), material);
+    mancha.position.set(0.122 * lado, 0.035, 0.24);
+    mancha.lookAt(mancha.position.clone().add(new THREE.Vector3(0.75 * lado, -0.1, 0.65)));
+    mancha.renderOrder = 3;
+    grupo.add(mancha);
+  }
+  grupo.visible = false;
+  return grupo;
+}

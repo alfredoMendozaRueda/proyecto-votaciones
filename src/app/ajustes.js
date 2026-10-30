@@ -134,6 +134,11 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
                 .join('')}
             </div>
           </div>
+          <div class="ajuste">
+            <span class="ajuste__etiqueta">Estilo</span>
+            ${segmentado('estilo', [['realista', 'Realista'], ['anime', 'Anime'], ['kawaii', 'Kawaii'], ['tinta', 'Tinta']])}
+            <p class="ajuste__ayuda">Realista, con pelo; anime y kawaii, como dibujo animado; tinta, como un sumi-e. Los dibujados gastan menos batería.</p>
+          </div>
           ${
             escritorio
               ? `<div class="ajuste solo-escritorio"><span class="ajuste__etiqueta">Tamaño</span>${segmentado('tamano', [['pequeno', 'Pequeño'], ['mediano', 'Mediano'], ['grande', 'Grande']])}</div>
