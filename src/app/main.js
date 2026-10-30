@@ -6,6 +6,7 @@ import { crearCorreo } from './correo.js';
 import { crearAjustes } from './ajustes.js';
 import { crearAgenda, crearRecordatorios, crearMemoria, crearHistorial } from './vistas.js';
 import { icono } from './iconos.js';
+import { prepararMovil } from './movil.js';
 
 // Electron trae window.asistente (preload). En el navegador se usa la versión
 // web real, salvo en el modo de ejemplo (?demo o la página de demostración).
@@ -29,12 +30,15 @@ const pestanas = Object.fromEntries([...document.querySelectorAll('.apartados [d
 for (const span of document.querySelectorAll('.apartado__icono')) span.innerHTML = icono(span.dataset.icono, 18);
 document.getElementById('boton-ajustes').innerHTML = icono('ajustes');
 document.getElementById('boton-cerrar').innerHTML = icono('cerrar');
+document.getElementById('boton-nueva').innerHTML = icono('conversacion');
 
 let ajustes;
 let kitsune;
 let chat;
 let correo;
 let panelAjustes;
+// Disposición de móvil de la versión web (null en Electron).
+let movil = null;
 // Apartados que se vuelven a pintar cada vez que se abren.
 const apartados = {};
 let vistaActual = 'chat';
@@ -66,6 +70,7 @@ function mostrarVista(nombre, seccionAjustes = null) {
   // El apartado activo, a la vista si la barra se ha desplazado (pantallas estrechas).
   pestanas[nombre]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   document.getElementById('boton-ajustes').setAttribute('aria-pressed', String(nombre === 'ajustes'));
+  movil?.alCambiarVista(nombre);
   if (nombre === 'ajustes') panelAjustes.abrir(seccionAjustes);
   if (nombre === 'chat') enfocarChat();
   apartados[nombre]?.mostrar();
@@ -79,6 +84,8 @@ async function contarRecordatoriosDeHoy() {
   const hoy = (pendientes ?? []).filter((r) => r.cuando <= fin.getTime()).length;
   insigniaRecordatorios.hidden = hoy === 0;
   insigniaRecordatorios.textContent = String(hoy);
+  recordatoriosHoy = hoy;
+  ponerInsigniaApp();
 }
 
 function abrirDialogo() {
@@ -88,7 +95,8 @@ function abrirDialogo() {
 }
 
 function cerrarDialogo() {
-  if (dialogo.hidden) return Promise.resolve();
+  // En el móvil la app es el diálogo: no se cierra.
+  if (dialogo.hidden || movil?.activo()) return Promise.resolve();
   dialogo.classList.add('cerrandose');
   return new Promise((resolver) =>
     setTimeout(() => {
@@ -103,6 +111,15 @@ function ponerNoLeidos(n) {
   noLeidos = n === null ? noLeidos + 1 : n;
   insignia.hidden = noLeidos === 0;
   insignia.textContent = noLeidos > 99 ? '99+' : String(noLeidos);
+  ponerInsigniaApp();
+}
+
+// Número en el icono de la app instalada: correos sin leer y recordatorios de hoy.
+let recordatoriosHoy = 0;
+function ponerInsigniaApp() {
+  if (api.plataforma !== 'web' || !('setAppBadge' in navigator)) return;
+  const total = noLeidos + recordatoriosHoy;
+  (total ? navigator.setAppBadge(total) : navigator.clearAppBadge()).catch(() => {});
 }
 
 function actividad() {
@@ -218,6 +235,7 @@ async function iniciar() {
     pestana.addEventListener('click', () => {
       // En la web, la sesión de Google dura una hora: se renueva con este mismo toque.
       if (nombre === 'correo' || nombre === 'agenda') api.correo.renovar?.();
+      if (nombre !== vistaActual) vibrar(6);
       mostrarVista(nombre);
     });
   }
@@ -244,6 +262,22 @@ async function iniciar() {
     mostrarVista(vistaActual === 'ajustes' ? 'chat' : 'ajustes'),
   );
   document.getElementById('boton-cerrar').addEventListener('click', cerrarDialogo);
+  const nuevaConversacion = async () => {
+    await chat.nueva();
+    mostrarVista('chat');
+  };
+  document.getElementById('boton-nueva').addEventListener('click', nuevaConversacion);
+  if (api.plataforma !== 'electron') {
+    movil = prepararMovil({
+      escena,
+      dialogo,
+      zorro: document.getElementById('zorro'),
+      mostrarVista,
+      obtenerVista: () => vistaActual,
+      nuevaConversacion,
+      vibrar,
+    });
+  }
 
   kitsune.on('caricia', () => {
     actividad();
@@ -305,8 +339,14 @@ async function iniciar() {
 
   manejarAlternar = async (accion) => {
     if (accion === 'mostrar') {
-      await kitsune.reproducir('aparecer');
-      abrirDialogo();
+      // En el móvil el zorro vive dentro del diálogo: primero se abre y luego aparece.
+      if (movil?.activo()) {
+        abrirDialogo();
+        await kitsune.reproducir('aparecer');
+      } else {
+        await kitsune.reproducir('aparecer');
+        abrirDialogo();
+      }
       // Saludo solo la primera vez de cada día.
       const hoy = new Date().toDateString();
       try {
@@ -400,13 +440,15 @@ function atenderParametros() {
   const parametros = new URLSearchParams(location.search);
   const compartido = ['titulo', 'texto', 'enlace'].map((c) => parametros.get(c)?.trim()).filter(Boolean);
   if (parametros.has('correo')) mostrarVista('correo');
+  else if (parametros.has('agenda')) mostrarVista('agenda');
+  else if (parametros.has('recordatorios')) mostrarVista('recordatorios');
   else if (parametros.has('pulso')) chat.preguntar('Prepárame el pulso de hoy');
   else if (compartido.length) {
     mostrarVista('chat');
     chat.ofrecerTexto([...new Set(compartido)].join('\n'), 'compartido');
   }
   // Que recargar no repita la acción.
-  if ([...parametros.keys()].some((c) => ['correo', 'pulso', 'chat', 'titulo', 'texto', 'enlace'].includes(c))) {
+  if ([...parametros.keys()].some((c) => ['correo', 'agenda', 'recordatorios', 'pulso', 'chat', 'titulo', 'texto', 'enlace'].includes(c))) {
     history.replaceState(null, '', location.pathname);
   }
 }

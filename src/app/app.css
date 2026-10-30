@@ -474,6 +474,48 @@ textarea.campo {
   border-color: var(--rojo);
 }
 
+.sugerencias button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.sugerencias button .icono {
+  color: var(--rojo-vivo);
+}
+
+/* Tres sugerencias como mucho (en pantallas bajas del móvil, menos). */
+.sugerencias button:nth-child(n + 4) {
+  display: none;
+}
+
+/* Volver al último mensaje tras subir a leer algo anterior. */
+.chat__bajar {
+  position: absolute;
+  right: 16px;
+  bottom: 62px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--linea);
+  border-radius: 50%;
+  background: var(--carbon-2);
+  color: var(--texto);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  animation: entrar 0.2s ease-out both;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.chat__bajar:hover {
+  background: var(--carbon-3);
+}
+
+.chat__bajar:active {
+  transform: scale(0.94);
+}
+
 .burbuja {
   max-width: 88%;
   padding: 9px 13px;
@@ -1563,7 +1605,7 @@ kbd {
   gap: 6px;
 }
 
-.fila {
+.filas .fila {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1619,11 +1661,11 @@ kbd {
   display: none;
 }
 
-.fila--conversacion {
+.filas .fila--conversacion {
   padding: 0 6px 0 0;
 }
 
-.fila__abrir {
+.fila--conversacion .fila__abrir {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -2055,104 +2097,612 @@ html {
   }
 }
 
-/* Móvil: el zorro abajo a lo ancho y el diálogo ocupando el resto. */
-@media (max-width: 600px) {
-  :root:not([data-plataforma='electron']) .escena,
-  :root:not([data-plataforma='electron']) body.demo .escena {
-    --alto-zorro: clamp(170px, 30dvh, 280px);
-    inset: 0;
-    width: auto;
-    height: auto;
+/* ---------- Móvil (PWA): la app a pantalla completa ----------
+   main.js marca :root.movil en la versión web con pantalla estrecha. El
+   diálogo pasa a ser la app: cabecera arriba, apartados en una barra
+   inferior al alcance del pulgar y el zorro dentro del chat. */
+
+.solo-movil,
+.chat__escenario {
+  display: none !important;
+}
+
+:root.movil .icono-boton.solo-movil {
+  display: grid !important;
+}
+
+:root.movil .apartados .solo-movil {
+  display: flex !important;
+}
+
+:root.movil body {
+  font-size: 15px;
+}
+
+/* Sin la espera del doble toque para hacer zoom. */
+:root.movil button {
+  touch-action: manipulation;
+}
+
+/* La escena ocupa lo que se ve: con el teclado abierto, solo lo que queda encima. */
+:root.movil .escena,
+:root.movil body.demo .escena {
+  position: fixed;
+  inset: var(--vv-arriba, 0px) 0 auto;
+  width: auto;
+  height: var(--vv-alto, 100dvh);
+  transform: none !important;
+}
+
+:root.movil body.demo::after {
+  display: none;
+}
+
+:root.movil .dialogo {
+  inset: 0;
+  width: auto;
+  height: auto;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  animation: aparecer-app 0.35s ease-out both;
+}
+
+:root.movil .dialogo::after {
+  display: none;
+}
+
+@keyframes aparecer-app {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Cabecera: marca, nueva conversación y ajustes. En el móvil no se cierra. */
+:root.movil .dialogo__cabecera {
+  gap: 2px;
+  padding: calc(env(safe-area-inset-top, 0px) + 6px) max(8px, env(safe-area-inset-right, 0px)) 2px
+    max(16px, env(safe-area-inset-left, 0px));
+  border-bottom: 0;
+}
+
+:root.movil #boton-cerrar,
+:root.movil .escena:not([data-vista='chat']) #boton-nueva {
+  display: none !important;
+}
+
+:root.movil .marca__sello {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  font-size: 17px;
+}
+
+:root.movil .marca__nombre {
+  font-size: 21px;
+  letter-spacing: -0.01em;
+}
+
+:root.movil .icono-boton {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+:root.movil .icono-boton:active {
+  background: var(--carbon-3);
+  transform: scale(0.94);
+}
+
+/* Apartados en una barra inferior translúcida, con nombre bajo cada icono. */
+:root.movil .dialogo__cuerpo {
+  order: 2;
+}
+
+:root.movil .apartados {
+  order: 3;
+  justify-content: space-around;
+  gap: 0;
+  padding: 5px max(4px, env(safe-area-inset-right, 0px)) calc(5px + env(safe-area-inset-bottom, 0px))
+    max(4px, env(safe-area-inset-left, 0px));
+  border-top: 1px solid var(--linea-suave);
+  border-bottom: 0;
+  background: rgba(16, 9, 11, 0.86);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  overflow: visible;
+}
+
+:root.movil .apartados [data-vista='memoria'],
+:root.movil .apartados [data-vista='historial'] {
+  display: none;
+}
+
+:root.movil .apartados button {
+  flex: 1 1 0;
+  min-width: 0;
+  height: auto;
+  min-height: 54px;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 0 2px;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--texto-3);
+  transition: color 0.2s ease;
+}
+
+:root.movil .apartados button:hover:not([aria-selected='true']) {
+  background: transparent;
+  color: var(--texto-3);
+}
+
+:root.movil .apartados button[aria-selected='true'],
+:root.movil .apartados button.activo {
+  background: transparent;
+  color: var(--texto);
+}
+
+:root.movil .apartado__icono {
+  width: 56px;
+  height: 30px;
+  border-radius: 999px;
+  transition: background-color 0.25s ease, color 0.25s ease, transform 0.1s ease;
+}
+
+:root.movil .apartado__icono .icono {
+  width: 21px;
+  height: 21px;
+}
+
+:root.movil .apartados button[aria-selected='true'] .apartado__icono,
+:root.movil .apartados button.activo .apartado__icono {
+  background: var(--rojo-velo);
+  color: var(--rojo-vivo);
+}
+
+:root.movil .apartados button:active .apartado__icono {
+  transform: scale(0.9);
+}
+
+:root.movil .apartado__nombre,
+:root.movil .apartados button[aria-selected='true'] .apartado__nombre {
+  max-width: none;
+  margin: 0;
+  opacity: 1;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+
+:root.movil .apartados button[aria-selected='true'] .apartado__nombre,
+:root.movil .apartados button.activo .apartado__nombre {
+  font-weight: 700;
+}
+
+/* «Recordatorios» no cabe bajo el icono: se lee «Avisos» (el lector de pantalla, el nombre completo). */
+:root.movil .apartados button .apartado__nombre[data-corto] {
+  font-size: 0;
+}
+
+:root.movil .apartado__nombre[data-corto]::after {
+  content: attr(data-corto);
+  font-size: 11px;
+}
+
+:root.movil .apartados .insignia,
+:root.movil .apartados button[aria-selected='true'] .insignia {
+  position: absolute;
+  top: 1px;
+  left: calc(50% + 7px);
+  right: auto;
+  margin: 0;
+  background: var(--rojo-vivo);
+  color: #fff;
+  box-shadow: 0 0 0 2px #10090b;
+}
+
+/* Con el teclado abierto solo quedan la conversación y el campo de texto. */
+:root.movil .escena.teclado .apartados,
+:root.movil .escena.teclado .chat__escenario {
+  display: none !important;
+}
+
+/* ---------- Móvil: chat con el zorro ---------- */
+
+#vista-chat {
+  position: relative;
+}
+
+:root.movil .chat__escenario {
+  display: block !important;
+  position: relative;
+  flex: 0 0 92px;
+  min-height: 0;
+}
+
+/* Sin conversación el zorro es el protagonista; al hablar se hace pequeño arriba. */
+:root.movil .escena[data-chat='vacio'] .chat__escenario {
+  flex: 1 1 0;
+  min-height: 120px;
+  max-height: 330px;
+}
+
+:root.movil .escena[data-chat='vacio'] .chat__mensajes {
+  flex: 0 1 auto;
+}
+
+:root.movil .chat__escenario .zorro {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+}
+
+/* El suelo del zorro se desvanece en vez de cortarse contra lo de abajo. */
+:root.movil .chat__escenario {
+  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent);
+  mask-image: linear-gradient(to bottom, #000 72%, transparent);
+}
+
+:root.movil .chat__escenario.asentando .zorro {
+  animation: asentar 0.45s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+@keyframes asentar {
+  from {
+    opacity: 0.35;
+    transform: scale(0.9);
+  }
+}
+
+:root.movil .chat__mensajes {
+  gap: 12px;
+  padding: 8px max(14px, env(safe-area-inset-right, 0px)) 8px max(14px, env(safe-area-inset-left, 0px));
+}
+
+:root.movil .burbuja {
+  max-width: 86%;
+  padding: 10px 14px;
+  border-radius: 18px;
+  font-size: 15.5px;
+  line-height: 1.5;
+}
+
+:root.movil .chat__vacio {
+  margin: 0;
+  gap: 4px;
+  text-align: center;
+}
+
+:root.movil .chat__saludo {
+  font-size: 26px;
+  letter-spacing: -0.01em;
+}
+
+:root.movil .chat__vacio > p:not(.chat__saludo) {
+  max-width: 32ch;
+  margin-inline: auto;
+  text-wrap: balance;
+}
+
+/* Sugerencias: una por fila, a lo ancho y fáciles de pulsar. */
+:root.movil .sugerencias {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+:root.movil .sugerencias button {
+  min-height: 48px;
+  gap: 12px;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-size: 15px;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+:root.movil .sugerencias button:active {
+  background: var(--carbon-3);
+  transform: scale(0.98);
+}
+
+/* Pantallas bajas (o Safari con sus barras): menos texto para que el zorro quepa. */
+@media (max-height: 760px) {
+  :root.movil .chat__vacio > p:not(.chat__saludo) {
+    display: none;
+  }
+
+  :root.movil .chat__saludo {
+    font-size: 23px;
+  }
+
+  :root.movil .sugerencias {
+    margin-top: 10px;
+  }
+}
+
+@media (max-height: 620px) {
+  :root.movil .sugerencias button:nth-child(n + 3) {
+    display: none;
+  }
+}
+
+
+/* El pulso, en una sola fila. */
+:root.movil .pulso {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  margin-bottom: 8px;
+  padding: 10px 10px 10px 12px;
+  text-align: left;
+}
+
+:root.movil .pulso__texto p:not(.pulso__titulo) {
+  display: none;
+}
+
+:root.movil .pulso .boton {
+  grid-column: auto;
+  margin: 0;
+}
+
+/* Campo de texto redondeado, con botones de 44 px y letra de 16 px (sin zoom en el iPhone). */
+:root.movil .compositor {
+  gap: 2px;
+  margin: 4px max(10px, env(safe-area-inset-right, 0px)) 8px max(10px, env(safe-area-inset-left, 0px));
+  padding: 4px;
+  border-radius: 24px;
+}
+
+:root.movil #chat-nueva {
+  display: none;
+}
+
+:root.movil .compositor textarea {
+  min-height: 44px;
+  padding: 11px 6px 11px 12px;
+  font-size: 16px;
+}
+
+:root.movil .boton-enviar,
+:root.movil .compositor .icono-boton {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+:root.movil .chat__bajar {
+  bottom: 70px;
+}
+
+/* ---------- Móvil: el resto de apartados ---------- */
+
+:root.movil .campo,
+:root.movil .buscador input {
+  font-size: 16px;
+}
+
+:root.movil .buscador {
+  height: 44px;
+}
+
+:root.movil .boton {
+  min-height: 42px;
+}
+
+:root.movil .boton:active {
+  transform: scale(0.97);
+}
+
+:root.movil .filtros button {
+  padding: 8px 13px;
+}
+
+:root.movil .estrella {
+  width: 40px;
+}
+
+:root.movil .fila {
+  grid-template-columns: 40px minmax(0, 1fr);
+}
+
+:root.movil .fila__abrir {
+  padding-block: 10px 11px;
+}
+
+:root.movil .fila__de,
+:root.movil .fila__asunto {
+  font-size: 15px;
+}
+
+:root.movil .fila__extracto {
+  font-size: 13.5px;
+}
+
+:root.movil .correo__barra .boton--primario {
+  padding-inline: 12px;
+}
+
+:root.movil .apartado {
+  padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
+}
+
+:root.movil .apartado__cabecera h2 {
+  font-size: 24px;
+  letter-spacing: -0.01em;
+}
+
+:root.movil .filas .fila {
+  min-height: 56px;
+  font-size: 15px;
+}
+
+/* ---------- Hoja «Más» (móvil) ---------- */
+
+.hoja-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(5, 2, 3, 0.55);
+  animation: fundido 0.25s ease-out backwards;
+  transition: opacity 0.2s ease-in;
+}
+
+.hoja-fondo.cerrandose {
+  opacity: 0;
+}
+
+.hoja {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 41;
+  padding: 8px max(14px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px))
+    max(14px, env(safe-area-inset-left, 0px));
+  border-radius: 22px 22px 0 0;
+  border-top: 1px solid var(--linea);
+  background: rgba(28, 17, 20, 0.94);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  backdrop-filter: blur(24px) saturate(150%);
+  box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.5);
+  touch-action: none;
+  overscroll-behavior: contain;
+  animation: hoja-entrar 0.34s cubic-bezier(0.32, 0.72, 0, 1) backwards;
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.hoja.arrastrando {
+  transition: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Sale por donde entró, desde donde la haya dejado el dedo. */
+.hoja.cerrandose {
+  transform: translateY(100%) !important;
+  transition-duration: 0.22s;
+}
+
+@keyframes hoja-entrar {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes fundido {
+  from {
+    opacity: 0;
+  }
+}
+
+.hoja__asa {
+  width: 38px;
+  height: 5px;
+  margin: 0 auto 10px;
+  border-radius: 3px;
+  background: var(--linea);
+}
+
+.hoja__titulo {
+  margin: 0 6px 8px;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 19px;
+}
+
+.hoja__lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hoja__entrada {
+  width: 100%;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.hoja__entrada:active {
+  background: var(--carbon-3);
+}
+
+.hoja__icono {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--rojo-velo);
+  color: var(--rojo-vivo);
+}
+
+.hoja__texto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.hoja__texto span {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.hoja__texto small {
+  font-size: 13px;
+  color: var(--texto-3);
+}
+
+.hoja__ayuda {
+  margin: 10px 4px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--carbon-2);
+  color: var(--texto-2);
+  font-size: 14px;
+}
+
+.hoja__ayuda .icono {
+  display: inline;
+  vertical-align: -3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hoja,
+  .hoja.cerrandose {
+    animation: none;
+    transition: opacity 0.2s ease;
+  }
+
+  .hoja.cerrandose {
+    opacity: 0;
     transform: none !important;
   }
+}
 
-  :root:not([data-plataforma='electron']) body.demo::after {
-    display: none;
-  }
-
-  :root:not([data-plataforma='electron']) .zorro {
-    left: 0;
-    right: 0;
-    width: auto;
-    bottom: env(safe-area-inset-bottom, 0px);
-    height: var(--alto-zorro);
-  }
-
-  :root:not([data-plataforma='electron']) .dialogo {
-    left: max(10px, env(safe-area-inset-left, 0px));
-    right: max(10px, env(safe-area-inset-right, 0px));
-    top: calc(10px + env(safe-area-inset-top, 0px));
-    bottom: calc(var(--alto-zorro) + env(safe-area-inset-bottom, 0px) - 28px);
-    width: auto;
-    height: auto;
-    max-height: none;
-    transform-origin: 50% 100%;
-  }
-
-  :root:not([data-plataforma='electron']) .dialogo::after {
-    left: calc(50% - 9px);
-    right: auto;
-  }
-
-  /* Con el teclado abierto el zorro se aparta y el diálogo llega abajo. */
-  :root:not([data-plataforma='electron']) .escena.teclado .zorro {
-    height: 0;
-  }
-
-  :root:not([data-plataforma='electron']) .escena.teclado .dialogo {
-    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
-  }
-
-  :root:not([data-plataforma='electron']) .escena.teclado .dialogo::after {
-    display: none;
-  }
-
-  /* Objetivos táctiles de al menos 44 px y texto de 16 px en los campos
-     (por debajo, el iPhone hace zoom al escribir). */
-  :root:not([data-plataforma='electron']) .icono-boton {
-    width: 44px;
-    height: 44px;
-  }
-
-  :root:not([data-plataforma='electron']) .apartados button {
-    min-width: 40px;
-    height: 40px;
-  }
-
-  :root:not([data-plataforma='electron']) .filtros button,
-  :root:not([data-plataforma='electron']) .sugerencias button {
-    padding: 8px 13px;
-  }
-
-  :root:not([data-plataforma='electron']) .boton {
-    min-height: 42px;
-  }
-
-  :root:not([data-plataforma='electron']) .boton-enviar {
-    width: 42px;
-    height: 42px;
-  }
-
-  :root:not([data-plataforma='electron']) .estrella {
-    width: 40px;
-  }
-
-  :root:not([data-plataforma='electron']) .fila {
-    grid-template-columns: 40px minmax(0, 1fr);
-  }
-
-  :root:not([data-plataforma='electron']) .campo,
-  :root:not([data-plataforma='electron']) .compositor textarea,
-  :root:not([data-plataforma='electron']) .buscador input {
-    font-size: 16px;
-  }
-
-  :root:not([data-plataforma='electron']) .buscador {
-    height: 44px;
-  }
-
-  :root:not([data-plataforma='electron']) .correo__barra .boton--primario {
-    padding-inline: 12px;
+@media (prefers-reduced-transparency: reduce) {
+  :root.movil .apartados,
+  .hoja {
+    background: var(--carbon);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 

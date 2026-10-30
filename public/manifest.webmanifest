@@ -60,6 +60,32 @@
           "type": "image/png"
         }
       ]
+    },
+    {
+      "name": "Agenda",
+      "short_name": "Agenda",
+      "description": "Tus próximos eventos del calendario",
+      "url": "./?agenda",
+      "icons": [
+        {
+          "src": "iconos/icono-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Recordatorios",
+      "short_name": "Avisos",
+      "description": "Lo que tienes pendiente",
+      "url": "./?recordatorios",
+      "icons": [
+        {
+          "src": "iconos/icono-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ],
   "share_target": {

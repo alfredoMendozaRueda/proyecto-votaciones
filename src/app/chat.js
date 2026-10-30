@@ -70,10 +70,17 @@ const marcarPulso = () => {
 export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjustes }) {
   // El dictado del navegador no funciona dentro de Electron (necesita los servicios de Google).
   const Reconocimiento = api.plataforma === 'electron' ? null : window.SpeechRecognition || window.webkitSpeechRecognition;
-  const sugerencias = ['¿Tengo correos sin leer?', PEDIR_PULSO, api.demo ? 'Ayúdame a responder a Lucía' : 'Recuérdame mirar el correo en una hora'];
+  const sugerencias = [
+    { texto: '¿Tengo correos sin leer?', icono: 'sobre' },
+    { texto: '¿Qué tengo hoy en la agenda?', icono: 'calendario' },
+    { texto: '¿Qué tiempo hace hoy?', icono: 'sol' },
+    api.demo ? { texto: 'Ayúdame a responder a Lucía', icono: 'responder' } : { texto: 'Recuérdame mirar el correo en una hora', icono: 'campana' },
+  ];
 
   contenedor.innerHTML = `
+    <div class="chat__escenario" aria-hidden="true"></div>
     <div class="chat__mensajes desplazable" id="chat-mensajes" role="log" aria-live="polite" aria-relevant="additions"></div>
+    <button type="button" class="chat__bajar" id="chat-bajar" aria-label="Ir al último mensaje" title="Ir al último mensaje" hidden>${icono('bajar', 18)}</button>
     <form class="compositor" id="chat-formulario">
       <button type="button" class="icono-boton" id="chat-nueva" aria-label="Nueva conversación" title="Nueva conversación">${icono('nueva')}</button>
       <textarea id="chat-entrada" rows="1" placeholder="Escribe a Kitsune…" aria-label="Mensaje para Kitsune"></textarea>
@@ -100,6 +107,28 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     if (forzar || alFinal()) mensajes.scrollTop = mensajes.scrollHeight;
   };
 
+  // Al subir a leer algo anterior aparece un botón para volver al final.
+  const botonBajar = contenedor.querySelector('#chat-bajar');
+  const vigilarFinal = () => {
+    botonBajar.hidden = alFinal() || Boolean(mensajes.querySelector('.chat__vacio'));
+  };
+  mensajes.addEventListener('scroll', vigilarFinal, { passive: true });
+  new ResizeObserver(vigilarFinal).observe(mensajes);
+  // También cuando llega texto nuevo sin que se haya movido nada.
+  let vigilanciaPendiente = false;
+  new MutationObserver(() => {
+    if (vigilanciaPendiente) return;
+    vigilanciaPendiente = true;
+    requestAnimationFrame(() => {
+      vigilanciaPendiente = false;
+      vigilarFinal();
+    });
+  }).observe(mensajes, { childList: true, subtree: true, characterData: true });
+  botonBajar.addEventListener('click', () => {
+    const suave = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    mensajes.scrollTo({ top: mensajes.scrollHeight, behavior: suave ? 'smooth' : 'auto' });
+  });
+
   function vacio() {
     const pulso = obtenerAjustes().pulsoDiario && leerPulso() !== new Date().toDateString();
     mensajes.innerHTML = `
@@ -115,10 +144,12 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
         }
         <p class="chat__saludo">Hola, soy Kitsune.</p>
         <p>Pregúntame lo que quieras, pídeme que revise tu correo o que te recuerde algo.</p>
-        <div class="sugerencias">${sugerencias.map((s) => `<button type="button">${s}</button>`).join('')}</div>
+        <div class="sugerencias">${(pulso ? sugerencias : [{ texto: PEDIR_PULSO, icono: 'pulso' }, ...sugerencias])
+          .map((s) => `<button type="button" data-texto="${s.texto}">${icono(s.icono, 16)}<span>${s.texto}</span></button>`)
+          .join('')}</div>
       </div>`;
     mensajes.querySelector('#chat-pulso')?.addEventListener('click', () => preguntar(PEDIR_PULSO));
-    mensajes.querySelectorAll('.sugerencias button').forEach((b) => b.addEventListener('click', () => preguntar(b.textContent)));
+    mensajes.querySelectorAll('.sugerencias button').forEach((b) => b.addEventListener('click', () => preguntar(b.dataset.texto)));
   }
 
   // Nota pequeña en el chat (recordatorio, memoria, cita), con un botón opcional para deshacer.

@@ -33,6 +33,7 @@
             <span class="marca__sello" lang="ja" aria-hidden="true">狐</span>
             <span class="marca__nombre">Kitsune</span>
           </div>
+          <button type="button" class="icono-boton solo-movil" id="boton-nueva" aria-label="Nueva conversación" title="Nueva conversación"></button>
           <button type="button" class="icono-boton" id="boton-ajustes" aria-label="Ajustes" title="Ajustes"></button>
           <button type="button" class="icono-boton" id="boton-cerrar" aria-label="Cerrar el diálogo" title="Cerrar"></button>
         </header>
@@ -40,9 +41,10 @@
           <button type="button" role="tab" id="pestana-chat" data-vista="chat" aria-selected="true" aria-controls="vista-chat" title="Chat"><span class="apartado__icono" data-icono="chat"></span><span class="apartado__nombre">Chat</span></button>
           <button type="button" role="tab" id="pestana-correo" data-vista="correo" aria-selected="false" aria-controls="vista-correo" title="Correo"><span class="apartado__icono" data-icono="sobre"></span><span class="apartado__nombre">Correo</span><span class="insignia" id="insignia-correo" hidden></span></button>
           <button type="button" role="tab" id="pestana-agenda" data-vista="agenda" aria-selected="false" aria-controls="vista-agenda" title="Agenda"><span class="apartado__icono" data-icono="calendario"></span><span class="apartado__nombre">Agenda</span></button>
-          <button type="button" role="tab" id="pestana-recordatorios" data-vista="recordatorios" aria-selected="false" aria-controls="vista-recordatorios" title="Recordatorios"><span class="apartado__icono" data-icono="campana"></span><span class="apartado__nombre">Recordatorios</span><span class="insignia" id="insignia-recordatorios" hidden></span></button>
+          <button type="button" role="tab" id="pestana-recordatorios" data-vista="recordatorios" aria-selected="false" aria-controls="vista-recordatorios" title="Recordatorios" aria-label="Recordatorios"><span class="apartado__icono" data-icono="campana"></span><span class="apartado__nombre" data-corto="Avisos">Recordatorios</span><span class="insignia" id="insignia-recordatorios" hidden></span></button>
           <button type="button" role="tab" id="pestana-memoria" data-vista="memoria" aria-selected="false" aria-controls="vista-memoria" title="Memoria"><span class="apartado__icono" data-icono="memoria"></span><span class="apartado__nombre">Memoria</span></button>
           <button type="button" role="tab" id="pestana-historial" data-vista="historial" aria-selected="false" aria-controls="vista-historial" title="Historial"><span class="apartado__icono" data-icono="historial"></span><span class="apartado__nombre">Historial</span></button>
+          <button type="button" class="solo-movil" id="pestana-mas" aria-haspopup="dialog" aria-expanded="false" aria-controls="hoja-mas" title="Más"><span class="apartado__icono"></span><span class="apartado__nombre">Más</span></button>
         </nav>
         <div class="dialogo__cuerpo">
           <section class="vista" id="vista-chat" role="tabpanel" aria-labelledby="pestana-chat"></section>
