@@ -89,14 +89,16 @@ async function contarRecordatoriosDeHoy() {
 }
 
 function abrirDialogo() {
+  // En el móvil se abre con la transición: el zorro se encoge y el diálogo le sale de la boca.
+  if (movil?.activo()) return movil.abrir();
   dialogo.classList.remove('cerrandose');
   dialogo.hidden = false;
   if (vistaActual === 'chat') enfocarChat();
 }
 
 function cerrarDialogo() {
-  // En el móvil la app es el diálogo: no se cierra.
-  if (dialogo.hidden || movil?.activo()) return Promise.resolve();
+  if (movil?.activo()) return movil.cerrar();
+  if (dialogo.hidden) return Promise.resolve();
   dialogo.classList.add('cerrandose');
   return new Promise((resolver) =>
     setTimeout(() => {
@@ -272,6 +274,7 @@ async function iniciar() {
       escena,
       dialogo,
       zorro: document.getElementById('zorro'),
+      kitsune,
       mostrarVista,
       obtenerVista: () => vistaActual,
       nuevaConversacion,
@@ -287,6 +290,11 @@ async function iniciar() {
   kitsune.on('toque', () => {
     actividad();
     vibrar(8);
+    // En el móvil tocar al zorro abre el diálogo o, si ya está abierto, lo recoge.
+    if (movil?.activo()) {
+      movil.alternar();
+      return;
+    }
     if (dialogo.hidden) {
       abrirDialogo();
       kitsune.reproducir('saludar');
@@ -340,8 +348,8 @@ async function iniciar() {
   manejarAlternar = async (accion) => {
     if (accion === 'mostrar') {
       // En el móvil el zorro vive dentro del diálogo: primero se abre y luego aparece.
+      // En el móvil la app empieza solo con el zorro: el diálogo se abre al tocarlo.
       if (movil?.activo()) {
-        abrirDialogo();
         await kitsune.reproducir('aparecer');
       } else {
         await kitsune.reproducir('aparecer');
@@ -429,7 +437,9 @@ function prepararWeb() {
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
     navigator.serviceWorker.addEventListener('message', (e) => {
-      if (e.data?.tipo === 'abrir-correo') mostrarVista('correo');
+      if (e.data?.tipo !== 'abrir-correo') return;
+      abrirDialogo();
+      mostrarVista('correo');
     });
   }
 }
@@ -447,8 +457,9 @@ function atenderParametros() {
     mostrarVista('chat');
     chat.ofrecerTexto([...new Set(compartido)].join('\n'), 'compartido');
   }
-  // Que recargar no repita la acción.
+  // Llegar con una acción abre el diálogo directamente; que recargar no la repita.
   if ([...parametros.keys()].some((c) => ['correo', 'agenda', 'recordatorios', 'pulso', 'chat', 'titulo', 'texto', 'enlace'].includes(c))) {
+    abrirDialogo();
     history.replaceState(null, '', location.pathname);
   }
 }

@@ -21,6 +21,32 @@ function fechaCorta(ms) {
   return fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
 }
 
+// Un color estable para cada remitente (el mismo nombre, el mismo tono).
+function tonoDe(texto = '') {
+  let h = 0;
+  for (const c of texto.toLowerCase()) h = (h * 31 + c.codePointAt(0)) % 360;
+  return h;
+}
+
+const inicialDe = (de) => (de.nombre || de.email || '?').trim().charAt(0).toUpperCase();
+
+const avatar = (de, clase = '') =>
+  `<span class="avatar ${clase}" style="--tono: ${tonoDe(de.email || de.nombre)}" aria-hidden="true">${escapar(inicialDe(de))}</span>`;
+
+// Grupo de la bandeja: Hoy, Ayer, el día de la semana (esta semana) o el mes.
+function grupoDe(ms) {
+  const dia = new Date(ms);
+  dia.setHours(0, 0, 0, 0);
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const dias = Math.round((hoy - dia) / 86_400_000);
+  if (dias <= 0) return 'Hoy';
+  if (dias === 1) return 'Ayer';
+  if (dias < 7) return dia.toLocaleDateString('es-ES', { weekday: 'long' });
+  const mes = dia.toLocaleDateString('es-ES', { month: 'long', ...(dia.getFullYear() !== hoy.getFullYear() ? { year: 'numeric' } : {}) });
+  return mes;
+}
+
 const fechaLarga = (ms) =>
   new Date(ms).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -59,7 +85,8 @@ function prepararHtml(html, permitirImagenes) {
     a.setAttribute('rel', 'noopener noreferrer');
   });
   const srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>
-    body{margin:0;padding:14px 16px;font:14px/1.55 'Segoe UI',system-ui,sans-serif;color:#1d1416;background:#f7efe8;overflow-wrap:anywhere}
+    html{overflow-y:hidden}
+    body{margin:0;padding:16px 18px;font:15px/1.6 'Segoe UI',system-ui,sans-serif;color:#1d1416;background:#f7efe8;overflow-wrap:anywhere}
     img{max-width:100%;height:auto} table{max-width:100%} a{color:#b3122e}
   </style></head><body>${doc.body.innerHTML}</body></html>`;
   return { srcdoc, bloqueadas };
@@ -143,24 +170,29 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
       lista.innerHTML = `<li class="lista-vacia">${estado.consulta ? 'No hay correos que coincidan.' : 'No hay correos aquí.'}</li>`;
       return;
     }
+    let grupoAnterior = null;
     lista.innerHTML = estado.mensajes
-      .map(
-        (m) => `
+      .map((m) => {
+        const grupo = grupoDe(m.fecha);
+        const cabecera = grupo !== grupoAnterior ? `<li class="lista-correos__dia" role="presentation">${grupo}</li>` : '';
+        grupoAnterior = grupo;
+        return `${cabecera}
         <li class="fila${m.noLeido ? ' no-leida' : ''}" data-id="${m.id}">
-          <button type="button" class="estrella" data-accion="destacar" aria-pressed="${m.destacado}" aria-label="${m.destacado ? 'Quitar de destacados' : 'Destacar'}">${icono('estrella', 16)}</button>
-          <button type="button" class="fila__abrir" data-accion="abrir">
+          <button type="button" class="fila__abrir" data-accion="abrir" aria-label="${m.noLeido ? 'Sin leer. ' : ''}${escapar(m.de.nombre)}: ${escapar(m.asunto)}">
+            ${avatar(m.de, 'avatar--fila')}
             <span class="fila__de">${escapar(m.de.nombre)}</span>
             <span class="fila__fecha">${fechaCorta(m.fecha)}</span>
-            <span class="fila__asunto">${escapar(m.asunto)}</span>
+            <span class="fila__asunto">${escapar(m.asunto) || '(sin asunto)'}</span>
             <span class="fila__extracto">${escapar(m.extracto)}</span>
           </button>
+          <button type="button" class="estrella" data-accion="destacar" aria-pressed="${m.destacado}" aria-label="${m.destacado ? 'Quitar de destacados' : 'Destacar'}">${icono('estrella', 16)}</button>
           <div class="fila__acciones">
             <button type="button" class="icono-boton" data-accion="archivar" aria-label="Archivar" title="Archivar">${icono('archivar', 16)}</button>
             <button type="button" class="icono-boton" data-accion="papelera" aria-label="Mover a la papelera" title="Mover a la papelera">${icono('papelera', 16)}</button>
             <button type="button" class="icono-boton" data-accion="leido" aria-label="${m.noLeido ? 'Marcar como leído' : 'Marcar como no leído'}" title="${m.noLeido ? 'Marcar como leído' : 'Marcar como no leído'}">${icono(m.noLeido ? 'sobreAbierto' : 'sobre', 16)}</button>
           </div>
-        </li>`,
-      )
+        </li>`;
+      })
       .join('');
     lista.querySelectorAll('[data-accion]').forEach((b) =>
       b.addEventListener('click', (e) => {
@@ -246,7 +278,6 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
 
   function pintarLectura() {
     const c = estado.actual;
-    const inicial = (c.de.nombre || c.de.email || '?').trim().charAt(0).toUpperCase();
     contenedor.innerHTML = `
       <article class="lectura">
         <div class="lectura__barra">
@@ -260,11 +291,12 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
         <div class="lectura__contenido desplazable">
           <h2 class="lectura__asunto">${escapar(c.asunto)}</h2>
           <div class="remitente">
-            <span class="avatar" aria-hidden="true">${escapar(inicial)}</span>
+            ${avatar(c.de)}
             <div class="remitente__datos">
-              <strong>${escapar(c.de.nombre)}</strong>
-              <span>${escapar(c.de.email)} · ${fechaLarga(c.fecha)}</span>
+              <strong>${escapar(c.de.nombre || c.de.email)}</strong>
+              <span>${escapar(c.de.email)}</span>
             </div>
+            <time class="remitente__fecha" datetime="${new Date(c.fecha).toISOString()}">${fechaLarga(c.fecha)}</time>
           </div>
           <div class="aviso-imagenes" id="aviso-imagenes" hidden>${icono('imagen', 15)}<span>Imágenes ocultas para proteger tu privacidad.</span><button type="button" id="mostrar-imagenes">Mostrar</button></div>
           <div id="lectura-cuerpo" class="lectura__cuerpo"></div>
@@ -325,8 +357,11 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
       const marco = document.createElement('iframe');
       marco.className = 'cuerpo-html';
       marco.title = 'Contenido del correo';
-      marco.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox');
+      // Sin allow-scripts el correo no puede ejecutar nada; allow-same-origin
+      // solo sirve para medir su altura y que la lectura se desplace entera.
+      marco.setAttribute('sandbox', 'allow-same-origin allow-popups allow-popups-to-escape-sandbox');
       marco.setAttribute('referrerpolicy', 'no-referrer');
+      marco.addEventListener('load', () => ajustarAltura(marco));
       marco.srcdoc = srcdoc;
       destino.replaceChildren(marco);
       aviso.hidden = bloqueadas === 0;
@@ -337,6 +372,25 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos }) {
       destino.replaceChildren(div);
       aviso.hidden = true;
     }
+  }
+
+  // El marco crece hasta su contenido (también cuando cargan las imágenes o cambia el ancho).
+  function ajustarAltura(marco) {
+    const doc = marco.contentDocument;
+    if (!doc?.documentElement) return;
+    const medir = () => {
+      if (!marco.isConnected) return;
+      marco.style.height = '0px';
+      marco.style.height = `${Math.max(120, doc.documentElement.scrollHeight)}px`;
+    };
+    medir();
+    doc.querySelectorAll('img').forEach((img) => img.complete || img.addEventListener('load', medir, { once: true }));
+    let ancho = marco.clientWidth;
+    new ResizeObserver(() => {
+      if (marco.clientWidth === ancho) return;
+      ancho = marco.clientWidth;
+      medir();
+    }).observe(marco);
   }
 
   async function responder({ conKitsune = false } = {}) {

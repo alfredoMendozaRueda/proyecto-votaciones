@@ -765,12 +765,27 @@ textarea.campo {
   list-style: none;
 }
 
+/* Separador de días en la bandeja: queda pegado arriba al desplazar. */
+.lista-correos__dia {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 12px 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--texto-3);
+  background: linear-gradient(var(--carbon) 70%, transparent);
+}
+
+.lista-correos__dia:first-child {
+  padding-top: 4px;
+}
+
 .fila {
   position: relative;
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
-  align-items: start;
-  border-radius: 12px;
+  border-radius: 14px;
   transition: background-color 0.12s ease;
 }
 
@@ -782,74 +797,84 @@ textarea.campo {
   background: var(--carbon-2);
 }
 
+/* Avatar, remitente y hora; debajo el asunto y dos líneas del texto. */
+.fila__abrir {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'avatar de fecha'
+    'avatar asunto asunto'
+    'avatar extracto extracto';
+  column-gap: 12px;
+  row-gap: 1px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.avatar--fila {
+  grid-area: avatar;
+  align-self: start;
+  width: 40px;
+  height: 40px;
+  margin-top: 2px;
+  font-size: 16px;
+}
+
+/* Sin leer: un punto sobre el avatar. */
 .fila.no-leida::before {
   content: '';
   position: absolute;
-  left: 2px;
-  top: 18px;
-  width: 4px;
-  height: 4px;
+  z-index: 1;
+  left: 43px;
+  top: 10px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
+  border: 2px solid var(--carbon);
   background: var(--rojo-vivo);
 }
 
-.estrella {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 36px;
-  margin-top: 4px;
-  border: 0;
-  background: transparent;
-  color: var(--texto-3);
-}
-
-.estrella[aria-pressed='true'] {
-  color: var(--oro);
-}
-
-.estrella[aria-pressed='true'] .icono {
-  fill: currentColor;
-}
-
-.fila__abrir {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 1px 10px;
-  padding: 8px 10px 9px 2px;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  min-width: 0;
-}
-
 .fila__de,
-.fila__asunto,
-.fila__extracto {
+.fila__asunto {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .fila__de {
+  grid-area: de;
   color: var(--texto-2);
 }
 
 .fila__fecha {
+  grid-area: fecha;
+  align-self: center;
   font-size: 12px;
   color: var(--texto-3);
   font-variant-numeric: tabular-nums;
 }
 
 .fila__asunto {
-  grid-column: 1 / -1;
+  grid-area: asunto;
   color: var(--texto-2);
 }
 
 .fila__extracto {
-  grid-column: 1 / -1;
+  grid-area: extracto;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding-right: 30px;
   color: var(--texto-3);
   font-size: 12.5px;
+  line-height: 1.45;
 }
 
 .fila.no-leida .fila__de,
@@ -863,10 +888,39 @@ textarea.campo {
   font-weight: 700;
 }
 
+/* La estrella, abajo a la derecha de cada correo. */
+.estrella {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--texto-3);
+  transition: color 0.15s ease, transform 0.1s ease;
+}
+
+.estrella:active {
+  transform: scale(0.88);
+}
+
+.estrella[aria-pressed='true'] {
+  color: var(--oro);
+}
+
+.estrella[aria-pressed='true'] .icono {
+  fill: currentColor;
+}
+
 .fila__acciones {
   position: absolute;
   right: 6px;
   top: 6px;
+  z-index: 2;
   display: none;
   gap: 2px;
   padding: 2px;
@@ -970,11 +1024,11 @@ textarea.campo {
   flex: none;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: var(--rojo-hondo);
-  color: #fff;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: hsl(var(--tono, 356) 42% 30%);
+  color: hsl(var(--tono, 356) 80% 90%);
   font-weight: 700;
 }
 
@@ -983,6 +1037,18 @@ textarea.campo {
   display: flex;
   flex-direction: column;
   line-height: 1.3;
+}
+
+.remitente__datos {
+  flex: 1;
+}
+
+.remitente__fecha {
+  flex: none;
+  align-self: flex-start;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--texto-3);
 }
 
 .remitente__datos span {
@@ -1013,19 +1079,20 @@ textarea.campo {
   font-size: 12.5px;
 }
 
-/* El cuerpo nunca encoge por debajo de 200px: si no cabe, desplaza el conjunto. */
+/* El correo crece hasta su contenido y la lectura entera se desplaza de una vez. */
 .lectura__cuerpo {
   display: flex;
-  flex: 1 0 200px;
+  flex: none;
 }
 
 .cuerpo-html {
   flex: 1;
-  min-height: 200px;
+  min-height: 120px;
   width: 100%;
   border: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--papel);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 30px rgba(0, 0, 0, 0.25);
 }
 
 .cuerpo-texto {
@@ -1846,6 +1913,192 @@ kbd {
   margin-top: auto;
 }
 
+/* ---------- Calendario (Agenda) ---------- */
+
+.boton--suave {
+  min-height: 32px;
+  padding: 4px 12px;
+  border-color: var(--linea);
+  background: transparent;
+  font-size: 13px;
+}
+
+.calendario {
+  padding: 10px 8px 8px;
+  border: 1px solid var(--linea-suave);
+  border-radius: 18px;
+  background: var(--carbon-2);
+}
+
+.calendario__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.calendario__mes {
+  margin: 0;
+  white-space: nowrap;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 17px;
+}
+
+.calendario__mes::first-letter,
+.calendario__dia h3::first-letter {
+  text-transform: uppercase;
+}
+
+.calendario__siguiente .icono {
+  transform: scaleX(-1);
+}
+
+.calendario__semana,
+.calendario__dias {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendario__semana {
+  padding: 4px 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: center;
+  color: var(--texto-3);
+}
+
+.calendario__dias {
+  gap: 2px;
+  touch-action: pan-y;
+}
+
+/* Al cambiar de mes, los días llegan desde el lado hacia el que se va. */
+.calendario__dias.desde-derecha {
+  animation: mes-desde-derecha 0.28s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.calendario__dias.desde-izquierda {
+  animation: mes-desde-izquierda 0.28s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+@keyframes mes-desde-derecha {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+
+@keyframes mes-desde-izquierda {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}
+
+.calendario__celda {
+  height: 46px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.calendario__celda:hover {
+  background: var(--carbon-3);
+}
+
+.calendario__celda:active {
+  transform: scale(0.92);
+}
+
+.calendario__celda.fuera {
+  color: var(--texto-3);
+  opacity: 0.5;
+}
+
+.calendario__numero {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.calendario__celda.hoy .calendario__numero {
+  color: var(--rojo-vivo);
+  font-weight: 800;
+  box-shadow: inset 0 0 0 1.5px var(--rojo);
+}
+
+.calendario__celda[aria-pressed='true'] .calendario__numero {
+  background: var(--rojo);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.calendario__puntos {
+  display: flex;
+  gap: 3px;
+  height: 5px;
+  transition: opacity 0.2s ease;
+}
+
+.calendario.cargando .calendario__puntos {
+  opacity: 0;
+}
+
+.calendario__puntos i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--rojo-vivo);
+}
+
+.calendario__puntos i.todo-el-dia {
+  background: var(--oro);
+}
+
+.calendario__dia h3 {
+  margin: 16px 2px 8px;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 17px;
+}
+
+/* Cada evento lleva una franja de color: roja con hora, dorada si es de todo el día. */
+.filas .fila--evento {
+  border-left: 3px solid var(--rojo);
+}
+
+.filas .fila--todo-el-dia {
+  border-left-color: var(--oro);
+}
+
+.fila--todo-el-dia .fila__hora {
+  color: var(--oro);
+}
+
+.fila--evento .fila__hora small {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--texto-3);
+}
+
 /* ---------- Copiar, fuentes, confirmar y texto copiado ---------- */
 
 .burbuja--kitsune {
@@ -2097,13 +2350,15 @@ html {
   }
 }
 
-/* ---------- Móvil (PWA): la app a pantalla completa ----------
-   main.js marca :root.movil en la versión web con pantalla estrecha. El
-   diálogo pasa a ser la app: cabecera arriba, apartados en una barra
-   inferior al alcance del pulgar y el zorro dentro del chat. */
+/* ---------- Móvil (PWA) ----------
+   movil.js marca :root.movil en la versión web con pantalla estrecha y pone
+   el modo en la escena: «solo» (el zorro grande en el centro), «abriendo»,
+   «abierto» (cría abajo a la derecha y el diálogo casi a pantalla completa,
+   saliéndole de la boca) y «cerrando». */
 
 .solo-movil,
-.chat__escenario {
+.zorro-hueco,
+.pista-zorro {
   display: none !important;
 }
 
@@ -2127,6 +2382,9 @@ html {
 /* La escena ocupa lo que se ve: con el teclado abierto, solo lo que queda encima. */
 :root.movil .escena,
 :root.movil body.demo .escena {
+  --cria: 104px;
+  --grande: min(92vw, 62dvh, 520px);
+  --hueco-abajo: calc(var(--cria) * 0.8 + env(safe-area-inset-bottom, 0px));
   position: fixed;
   inset: var(--vv-arriba, 0px) 0 auto;
   width: auto;
@@ -2138,37 +2396,114 @@ html {
   display: none;
 }
 
-:root.movil .dialogo {
-  inset: 0;
-  width: auto;
-  height: auto;
-  max-height: none;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  background: transparent;
-  animation: aparecer-app 0.35s ease-out both;
+/* ---------- Móvil: el zorro ---------- */
+
+:root.movil .zorro {
+  z-index: 5;
+  transform-origin: 0 0;
 }
 
-:root.movil .dialogo::after {
-  display: none;
+/* Solo, abriéndose o cerrándose: grande y en el centro (un poco por encima). */
+:root.movil .escena .zorro {
+  left: calc(50% - var(--grande) / 2);
+  top: calc(46% - var(--grande) / 2);
+  bottom: auto;
+  right: auto;
+  width: var(--grande);
+  height: var(--grande);
 }
 
-@keyframes aparecer-app {
+/* Abierto: una cría en la esquina, a la que apunta la cola del diálogo. */
+:root.movil .escena[data-modo='abierto'] .zorro,
+:root.movil .zorro-hueco {
+  left: auto;
+  top: auto;
+  right: max(2px, env(safe-area-inset-right, 0px));
+  bottom: calc(2px + env(safe-area-inset-bottom, 0px));
+  width: var(--cria);
+  height: var(--cria);
+}
+
+:root.movil .zorro-hueco {
+  display: block !important;
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* La invitación a tocarlo, bajo el zorro, cuando está solo. */
+:root.movil .escena[data-modo='solo'] .pista-zorro {
+  display: block !important;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(46% + var(--grande) / 2 - 8px);
+  margin: 0;
+  text-align: center;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: var(--texto-3);
+  animation: pista 0.6s ease-out 1.6s both;
+  pointer-events: none;
+}
+
+@keyframes pista {
   from {
     opacity: 0;
+    transform: translateY(6px);
   }
 }
 
-/* Cabecera: marca, nueva conversación y ajustes. En el móvil no se cierra. */
+/* ---------- Móvil: el diálogo, que sale de la boca de la cría ---------- */
+
+:root.movil .dialogo {
+  inset: calc(env(safe-area-inset-top, 0px) + 8px) max(8px, env(safe-area-inset-right, 0px)) var(--hueco-abajo)
+    max(8px, env(safe-area-inset-left, 0px));
+  width: auto;
+  height: auto;
+  max-height: none;
+  border-radius: 24px;
+  /* La boca de la cría, abajo a la derecha: de ahí sale y ahí vuelve. */
+  transform-origin: calc(100% - var(--cria) * 0.42) calc(100% + var(--cria) * 0.3);
+  animation: salir-de-la-boca 0.5s cubic-bezier(0.32, 0.72, 0, 1) 0.1s both;
+}
+
+:root.movil .dialogo.cerrandose {
+  animation: volver-a-la-boca 0.2s cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@keyframes salir-de-la-boca {
+  from {
+    opacity: 0;
+    transform: scale(0.06);
+    border-radius: 60px;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@keyframes volver-a-la-boca {
+  to {
+    opacity: 0;
+    transform: scale(0.06);
+  }
+}
+
+/* La cola del bocadillo apunta a la boca de la cría. */
+:root.movil .dialogo::after {
+  left: auto;
+  right: calc(var(--cria) * 0.42 - 9px);
+  bottom: -9px;
+}
+
+/* Cabecera: marca, nueva conversación, ajustes y cerrar. */
 :root.movil .dialogo__cabecera {
-  gap: 2px;
-  padding: calc(env(safe-area-inset-top, 0px) + 6px) max(8px, env(safe-area-inset-right, 0px)) 2px
-    max(16px, env(safe-area-inset-left, 0px));
+  gap: 0;
+  padding: 8px 6px 4px 16px;
   border-bottom: 0;
 }
 
-:root.movil #boton-cerrar,
 :root.movil .escena:not([data-vista='chat']) #boton-nueva {
   display: none !important;
 }
@@ -2197,7 +2532,7 @@ html {
   transform: scale(0.94);
 }
 
-/* Apartados en una barra inferior translúcida, con nombre bajo cada icono. */
+/* Apartados en una barra al pie del diálogo, con nombre bajo cada icono. */
 :root.movil .dialogo__cuerpo {
   order: 2;
 }
@@ -2206,13 +2541,11 @@ html {
   order: 3;
   justify-content: space-around;
   gap: 0;
-  padding: 5px max(4px, env(safe-area-inset-right, 0px)) calc(5px + env(safe-area-inset-bottom, 0px))
-    max(4px, env(safe-area-inset-left, 0px));
+  padding: 4px 4px 6px;
   border-top: 1px solid var(--linea-suave);
   border-bottom: 0;
-  background: rgba(16, 9, 11, 0.86);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
-  backdrop-filter: blur(18px) saturate(150%);
+  border-radius: 0 0 24px 24px;
+  background: rgba(16, 9, 11, 0.6);
   overflow: visible;
 }
 
@@ -2225,7 +2558,7 @@ html {
   flex: 1 1 0;
   min-width: 0;
   height: auto;
-  min-height: 54px;
+  min-height: 52px;
   flex-direction: column;
   gap: 3px;
   padding: 4px 0 2px;
@@ -2247,7 +2580,7 @@ html {
 }
 
 :root.movil .apartado__icono {
-  width: 56px;
+  width: 54px;
   height: 30px;
   border-radius: 999px;
   transition: background-color 0.25s ease, color 0.25s ease, transform 0.1s ease;
@@ -2303,66 +2636,32 @@ html {
   margin: 0;
   background: var(--rojo-vivo);
   color: #fff;
-  box-shadow: 0 0 0 2px #10090b;
+  box-shadow: 0 0 0 2px var(--carbon);
 }
 
-/* Con el teclado abierto solo quedan la conversación y el campo de texto. */
-:root.movil .escena.teclado .apartados,
-:root.movil .escena.teclado .chat__escenario {
+/* Con el teclado abierto la cría se esconde y el diálogo llega hasta abajo. */
+:root.movil .escena.teclado .apartados {
   display: none !important;
 }
 
-/* ---------- Móvil: chat con el zorro ---------- */
+:root.movil .escena.teclado .dialogo {
+  bottom: 8px;
+}
+
+:root.movil .escena.teclado .dialogo::after,
+:root.movil .escena.teclado[data-modo='abierto'] .zorro {
+  display: none;
+}
+
+/* ---------- Móvil: chat ---------- */
 
 #vista-chat {
   position: relative;
 }
 
-:root.movil .chat__escenario {
-  display: block !important;
-  position: relative;
-  flex: 0 0 92px;
-  min-height: 0;
-}
-
-/* Sin conversación el zorro es el protagonista; al hablar se hace pequeño arriba. */
-:root.movil .escena[data-chat='vacio'] .chat__escenario {
-  flex: 1 1 0;
-  min-height: 120px;
-  max-height: 330px;
-}
-
-:root.movil .escena[data-chat='vacio'] .chat__mensajes {
-  flex: 0 1 auto;
-}
-
-:root.movil .chat__escenario .zorro {
-  position: absolute;
-  inset: 0;
-  width: auto;
-  height: auto;
-}
-
-/* El suelo del zorro se desvanece en vez de cortarse contra lo de abajo. */
-:root.movil .chat__escenario {
-  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent);
-  mask-image: linear-gradient(to bottom, #000 72%, transparent);
-}
-
-:root.movil .chat__escenario.asentando .zorro {
-  animation: asentar 0.45s cubic-bezier(0.2, 0.9, 0.3, 1) both;
-}
-
-@keyframes asentar {
-  from {
-    opacity: 0.35;
-    transform: scale(0.9);
-  }
-}
-
 :root.movil .chat__mensajes {
   gap: 12px;
-  padding: 8px max(14px, env(safe-area-inset-right, 0px)) 8px max(14px, env(safe-area-inset-left, 0px));
+  padding: 8px 14px;
 }
 
 :root.movil .burbuja {
@@ -2374,13 +2673,13 @@ html {
 }
 
 :root.movil .chat__vacio {
-  margin: 0;
+  margin: auto 0;
   gap: 4px;
   text-align: center;
 }
 
 :root.movil .chat__saludo {
-  font-size: 26px;
+  font-size: 27px;
   letter-spacing: -0.01em;
 }
 
@@ -2395,7 +2694,7 @@ html {
   flex-direction: column;
   flex-wrap: nowrap;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 :root.movil .sugerencias button {
@@ -2412,32 +2711,24 @@ html {
   transform: scale(0.98);
 }
 
-/* Pantallas bajas (o Safari con sus barras): menos texto para que el zorro quepa. */
-@media (max-height: 760px) {
+@media (max-height: 640px) {
   :root.movil .chat__vacio > p:not(.chat__saludo) {
     display: none;
   }
 
-  :root.movil .chat__saludo {
-    font-size: 23px;
-  }
-
-  :root.movil .sugerencias {
-    margin-top: 10px;
-  }
-}
-
-@media (max-height: 620px) {
   :root.movil .sugerencias button:nth-child(n + 3) {
     display: none;
   }
-}
 
+  :root.movil .calendario__celda {
+    height: 40px;
+  }
+}
 
 /* El pulso, en una sola fila. */
 :root.movil .pulso {
   grid-template-columns: auto minmax(0, 1fr) auto;
-  margin-bottom: 8px;
+  margin-bottom: 14px;
   padding: 10px 10px 10px 12px;
   text-align: left;
 }
@@ -2454,7 +2745,7 @@ html {
 /* Campo de texto redondeado, con botones de 44 px y letra de 16 px (sin zoom en el iPhone). */
 :root.movil .compositor {
   gap: 2px;
-  margin: 4px max(10px, env(safe-area-inset-right, 0px)) 8px max(10px, env(safe-area-inset-left, 0px));
+  margin: 4px 10px 8px;
   padding: 4px;
   border-radius: 24px;
 }
@@ -2503,16 +2794,48 @@ html {
   padding: 8px 13px;
 }
 
-:root.movil .estrella {
-  width: 40px;
-}
-
-:root.movil .fila {
-  grid-template-columns: 40px minmax(0, 1fr);
-}
-
 :root.movil .fila__abrir {
-  padding-block: 10px 11px;
+  padding-block: 12px;
+}
+
+:root.movil .avatar--fila {
+  width: 44px;
+  height: 44px;
+  font-size: 17px;
+}
+
+:root.movil .fila.no-leida::before {
+  left: 46px;
+}
+
+:root.movil .lectura__asunto {
+  font-size: 23px;
+  letter-spacing: -0.01em;
+}
+
+:root.movil .lectura__contenido {
+  gap: 14px;
+  padding: 14px 16px 20px;
+}
+
+:root.movil .remitente .avatar {
+  width: 44px;
+  height: 44px;
+  font-size: 17px;
+}
+
+:root.movil .cuerpo-texto {
+  font-size: 15.5px;
+}
+
+:root.movil .lectura__pie {
+  padding: 10px 12px;
+}
+
+:root.movil .lectura__pie .boton {
+  flex: 1;
+  justify-content: center;
+  min-height: 46px;
 }
 
 :root.movil .fila__de,

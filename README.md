@@ -3,8 +3,9 @@
 Asistente personal protagonizado por un kitsune 3D de nueve colas. En Windows,
 con `Ctrl + Alt + K` aparece abajo a la izquierda de la pantalla y, encima de
 él, un diálogo en rojo y negro para hablar con Claude y llevar el correo de
-Gmail sin salir de ahí. En el móvil es una app web instalable (PWA): tocas el
-icono y el zorro aparece abajo con el diálogo encima, a pantalla completa.
+Gmail sin salir de ahí. En el móvil es una app web instalable (PWA): al
+abrirla solo está el zorro, grande; al tocarlo se encoge hasta una cría en la
+esquina y el diálogo le sale de la boca, casi a pantalla completa.
 
 Esta rama es un proyecto independiente del sistema de votaciones: no comparte
 historial ni código con `main`.
@@ -18,7 +19,7 @@ las flechas pasan de uno a otro):
 | ----------------- | ----------------------------------------------------------------------------------------- |
 | **Chat**          | La conversación con Kitsune.                                                              |
 | **Correo**        | La bandeja de Gmail.                                                                      |
-| **Agenda**        | Google Calendar por días (14 días, ampliable), crear eventos a mano y borrarlos.          |
+| **Agenda**        | Calendario del mes con puntos en los días ocupados; al tocar un día, sus eventos. Crear y borrar a mano. |
 | **Recordatorios** | Los pendientes, alta rápida («en 1 hora», «mañana a las 9») y borrar. Insignia con los de hoy. |
 | **Memoria**       | Lo que Kitsune sabe de ti: añadir, olvidar, olvidarlo todo y apagarla.                    |
 | **Historial**     | Las últimas 50 conversaciones, con buscador: ábrelas para seguir donde lo dejaste.        |
@@ -170,7 +171,10 @@ Quien prefiera su propio proyecto de Google Cloud puede ponerlo en
 
 ## En el móvil (app web instalable)
 
-La misma interfaz funciona como PWA en Android e iPhone. Se publica sola en
+La misma interfaz funciona como PWA en Android e iPhone, con disposición
+propia: el zorro solo al abrir, el diálogo saliendo de su boca al tocarlo,
+los apartados en una barra inferior, una hoja «Más» (Memoria, Historial,
+Ajustes) que se cierra deslizándola, y la app ajustada al teclado. Se publica sola en
 GitHub Pages con cada push a esta rama (`.github/workflows/web.yml`). La
 primera vez hay que activarlo en el repositorio:
 

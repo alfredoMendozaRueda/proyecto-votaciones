@@ -1,5 +1,5 @@
 import { icono } from './iconos.js';
-import { cuandoLegible, haceCuanto, nombreDelDia } from './fechas.js';
+import { cuandoLegible, haceCuanto } from './fechas.js';
 
 // Apartados de Agenda, Recordatorios, Memoria e Historial. Cada uno pinta su
 // lista al mostrarse (mostrar) y permite añadir y borrar a mano lo mismo que
@@ -59,17 +59,6 @@ function botonBorrar(etiqueta, accion) {
   return boton;
 }
 
-// Agrupa por día: "Hoy", "Mañana", "Jueves 6 de noviembre".
-function agruparPorDia(elementos, fecha) {
-  const grupos = new Map();
-  for (const el of elementos) {
-    const clave = inicioDelDia(fecha(el));
-    if (!grupos.has(clave)) grupos.set(clave, []);
-    grupos.get(clave).push(el);
-  }
-  return [...grupos].map(([dia, lista]) => ({ titulo: nombreDelDia(dia), lista }));
-}
-
 function mensajeError(contenedor, texto) {
   const p = contenedor.querySelector('.apartado__mensaje');
   if (!p) return;
@@ -79,19 +68,43 @@ function mensajeError(contenedor, texto) {
 
 // ---------- Agenda ----------
 
+const DIAS_SEMANA = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+const NOMBRES_SEMANA = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+const horaCorta = (ms) => new Date(ms).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+const mismoDia = (a, b) => inicioDelDia(a) === inicioDelDia(b);
+// El día siguiente a las 00:00 (sin contar los cambios de hora).
+const diaSiguiente = (ms) => {
+  const d = new Date(ms);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
+};
+
+// Primer lunes visible y los 42 días (6 semanas) de la cuadrícula de un mes.
+function diasDeLaCuadricula(anio, mes) {
+  const primero = new Date(anio, mes, 1);
+  const desplazamiento = (primero.getDay() + 6) % 7;
+  return Array.from({ length: 42 }, (_, i) => new Date(anio, mes, 1 - desplazamiento + i).getTime());
+}
+
+// La agenda es un calendario: el mes en cuadrícula, con puntos en los días que
+// tienen algo, y debajo los eventos del día elegido.
 export function crearAgenda({ contenedor, api, abrirAjustes, preguntar }) {
-  let dias = 14;
+  const hoy = () => inicioDelDia(Date.now());
+  let seleccionado = hoy();
+  let mesVisible = { anio: new Date().getFullYear(), mes: new Date().getMonth() };
+  let eventos = [];
+  let cargado = null; // clave del mes cuyos eventos hay en memoria
 
   async function mostrar() {
     contenedor.innerHTML = `
       <div class="apartado desplazable">
         <div class="apartado__cabecera">
           <h2>Agenda</h2>
+          <button type="button" class="boton boton--suave" id="agenda-hoy">Hoy</button>
           <button type="button" class="icono-boton" id="agenda-actualizar" aria-label="Actualizar" title="Actualizar">${icono('actualizar')}</button>
           <button type="button" class="boton boton--primario" id="agenda-nuevo" hidden>${icono('nueva', 15)} Nuevo</button>
         </div>
         <form class="formulario" id="agenda-formulario" hidden>
-          <input class="campo" name="titulo" placeholder="Qué (por ejemplo, Dentista)" maxlength="200" required aria-label="Título del evento">
+          <input class="campo" name="titulo" placeholder="Qué (por ejemplo, Dentista)…" maxlength="200" required aria-label="Título del evento" autocomplete="off">
           <div class="formulario__fila">
             <input class="campo" type="date" name="fecha" required aria-label="Fecha">
             <label class="casilla"><input type="checkbox" name="todoElDia"> Todo el día</label>
@@ -100,7 +113,7 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar }) {
             <label class="formulario__hora">De <input class="campo" type="time" name="inicio" required aria-label="Hora de inicio"></label>
             <label class="formulario__hora">a <input class="campo" type="time" name="fin" required aria-label="Hora de fin"></label>
           </div>
-          <input class="campo" name="lugar" placeholder="Dónde (opcional)" maxlength="200" aria-label="Lugar">
+          <input class="campo" name="lugar" placeholder="Dónde (opcional)…" maxlength="200" aria-label="Lugar" autocomplete="off">
           <p class="apartado__mensaje" role="alert" hidden></p>
           <div class="formulario__botones">
             <button type="submit" class="boton boton--primario">Guardar en el calendario</button>
@@ -109,7 +122,11 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar }) {
         </form>
         <div id="agenda-lista">${cargando}</div>
       </div>`;
-    contenedor.querySelector('#agenda-actualizar').addEventListener('click', pintarLista);
+    contenedor.querySelector('#agenda-actualizar').addEventListener('click', () => {
+      cargado = null;
+      pintar();
+    });
+    contenedor.querySelector('#agenda-hoy').addEventListener('click', () => irA(hoy()));
     const formulario = contenedor.querySelector('#agenda-formulario');
     contenedor.querySelector('#agenda-nuevo').addEventListener('click', () => abrirFormulario(formulario));
     formulario.querySelector('[data-cancelar]').addEventListener('click', () => (formulario.hidden = true));
@@ -126,16 +143,19 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar }) {
       e.preventDefault();
       guardarEvento(formulario);
     });
-    await pintarLista();
+    await pintar();
   }
 
+  // El formulario se abre con el día elegido en el calendario.
   function abrirFormulario(formulario) {
     formulario.reset();
-    const ahora = new Date();
-    ahora.setHours(ahora.getHours() + 1, 0, 0, 0);
-    formulario.fecha.value = fechaCampo(ahora);
-    formulario.inicio.value = horaCampo(ahora);
-    formulario.fin.value = `${dos(Math.min(ahora.getHours() + 1, 23))}:00`;
+    const base = new Date();
+    base.setHours(base.getHours() + 1, 0, 0, 0);
+    const dia = new Date(seleccionado);
+    dia.setHours(mismoDia(seleccionado, Date.now()) ? base.getHours() : 10, 0, 0, 0);
+    formulario.fecha.value = fechaCampo(dia);
+    formulario.inicio.value = horaCampo(dia);
+    formulario.fin.value = `${dos(Math.min(dia.getHours() + 1, 23))}:00`;
     formulario.querySelector('[data-horas]').hidden = false;
     mensajeError(formulario, '');
     formulario.hidden = false;
@@ -145,7 +165,7 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar }) {
   async function guardarEvento(formulario) {
     const todoElDia = formulario.todoElDia.checked;
     const inicio = deCampos(formulario.fecha.value, todoElDia ? '00:00' : formulario.inicio.value);
-    const fin = todoElDia ? inicio + DIA : deCampos(formulario.fecha.value, formulario.fin.value);
+    const fin = todoElDia ? diaSiguiente(inicio) : deCampos(formulario.fecha.value, formulario.fin.value);
     if (!Number.isFinite(inicio) || !Number.isFinite(fin) || fin <= inicio) {
       mensajeError(formulario, 'La hora de fin tiene que ser posterior a la de inicio.');
       return;
@@ -155,7 +175,10 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar }) {
     try {
       await api.calendario.crear({ titulo: formulario.titulo.value.trim(), inicio, fin, todoElDia, lugar: formulario.lugar.value.trim() });
       formulario.hidden = true;
-      await pintarLista();
+      cargado = null;
+      seleccionado = inicioDelDia(inicio);
+      mesVisible = { anio: new Date(inicio).getFullYear(), mes: new Date(inicio).getMonth() };
+      await pintar();
     } catch (e) {
       mensajeError(formulario, e.message);
     } finally {
@@ -163,12 +186,36 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar }) {
     }
   }
 
-  async function pintarLista() {
+  const delDia = (dia) => {
+    const fin = diaSiguiente(dia);
+    return eventos.filter((e) => e.inicio < fin && e.fin > dia);
+  };
+
+  // Elegir un día (si es de otro mes, el calendario pasa a ese mes).
+  function irA(dia, { enfocar = false } = {}) {
+    seleccionado = inicioDelDia(dia);
+    const d = new Date(seleccionado);
+    const otroMes = d.getFullYear() !== mesVisible.anio || d.getMonth() !== mesVisible.mes;
+    mesVisible = { anio: d.getFullYear(), mes: d.getMonth() };
+    if (otroMes) return pintar({ enfocar });
+    pintarCalendario({ enfocar });
+  }
+
+  function cambiarMes(paso) {
+    const d = new Date(mesVisible.anio, mesVisible.mes + paso, 1);
+    mesVisible = { anio: d.getFullYear(), mes: d.getMonth() };
+    // Al cambiar de mes se elige el 1 (o hoy, si es el mes actual).
+    seleccionado = d.getMonth() === new Date().getMonth() && d.getFullYear() === new Date().getFullYear() ? hoy() : d.getTime();
+    pintar({ direccion: paso });
+  }
+
+  async function pintar({ enfocar = false, direccion = 0 } = {}) {
     const lista = contenedor.querySelector('#agenda-lista');
     if (!lista) return;
     const estado = await api.calendario.estado().catch(() => ({ conectado: false }));
     contenedor.querySelector('#agenda-nuevo').hidden = !(estado.calendario && !estado.necesitaReconectar);
     if (!estado.conectado || !estado.calendario || estado.necesitaReconectar) {
+      contenedor.querySelector('#agenda-hoy').hidden = true;
       const reconectar = estado.necesitaReconectar && estado.calendario;
       lista.innerHTML = `
         <div class="tarjeta-aviso">
@@ -183,56 +230,135 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar }) {
       lista.querySelector('#agenda-conectar').addEventListener('click', async () => {
         if (!reconectar) return abrirAjustes('correo');
         await api.correo.conectar().catch(() => {});
-        pintarLista();
+        pintar();
       });
       return;
     }
-    lista.innerHTML = cargando;
-    const desde = inicioDelDia(Date.now());
-    let eventos;
-    try {
-      eventos = await api.calendario.eventos(desde, desde + dias * DIA);
-    } catch (e) {
-      lista.innerHTML = `<p class="apartado__vacio">${escapar(e.message)}</p>`;
-      return;
+    const clave = `${mesVisible.anio}-${mesVisible.mes}`;
+    if (!lista.querySelector('.calendario')) {
+      lista.innerHTML = `
+        <section class="calendario" aria-label="Calendario">
+          <div class="calendario__cabecera">
+            <button type="button" class="icono-boton" data-mes="-1" aria-label="Mes anterior" title="Mes anterior">${icono('volver')}</button>
+            <h3 class="calendario__mes" aria-live="polite"></h3>
+            <button type="button" class="icono-boton calendario__siguiente" data-mes="1" aria-label="Mes siguiente" title="Mes siguiente">${icono('volver')}</button>
+          </div>
+          <div class="calendario__semana" aria-hidden="true">${DIAS_SEMANA.map((d) => `<span>${d}</span>`).join('')}</div>
+          <div class="calendario__dias" role="group"></div>
+        </section>
+        <section class="calendario__dia" aria-live="polite"></section>`;
+      lista.querySelectorAll('[data-mes]').forEach((b) => b.addEventListener('click', () => cambiarMes(Number(b.dataset.mes))));
+      prepararGestos(lista.querySelector('.calendario__dias'));
     }
-    // Lo que ya terminó hoy no hace falta verlo.
-    eventos = eventos.filter((e) => e.fin > Date.now() || e.todoElDia);
-    lista.innerHTML = '';
-    if (!eventos.length) {
-      lista.innerHTML = `<p class="apartado__vacio">No tienes nada en los próximos ${dias} días.</p>`;
-    }
-    for (const grupo of agruparPorDia(eventos, (e) => Math.max(e.inicio, desde))) {
-      const seccion = document.createElement('section');
-      seccion.className = 'apartado__grupo';
-      seccion.innerHTML = `<h3>${escapar(grupo.titulo)}</h3><ul class="filas"></ul>`;
-      for (const e of grupo.lista) {
-        const li = document.createElement('li');
-        li.className = 'fila';
-        const hora = e.todoElDia ? 'Todo el día' : new Date(e.inicio).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-        li.innerHTML = `<span class="fila__hora">${hora}</span><div class="fila__cuerpo"><span class="fila__titulo"></span><span class="fila__detalle"></span></div>`;
-        li.querySelector('.fila__titulo').textContent = e.titulo;
-        li.querySelector('.fila__detalle').textContent = e.lugar;
-        li.append(
-          botonBorrar(`Borrar «${e.titulo}» del calendario`, async () => {
-            await api.calendario.borrar(e.id);
-            li.remove();
-          }),
-        );
-        seccion.querySelector('ul').append(li);
+    if (cargado !== clave) {
+      const dias = diasDeLaCuadricula(mesVisible.anio, mesVisible.mes);
+      lista.querySelector('.calendario').classList.add('cargando');
+      pintarCalendario({ enfocar, direccion });
+      try {
+        eventos = await api.calendario.eventos(dias[0], diaSiguiente(dias.at(-1)));
+        cargado = clave;
+      } catch (e) {
+        lista.querySelector('.calendario__dia').innerHTML = `<p class="apartado__vacio">${escapar(e.message)}</p>`;
+        return;
+      } finally {
+        lista.querySelector('.calendario')?.classList.remove('cargando');
       }
-      lista.append(seccion);
+    }
+    pintarCalendario({ enfocar, direccion: cargado === clave ? 0 : direccion });
+  }
+
+  function pintarCalendario({ enfocar = false, direccion = 0 } = {}) {
+    const lista = contenedor.querySelector('#agenda-lista');
+    const rejilla = lista?.querySelector('.calendario__dias');
+    if (!rejilla) return;
+    const { anio, mes } = mesVisible;
+    const titulo = `${new Date(anio, mes, 1).toLocaleDateString('es-ES', { month: 'long' })} ${anio}`;
+    lista.querySelector('.calendario__mes').textContent = titulo;
+    contenedor.querySelector('#agenda-hoy').hidden = mismoDia(seleccionado, Date.now());
+    rejilla.innerHTML = diasDeLaCuadricula(anio, mes)
+      .map((dia) => {
+        const d = new Date(dia);
+        const suyos = delDia(dia);
+        const fuera = d.getMonth() !== mes;
+        const nombre = `${NOMBRES_SEMANA[(d.getDay() + 6) % 7]}, ${d.getDate()} de ${d.toLocaleDateString('es-ES', { month: 'long' })}`;
+        const cuantos = suyos.length ? `, ${suyos.length} ${suyos.length === 1 ? 'evento' : 'eventos'}` : '';
+        const puntos = suyos
+          .slice(0, 3)
+          .map((e) => `<i class="${e.todoElDia ? 'todo-el-dia' : ''}"></i>`)
+          .join('');
+        return `<button type="button" class="calendario__celda${fuera ? ' fuera' : ''}${mismoDia(dia, Date.now()) ? ' hoy' : ''}"
+          data-dia="${dia}" aria-label="${nombre}${cuantos}" aria-pressed="${dia === seleccionado}"
+          ${mismoDia(dia, Date.now()) ? 'aria-current="date"' : ''} tabindex="${dia === seleccionado ? 0 : -1}">
+          <span class="calendario__numero">${d.getDate()}</span><span class="calendario__puntos">${puntos}</span></button>`;
+      })
+      .join('');
+    if (direccion) {
+      rejilla.classList.remove('desde-izquierda', 'desde-derecha');
+      void rejilla.offsetWidth;
+      rejilla.classList.add(direccion > 0 ? 'desde-derecha' : 'desde-izquierda');
+    }
+    rejilla.querySelectorAll('[data-dia]').forEach((b) => b.addEventListener('click', () => irA(Number(b.dataset.dia))));
+    rejilla.onkeydown = (e) => {
+      const pasos = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+      if (!pasos) return;
+      e.preventDefault();
+      const d = new Date(seleccionado);
+      irA(new Date(d.getFullYear(), d.getMonth(), d.getDate() + pasos).getTime(), { enfocar: true });
+    };
+    if (enfocar) rejilla.querySelector('[aria-pressed="true"]')?.focus();
+    pintarDia();
+  }
+
+  // Los eventos del día elegido, debajo del calendario.
+  function pintarDia() {
+    const caja = contenedor.querySelector('.calendario__dia');
+    if (!caja) return;
+    const suyos = delDia(seleccionado).sort((a, b) => Number(b.todoElDia) - Number(a.todoElDia) || a.inicio - b.inicio);
+    const d = new Date(seleccionado);
+    const titulo = mismoDia(seleccionado, Date.now())
+      ? 'Hoy'
+      : `${NOMBRES_SEMANA[(d.getDay() + 6) % 7]}, ${d.getDate()} de ${d.toLocaleDateString('es-ES', { month: 'long' })}`;
+    caja.innerHTML = `<h3>${escapar(titulo)}</h3>${
+      cargado === null ? cargando : suyos.length ? '<ul class="filas"></ul>' : '<p class="apartado__vacio">Nada este día.</p>'
+    }`;
+    const ul = caja.querySelector('ul');
+    for (const e of suyos) {
+      const li = document.createElement('li');
+      li.className = `fila fila--evento${e.todoElDia ? ' fila--todo-el-dia' : ''}`;
+      const hora = e.todoElDia ? 'Todo el día' : `${horaCorta(e.inicio)}<small>${horaCorta(e.fin)}</small>`;
+      li.innerHTML = `<span class="fila__hora">${hora}</span><div class="fila__cuerpo"><span class="fila__titulo"></span><span class="fila__detalle"></span></div>`;
+      li.querySelector('.fila__titulo').textContent = e.titulo;
+      li.querySelector('.fila__detalle').textContent = e.lugar;
+      li.append(
+        botonBorrar(`Borrar «${e.titulo}» del calendario`, async () => {
+          await api.calendario.borrar(e.id);
+          eventos = eventos.filter((x) => x.id !== e.id);
+          pintarCalendario();
+        }),
+      );
+      ul.append(li);
     }
     const pie = document.createElement('div');
     pie.className = 'apartado__pie';
-    pie.innerHTML = `<button type="button" class="boton" data-mas>Ver más días</button>
-      <button type="button" class="boton" data-preguntar>${icono('chispa', 15)} Pregúntale a Kitsune por tu semana</button>`;
-    pie.querySelector('[data-mas]').addEventListener('click', () => {
-      dias += 14;
-      pintarLista();
-    });
+    pie.innerHTML = `<button type="button" class="boton" data-preguntar>${icono('chispa', 15)} Pregúntale a Kitsune por tu semana</button>`;
     pie.querySelector('[data-preguntar]').addEventListener('click', () => preguntar('¿Qué tengo esta semana en el calendario?'));
-    lista.append(pie);
+    caja.append(pie);
+  }
+
+  // Deslizar el mes a los lados cambia de mes (las flechas hacen lo mismo).
+  function prepararGestos(rejilla) {
+    let inicio = null;
+    rejilla.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse') inicio = { x: e.clientX, y: e.clientY };
+    });
+    rejilla.addEventListener('pointerup', (e) => {
+      if (!inicio) return;
+      const dx = e.clientX - inicio.x;
+      const dy = e.clientY - inicio.y;
+      inicio = null;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) cambiarMes(dx < 0 ? 1 : -1);
+    });
+    rejilla.addEventListener('pointercancel', () => (inicio = null));
   }
 
   return { mostrar };

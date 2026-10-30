@@ -1,11 +1,17 @@
 import { icono } from './iconos.js';
 
-// Disposición de móvil de la versión web (la PWA): barra de apartados abajo,
-// el zorro dentro del chat (grande al empezar, compacto al conversar), una
-// hoja «Más» para lo que no cabe en la barra y la app ajustada al teclado.
-// En Electron y en pantallas anchas no cambia nada.
+// Disposición de móvil de la versión web (la PWA). Al abrir la app solo está
+// el zorro, grande en el centro; al tocarlo se encoge (se vuelve una cría),
+// se va abajo a la derecha y el diálogo le sale de la boca, casi a pantalla
+// completa, con los apartados en una barra inferior. Tocarlo otra vez (o la X)
+// lo cierra por el mismo camino. Hay además una hoja «Más» para lo que no cabe
+// en la barra, y la app se ajusta al teclado. En Electron y en pantallas
+// anchas no cambia nada.
 
 const MOVIL = '(max-width: 600px)';
+// Curva de las hojas de iOS: arranca rápida y se posa sin rebote.
+const CURVA = 'cubic-bezier(0.32, 0.72, 0, 1)';
+const DURACION = 560;
 
 const ENTRADAS_MAS = [
   { vista: 'memoria', icono: 'memoria', titulo: 'Memoria', detalle: 'Lo que Kitsune recuerda de ti' },
@@ -15,42 +21,95 @@ const ENTRADAS_MAS = [
 
 const enApp = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const esIphone = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const reducido = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function prepararMovil({ escena, dialogo, zorro, mostrarVista, obtenerVista, nuevaConversacion, vibrar }) {
+export function prepararMovil({ escena, dialogo, zorro, kitsune, mostrarVista, obtenerVista, nuevaConversacion, vibrar, alAbrir }) {
   const consulta = matchMedia(MOVIL);
   const raiz = document.documentElement;
-  const vistaChat = document.getElementById('vista-chat');
-  const escenario = vistaChat.querySelector('.chat__escenario');
-  const mensajes = vistaChat.querySelector('.chat__mensajes');
   const botonMas = document.getElementById('pestana-mas');
-  const lugarOriginal = zorro.parentElement;
   let instalacion = null;
 
-  // ---------- El zorro: en el chat en móvil, en la escena en el resto ----------
+  // ---------- El zorro: grande y solo, o cría en la esquina con el diálogo ----------
 
-  function colocarZorro() {
-    const destino = consulta.matches ? escenario : lugarOriginal;
-    if (zorro.parentElement !== destino) destino.append(zorro);
+  // Dónde acaba el zorro al abrir (lo coloca el CSS) y la invitación a tocarlo.
+  const hueco = document.createElement('div');
+  hueco.className = 'zorro-hueco';
+  hueco.setAttribute('aria-hidden', 'true');
+  const pista = document.createElement('p');
+  pista.className = 'pista-zorro';
+  pista.textContent = 'Toca a Kitsune';
+  escena.append(hueco, pista);
+
+  function aplicarModo() {
     raiz.classList.toggle('movil', consulta.matches);
+    if (!consulta.matches) {
+      delete escena.dataset.modo;
+      kitsune.setBebe(false);
+      return;
+    }
+    escena.dataset.modo = dialogo.hidden ? 'solo' : 'abierto';
+    kitsune.setBebe(!dialogo.hidden);
   }
-  consulta.addEventListener('change', colocarZorro);
-  colocarZorro();
+  consulta.addEventListener('change', aplicarModo);
+  aplicarModo();
 
-  // Chat vacío (zorro grande y sugerencias) o conversación (zorro compacto).
-  let estadoChat = null;
-  const actualizarChat = () => {
-    const vacio = Boolean(mensajes.querySelector('.chat__vacio')) || !mensajes.children.length;
-    const nuevo = vacio ? 'vacio' : 'conversacion';
-    if (nuevo === estadoChat) return;
-    estadoChat = nuevo;
-    escena.dataset.chat = nuevo;
-    // Un pequeño asentamiento al cambiar de tamaño, para que no sea un salto seco.
-    escenario.classList.remove('asentando');
-    void escenario.offsetWidth;
-    escenario.classList.add('asentando');
-  };
-  new MutationObserver(actualizarChat).observe(mensajes, { childList: true });
-  actualizarChat();
+  let animacion = null;
+  let enCurso = Promise.resolve();
+
+  // FLIP inverso: el contenedor conserva su tamaño grande mientras se mueve y
+  // encoge con transform (nítido y sin redimensionar el lienzo cada fotograma);
+  // al terminar se coloca en su sitio con su tamaño real.
+  function moverZorro(desde, hasta, alReves = false) {
+    animacion?.cancel();
+    const s = hasta.width / desde.width;
+    const destino = `translate(${hasta.left - desde.left}px, ${hasta.top - desde.top}px) scale(${s})`;
+    const fotogramas = alReves ? [{ transform: destino }, { transform: 'none' }] : [{ transform: 'none' }, { transform: destino }];
+    animacion = zorro.animate(fotogramas, { duration: reducido() ? 1 : DURACION, easing: CURVA, fill: 'forwards' });
+    return animacion.finished.catch(() => {});
+  }
+
+  function abrir() {
+    if (escena.dataset.modo === 'abierto' || escena.dataset.modo === 'abriendo') return enCurso;
+    enCurso = enCurso.then(async () => {
+      const grande = zorro.getBoundingClientRect();
+      const pequeno = hueco.getBoundingClientRect();
+      escena.dataset.modo = 'abriendo';
+      dialogo.classList.remove('cerrandose');
+      dialogo.hidden = false;
+      kitsune.setBebe(true);
+      vibrar(10);
+      // El diálogo sale de la boca: el zorro la abre mientras tanto.
+      setTimeout(() => kitsune.pulsoHabla(30), 120);
+      setTimeout(() => kitsune.pulsoHabla(20), 300);
+      alAbrir?.();
+      await moverZorro(grande, pequeno);
+      escena.dataset.modo = 'abierto';
+      animacion?.cancel();
+    });
+    return enCurso;
+  }
+
+  function cerrar() {
+    if (escena.dataset.modo !== 'abierto' && escena.dataset.modo !== 'abriendo') return enCurso;
+    enCurso = enCurso.then(async () => {
+      cerrarHoja({ devolverFoco: false });
+      // Primero el diálogo vuelve a la boca; luego el zorro crece hasta el centro.
+      dialogo.classList.add('cerrandose');
+      kitsune.pulsoHabla(20);
+      await esperar(reducido() ? 0 : 200);
+      const pequeno = zorro.getBoundingClientRect();
+      escena.dataset.modo = 'cerrando';
+      dialogo.hidden = true;
+      dialogo.classList.remove('cerrandose');
+      kitsune.setBebe(false);
+      const grande = zorro.getBoundingClientRect();
+      await moverZorro(grande, pequeno, true);
+      escena.dataset.modo = 'solo';
+      animacion?.cancel();
+    });
+    return enCurso;
+  }
 
   // ---------- Teclado: la app ocupa solo lo que queda visible ----------
 
@@ -244,6 +303,10 @@ export function prepararMovil({ escena, dialogo, zorro, mostrarVista, obtenerVis
 
   return {
     activo: () => consulta.matches,
+    abierto: () => escena.dataset.modo === 'abierto' || escena.dataset.modo === 'abriendo',
+    abrir,
+    cerrar,
+    alternar: () => (escena.dataset.modo === 'abierto' || escena.dataset.modo === 'abriendo' ? cerrar() : abrir()),
     alCambiarVista,
     abrirHoja,
     cerrarHoja,

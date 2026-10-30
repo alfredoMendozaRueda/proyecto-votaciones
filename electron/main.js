@@ -351,7 +351,7 @@ function registrarCanales() {
   manejar('calendario:eventos', (desde, hasta) => {
     exigirCalendario();
     if (!Number.isFinite(desde) || !Number.isFinite(hasta) || hasta <= desde) throw new Error('Fechas no válidas.');
-    return gmail.calendario.eventos({ desde, hasta, maximo: 50 });
+    return gmail.calendario.eventos({ desde, hasta, maximo: 250 });
   });
   manejar('calendario:crear', (evento) => {
     exigirCalendario();

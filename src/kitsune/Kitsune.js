@@ -254,6 +254,8 @@ export class Kitsune {
     this.corazones = { espera: 0 };
     // La boca sigue al texto: cada trozo que llega le da "energía" que se va apagando.
     this.voz = { energia: 0, ultimo: -10 };
+    // Versión bebé (0 a 1): cabeza grande, cuerpo y colas pequeños. Se mueve hacia el objetivo con suavidad.
+    this.bebe = { valor: 0, objetivo: 0 };
     this.ocio = { espera: 14 + Math.random() * 10 };
     this._caricia = null;
     // Objetos reutilizados en cada fotograma (sin basura para el recolector).
@@ -360,6 +362,12 @@ export class Kitsune {
       s.material.needsUpdate = true;
     }
     this._emitir('paleta', nombre);
+  }
+
+  // En pequeño (en la esquina del móvil) el zorro pasa a ser una cría.
+  setBebe(activo) {
+    this.bebe.objetivo = activo ? 1 : 0;
+    if (this.opciones.movimientoReducido) this.bebe.valor = this.bebe.objetivo;
   }
 
   setOpcion(clave, valor) {
@@ -504,6 +512,7 @@ export class Kitsune {
     if (!this._enPantalla || document.hidden) return 0;
     if (!this.visible && !this.accion) return this._pendientePintar ? 30 : 0;
     if (this.accion || this.estado === 'hablar' || this.estado === 'pensar' || this.estado === 'escuchar') return 60;
+    if (Math.abs(this.bebe.objetivo - this.bebe.valor) > 0.01) return 60;
     if (this.estado === 'dormir') return 20;
     if (this.opciones.movimientoReducido) return 30;
     return this.t - this.mirada.ultimoMovimiento < 1.5 ? 60 : 30;
@@ -565,11 +574,17 @@ export class Kitsune {
       1 + ampRespiracion * respiracion,
     );
     this.pecho.rotation.x = 0.1 * p.agachado;
+    // Cría: el pecho y las colas encogen y la cabeza (con sus ojos) crece.
+    this.bebe.valor += (this.bebe.objetivo - this.bebe.valor) * Math.min(1, dt * 5);
+    const bebe = this.bebe.valor;
+    this.pecho.scale.multiplyScalar(1 - 0.12 * bebe);
+    this.colasBase.scale.setScalar(1 - 0.3 * bebe);
     this.cuerpo.rotation.z = 0.015 * Math.sin(t * 0.7) * reducido;
 
     // Cabeza
     const habla = this._habla(dt, p.habla);
-    this.cabeza.position.set(0, 1.37 - 0.12 * p.agachado + respiracion * 0.006, 0.17 + 0.05 * p.agachado);
+    this.cabeza.position.set(0, 1.37 - 0.12 * p.agachado + respiracion * 0.006 + 0.05 * bebe, 0.17 + 0.05 * p.agachado);
+    this.cabeza.scale.setScalar(1 + 0.42 * bebe);
     this.cabeza.rotation.set(
       p.cabeceo + o.cabeceo + this.mirada.y * -0.28 + p.habla * 0.04 * Math.sin(t * 6.8) - 0.05 * habla,
       this.mirada.x * 0.55 + o.giro,

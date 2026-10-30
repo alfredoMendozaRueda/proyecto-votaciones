@@ -450,7 +450,7 @@ export function crearBackendWeb() {
         const e = await estadoCorreo();
         return { conectado: e.conectado, calendario: e.calendario, necesitaReconectar: e.necesitaReconectar };
       },
-      eventos: (desde, hasta) => calendario.eventos({ desde, hasta, maximo: 50 }),
+      eventos: (desde, hasta) => calendario.eventos({ desde, hasta, maximo: 250 }),
       crear: (evento) => calendario.crear(evento),
       borrar: (id) => calendario.borrar(id),
       alCita: (f) => escuchar('cita', f),

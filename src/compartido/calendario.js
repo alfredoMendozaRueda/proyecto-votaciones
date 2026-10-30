@@ -63,7 +63,7 @@ export class ClienteCalendario {
       timeMax: new Date(hasta).toISOString(),
       singleEvents: 'true',
       orderBy: 'startTime',
-      maxResults: String(Math.min(Math.max(maximo, 1), 50)),
+      maxResults: String(Math.min(Math.max(maximo, 1), 250)),
     });
     const datos = await this.api(`?${parametros}`);
     return (datos.items ?? []).filter((e) => e.status !== 'cancelled').map(convertir);

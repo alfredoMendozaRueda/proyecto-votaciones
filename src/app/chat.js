@@ -78,7 +78,6 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
   ];
 
   contenedor.innerHTML = `
-    <div class="chat__escenario" aria-hidden="true"></div>
     <div class="chat__mensajes desplazable" id="chat-mensajes" role="log" aria-live="polite" aria-relevant="additions"></div>
     <button type="button" class="chat__bajar" id="chat-bajar" aria-label="Ir al último mensaje" title="Ir al último mensaje" hidden>${icono('bajar', 18)}</button>
     <form class="compositor" id="chat-formulario">
