@@ -8,6 +8,7 @@ import { crearMaterialesPelaje } from './pelaje.js';
 import { colorearOjo } from './ojo.js';
 import { ESTILOS, crearMaterialDibujo, crearMaterialContorno, crearColoretes } from './estilos.js';
 import { GestorCalidad, indiceNivel } from './rendimiento.js';
+import { Lamina } from './lamina.js';
 import {
   clamp01,
   lerp,
@@ -210,6 +211,8 @@ export class Kitsune {
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
     contenedor.appendChild(this.renderer.domElement);
+    // En el estilo Ilustración el zorro es el dibujo, detrás del lienzo de los fuegos.
+    this.lamina = new Lamina(contenedor);
 
     this.escena = new THREE.Scene();
     this.camara = new THREE.PerspectiveCamera(28, 1, 0.1, 50);
@@ -341,6 +344,7 @@ export class Kitsune {
     // El estilo puede retocar algunos colores del pelaje (p. ej., la cola sin banda oscura).
     const pal = { ...PALETAS[nombre], ...(this._estilo?.retoques?.(PALETAS[nombre]) ?? {}) };
     this.paleta = nombre;
+    this.lamina.setPaleta(nombre);
     const colores = Object.fromEntries(
       Object.entries(pal)
         .filter(([, v]) => typeof v === 'string' && v.startsWith('#'))
@@ -377,6 +381,8 @@ export class Kitsune {
     const estilo = ESTILOS[nombre] ?? ESTILOS.realista;
     this.estilo = ESTILOS[nombre] ? nombre : 'realista';
     this._estilo = estilo;
+    this._modoImagen = estilo.imagen;
+    this.lamina.activa = estilo.imagen;
     this._materialesEstilo ??= {};
     const cache = (this._materialesEstilo[this.estilo] ??= {
       dibujo: estilo.toon ? crearMaterialDibujo(estilo.toon) : null,
@@ -469,6 +475,7 @@ export class Kitsune {
     window.removeEventListener('pointercancel', this._alSoltar);
     this.renderer.dispose();
     this.renderer.domElement.remove();
+    this.lamina.destruir();
   }
 
   // ---------- Construcción ----------
@@ -662,6 +669,24 @@ export class Kitsune {
         Math.max(-1, Math.min(1, p.miradaX + this.mirada.x * 0.8 + o.giro * 0.7)),
         Math.max(-1, Math.min(1, p.miradaY + this.mirada.y * 0.8)),
       );
+    }
+    if (this._modoImagen) {
+      this.raiz.visible = false;
+      this.lamina.pintar({
+        escala,
+        salto: clamp01(o.saltoY / 0.55),
+        sx: o.sx,
+        sy: o.sy,
+        giro: o.vuelta,
+        inclinacion: p.inclinacion + o.inclinacion,
+        cabeceo: p.cabeceo + o.cabeceo,
+        respiracion,
+        habla,
+        apertura,
+        alegria: clamp01(o.alegria),
+        mirada: this.mirada.x,
+        bebe: this.bebe.valor,
+      });
     }
     this.zorro.marca.uniforms.uBrillo.value = p.remolino * (0.5 + 0.5 * Math.sin(t * 5));
 
@@ -1024,6 +1049,7 @@ export class Kitsune {
   }
 
   _tocaKitsune(evento) {
+    if (this._modoImagen) return this.lamina.toca(evento.clientX, evento.clientY);
     const rect = this.renderer.domElement.getBoundingClientRect();
     this._puntero.set(
       ((evento.clientX - rect.left) / rect.width) * 2 - 1,

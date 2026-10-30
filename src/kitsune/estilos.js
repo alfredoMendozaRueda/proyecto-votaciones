@@ -3,6 +3,7 @@ import * as THREE from 'three';
 // Estilos de dibujo del zorro. No cambian la geometría: cambian el material
 // (pelo por capas o sombreado de dibujo animado), el contorno, las
 // proporciones (la cría de cabeza grande) y el tamaño de la pupila.
+//   ilustracion: el dibujo de referencia, animado encima del lienzo.
 //   realista: pelo por capas y luz suave (el de siempre).
 //   anime:    sombreado en dos tonos, colores vivos y contorno marcado.
 //   kawaii:   cría, colores pastel, contorno suave, pupilas grandes y coloretes.
@@ -28,36 +29,12 @@ const BASE = {
   colas: 1, // grosor de las colas
   punta: 0.86, // dónde empieza la punta clara de las colas (0 = raíz, 1 = punta)
   retoques: null, // ajustes de color sobre el pelaje elegido
+  imagen: false, // el zorro es la ilustración (una imagen) en vez del modelo 3D
 };
 
 export const ESTILOS = {
-  // Como la ilustración de referencia: cría de peluche, ojos grandes y
-  // redondos, cejas, sonrisa, calcetines chocolate y nueve colas en abanico
-  // que pasan del naranja al crema sin banda oscura.
-  ilustracion: {
-    ...BASE,
-    nombre: 'Ilustración',
-    bebe: 1,
-    colas: 1.45,
-    punta: 0.62,
-    dilatacion: 0.35,
-    apertura: 1.15,
-    bigotes: 0,
-    caricatura: 1,
-    rasgos: true,
-    marca: false,
-    orejas: [1.4, 1.12],
-    cabeza: 1.12,
-    patas: 1.35,
-    hocico: 0.74,
-    abanico: 0.45,
-    retoques: (p) => ({
-      bandaCola: p.flanco,
-      iris: '#6e3d1c',
-      medias: mezclar(p.medias, '#4a2414', 0.7),
-      orejaDorso: mezclar(p.orejaDorso, '#3a1d12', 0.6),
-    }),
-  },
+  // La ilustración de referencia tal cual, animada como lámina (ver lamina.js).
+  ilustracion: { ...BASE, nombre: 'Ilustración', imagen: true },
   realista: { ...BASE, nombre: 'Realista' },
   anime: {
     ...BASE,
@@ -98,11 +75,6 @@ export const ESTILOS = {
     bigotes: 1,
   },
 };
-
-// Mezcla dos colores hexadecimales (t = 0, el primero; 1, el segundo).
-function mezclar(a, b, t) {
-  return `#${new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString()}`;
-}
 
 // Escalera de luz del sombreado: pocos tonos, sin degradado entre ellos.
 function crearRampa(valores) {

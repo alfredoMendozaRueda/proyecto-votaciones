@@ -9,7 +9,7 @@ function serviceWorker() {
     name: 'kitsune-service-worker',
     apply: 'build',
     generateBundle(_opciones, paquete) {
-      const fijos = ['./', 'manifest.webmanifest', 'iconos/icono-192.png', 'iconos/icono-512.png', 'iconos/apple-touch-icon.png', 'iconos/favicon-32.png'];
+      const fijos = ['./', 'manifest.webmanifest', 'iconos/icono-192.png', 'iconos/icono-512.png', 'iconos/apple-touch-icon.png', 'iconos/favicon-32.png', 'kitsune/ilustracion.webp'];
       // El estudio del personaje no forma parte de la app instalada.
       const generados = Object.keys(paquete).filter((archivo) => archivo.startsWith('assets/') && !archivo.includes('personaje'));
       const precarga = [...fijos, ...generados.sort()];
