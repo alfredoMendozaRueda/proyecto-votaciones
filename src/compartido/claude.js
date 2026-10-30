@@ -531,6 +531,7 @@ export class ConversacionClaude {
             herramientas,
             signal: this.controlador.signal,
             alTexto: (delta) => this.emitir({ tipo: 'texto', delta }),
+            alEsperar: (segundos) => this.emitir({ tipo: 'esperando', segundos }),
             fetch: this.opcionesCliente.fetch,
           });
         } else {
@@ -683,6 +684,7 @@ export class ConversacionClaude {
           apiKey: this.clienteTurno.apiKey,
           consulta: entrada.consulta,
           signal: this.controlador?.signal,
+          alEsperar: (segundos) => this.emitir({ tipo: 'esperando', segundos }),
           fetch: this.opcionesCliente.fetch,
         });
         this.fuentesTurno.push(...fuentes);

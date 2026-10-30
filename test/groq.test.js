@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ConversacionClaude } from '../src/compartido/claude.js';
 import { Memoria } from '../src/compartido/memoria.js';
-import { mensajesOpenAI, inicioReciente } from '../src/compartido/groq.js';
+import { mensajesOpenAI, inicioReciente, segundosDeEspera } from '../src/compartido/groq.js';
 
 // API de Groq simulada: respuestas en directo (SSE) en el formato de OpenAI.
 function groqSimulado(respuestas) {
@@ -10,7 +10,7 @@ function groqSimulado(respuestas) {
   const fetch = async (url, init = {}) => {
     peticiones.push({ url: String(url), metodo: init.method, cabeceras: init.headers, cuerpo: init.body && JSON.parse(init.body) });
     const r = respuestas[peticiones.length - 1];
-    if (r.estado) return new Response(JSON.stringify({ error: { message: 'Rate limit reached' } }), { status: r.estado });
+    if (r.estado) return new Response(JSON.stringify({ error: { message: r.mensaje ?? 'Rate limit reached' } }), { status: r.estado });
     if (r.json) return Response.json(r.json);
     const cuerpo = r.trozos.map((t) => `data: ${JSON.stringify(t)}\n\n`).join('') + 'data: [DONE]\n\n';
     return new Response(cuerpo, { headers: { 'content-type': 'text/event-stream' } });
@@ -68,12 +68,51 @@ test('Groq: herramienta en trozos, resultado y respuesta; el historial queda en 
   assert.equal(eventos.at(-1).tipo, 'fin');
 });
 
-test('Groq: el límite gratuito alcanzado se explica y no deja el turno a medias', async () => {
-  const { fetch } = groqSimulado([{ estado: 429 }]);
+const limiteMinuto = (s) =>
+  `Rate limit reached for model \`openai/gpt-oss-120b\` on tokens per minute (TPM): Limit 8000, Used 7000, Requested 3000. Please try again in ${s}.`;
+const limiteDia = (m) => `Rate limit reached for model \`${m}\` on tokens per day (TPD): Limit 200000, Used 199000. Please try again in 7m30s.`;
+const hola = { trozos: [delta({ content: 'Hola.' }), delta({}, 'stop')] };
+
+test('Groq: si el límite por minuto se libera en segundos, espera, avisa y repite solo', async () => {
+  const { fetch, peticiones } = groqSimulado([{ estado: 429, mensaje: limiteMinuto('0.05s') }, hola]);
   const { c, eventos } = conversacion(fetch);
   await c.enviar('Hola');
-  assert.match(eventos.at(-1).mensaje, /límite gratuito de Groq/);
-  assert.equal(c.historial.length, 0);
+  assert.equal(peticiones.length, 2);
+  assert.deepEqual(eventos.find((e) => e.tipo === 'esperando'), { tipo: 'esperando', segundos: 1 });
+  assert.equal(eventos.at(-1).tipo, 'fin');
+});
+
+test('Groq: con el cupo del día gastado prueba otro modelo, y si todos están gastados lo explica', async () => {
+  const otro = groqSimulado([{ estado: 429, mensaje: limiteDia('openai/gpt-oss-120b') }, hola]);
+  const a = conversacion(otro.fetch);
+  await a.c.enviar('Hola');
+  assert.deepEqual(otro.peticiones.map((p) => p.cuerpo.model), ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile']);
+  assert.ok(!('reasoning_effort' in otro.peticiones[1].cuerpo), 'Llama no razona');
+  assert.equal(a.eventos.at(-1).tipo, 'fin');
+
+  const gastado = groqSimulado([1, 2, 3].map(() => ({ estado: 429, mensaje: limiteDia('x') })));
+  const b = conversacion(gastado.fetch);
+  await b.c.enviar('Hola');
+  assert.match(b.eventos.at(-1).mensaje, /uso gratuito de Groq de hoy/);
+  assert.equal(b.c.historial.length, 0);
+});
+
+test('Groq: una espera larga no se hace: se prueba otro modelo y si no, se avisa', async () => {
+  const { fetch, peticiones } = groqSimulado([1, 2, 3].map(() => ({ estado: 429, mensaje: limiteMinuto('45s') })));
+  const { c, eventos } = conversacion(fetch);
+  await c.enviar('Hola');
+  assert.equal(peticiones.length, 3);
+  assert.ok(!eventos.some((e) => e.tipo === 'esperando'));
+  assert.match(eventos.at(-1).mensaje, /límite de uso gratuito por minuto/);
+});
+
+test('Groq: tiempos de espera del mensaje de error', () => {
+  assert.equal(segundosDeEspera(null, 'Please try again in 11.25s.'), 11.25);
+  assert.equal(segundosDeEspera(null, 'Please try again in 1m2.5s.'), 62.5);
+  assert.equal(segundosDeEspera(null, 'Please try again in 7m30s.'), 450);
+  assert.equal(segundosDeEspera(null, 'Please try again in 340ms.'), 0.34);
+  assert.equal(segundosDeEspera('4', 'try again in 9s'), 4);
+  assert.equal(segundosDeEspera(null, 'sin datos'), null);
 });
 
 test('Groq: la clave se comprueba pidiendo la lista de modelos', async () => {

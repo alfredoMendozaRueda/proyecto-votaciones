@@ -8,38 +8,88 @@ export const MODELOS_GROQ = ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile', '
 
 // La capa gratuita permite unos 8.000 tokens por minuto, sumando lo que se
 // envía y lo que se responde: solo viaja la parte reciente de la conversación.
-const PRESUPUESTO_HISTORIAL = 14_000; // caracteres, unos 3.500 tokens
-const MAX_RESPUESTA = 3000; // tokens
+// Groq cuenta para ese límite lo que se envía más lo que se reserva para la
+// respuesta, así que las dos cosas se mantienen pequeñas.
+const PRESUPUESTO_HISTORIAL = 8000; // caracteres, unos 2.000 tokens
+const MAX_RESPUESTA = 1200; // tokens, razonamiento incluido
+// Si el límite por minuto se libera pronto, se espera y se repite solo.
+const ESPERA_MAXIMA = 30; // segundos
+const MAX_ESPERAS = 2;
 
-export class ErrorGroq extends Error {}
+export class ErrorGroq extends Error {
+  constructor(mensaje, limite = null) {
+    super(mensaje);
+    this.limite = limite; // 'minuto' o 'dia' cuando es un 429
+  }
+}
 
-function mensajeDeEstado(estado, detalle) {
+function mensajeDeEstado(estado, detalle, limite) {
   if (estado === 401) return 'La clave de Groq no es válida. Revísala en Ajustes.';
-  if (estado === 429) return 'Has llegado al límite gratuito de Groq. Espera un minuto y vuelve a probar (si es el límite del día, mañana).';
+  if (limite === 'dia') return 'Has gastado el uso gratuito de Groq de hoy. Vuelve a probar mañana o usa Claude en Ajustes.';
+  if (estado === 429) return 'Groq va al límite de uso gratuito por minuto. Espera un minuto y vuelve a probar.';
   if (estado === 413) return 'La conversación es demasiado larga para la versión gratuita. Empieza una conversación nueva.';
   if (estado === 400 && /tool/i.test(detalle)) return 'La IA se ha liado al usar una herramienta. Prueba a pedírmelo de otra forma.';
   if (estado >= 500) return 'Groq ha tenido un problema. Prueba de nuevo en un momento.';
   return `Groq devolvió un error: ${detalle || estado}`;
 }
 
-async function pedir(apiKey, ruta, { cuerpo, signal, fetch: hacerFetch = fetch } = {}) {
-  let respuesta;
-  try {
-    respuesta = await hacerFetch(`${URL_GROQ}${ruta}`, {
-      method: cuerpo ? 'POST' : 'GET',
-      headers: { Authorization: `Bearer ${apiKey}`, ...(cuerpo ? { 'Content-Type': 'application/json' } : {}) },
-      body: cuerpo ? JSON.stringify(cuerpo) : undefined,
-      signal,
-    });
-  } catch (error) {
-    if (signal?.aborted) throw error;
-    throw new ErrorGroq('No hay conexión con Groq. Revisa tu conexión a internet.');
-  }
-  if (!respuesta.ok) {
+// "Please try again in 11.25s", "in 1m2.5s", "in 340ms" o la cabecera retry-after.
+export function segundosDeEspera(cabecera, detalle) {
+  const segundos = Number(cabecera);
+  if (cabecera && Number.isFinite(segundos)) return segundos;
+  const ms = /try again in ([\d.]+)ms/i.exec(detalle ?? '');
+  if (ms) return Number(ms[1]) / 1000;
+  const m = /try again in (?:(\d+)h)?(?:(\d+)m(?!s))?(?:([\d.]+)s)?/i.exec(detalle ?? '');
+  if (!m || !(m[1] || m[2] || m[3])) return null;
+  return Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
+}
+
+const dormir = (ms, signal) =>
+  new Promise((resolver, rechazar) => {
+    if (signal?.aborted) return rechazar(signal.reason);
+    const reloj = setTimeout(resolver, ms);
+    signal?.addEventListener('abort', () => (clearTimeout(reloj), rechazar(signal.reason)), { once: true });
+  });
+
+async function pedir(apiKey, ruta, { cuerpo, signal, fetch: hacerFetch = fetch, alEsperar } = {}) {
+  for (let esperas = 0; ; esperas++) {
+    let respuesta;
+    try {
+      respuesta = await hacerFetch(`${URL_GROQ}${ruta}`, {
+        method: cuerpo ? 'POST' : 'GET',
+        headers: { Authorization: `Bearer ${apiKey}`, ...(cuerpo ? { 'Content-Type': 'application/json' } : {}) },
+        body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      throw new ErrorGroq('No hay conexión con Groq. Revisa tu conexión a internet.');
+    }
+    if (respuesta.ok) return respuesta;
     const datos = await respuesta.json().catch(() => ({}));
-    throw new ErrorGroq(mensajeDeEstado(respuesta.status, datos.error?.message ?? ''));
+    const detalle = datos.error?.message ?? '';
+    if (respuesta.status !== 429) throw new ErrorGroq(mensajeDeEstado(respuesta.status, detalle));
+    const limite = /per day|\b[TR]PD\b/i.test(detalle) ? 'dia' : 'minuto';
+    const espera = segundosDeEspera(respuesta.headers.get('retry-after'), detalle) ?? 10;
+    if (limite === 'dia' || espera > ESPERA_MAXIMA || esperas >= MAX_ESPERAS) {
+      throw new ErrorGroq(mensajeDeEstado(429, detalle, limite), limite);
+    }
+    alEsperar?.(Math.ceil(espera));
+    await dormir(espera * 1000 + 250, signal);
   }
-  return respuesta;
+}
+
+// Cada modelo tiene su propio cupo gratuito: si el elegido lo ha gastado, se
+// prueba con los demás antes de rendirse.
+async function conRespaldo(modelo, peticion, alternativas = MODELOS_GROQ) {
+  const modelos = [modelo, ...alternativas.filter((m) => m !== modelo)];
+  for (const [i, m] of modelos.entries()) {
+    try {
+      return await peticion(m);
+    } catch (error) {
+      if (!(error instanceof ErrorGroq) || !error.limite || i === modelos.length - 1) throw error;
+    }
+  }
 }
 
 // Herramientas de Kitsune en el formato de OpenAI. Las del servidor de
@@ -107,21 +157,25 @@ const parametrosModelo = (modelo) => (modelo.startsWith('openai/gpt-oss') ? { re
 
 // Un turno de la conversación con respuesta en directo. Devuelve el mensaje
 // en el formato de Claude: { content: [...bloques], stop_reason }.
-export async function turnoGroq({ apiKey, modelo, sistema, historial, inicioTurno, herramientas, signal, alTexto, fetch }) {
+export async function turnoGroq({ apiKey, modelo, sistema, historial, inicioTurno, herramientas, signal, alTexto, alEsperar, fetch }) {
   const reciente = historial.slice(inicioReciente(historial, inicioTurno));
   const tools = herramientasOpenAI(herramientas);
-  const respuesta = await pedir(apiKey, '/chat/completions', {
-    signal,
-    fetch,
-    cuerpo: {
-      model: modelo,
-      messages: mensajesOpenAI(sistema, reciente),
-      stream: true,
-      max_completion_tokens: MAX_RESPUESTA,
-      ...(tools.length ? { tools } : {}),
-      ...parametrosModelo(modelo),
-    },
-  });
+  const messages = mensajesOpenAI(sistema, reciente);
+  const respuesta = await conRespaldo(modelo, (m) =>
+    pedir(apiKey, '/chat/completions', {
+      signal,
+      fetch,
+      alEsperar,
+      cuerpo: {
+        model: m,
+        messages,
+        stream: true,
+        max_completion_tokens: MAX_RESPUESTA,
+        ...(tools.length ? { tools } : {}),
+        ...parametrosModelo(m),
+      },
+    }),
+  );
 
   let texto = '';
   let motivo = null;
@@ -178,18 +232,20 @@ export async function turnoGroq({ apiKey, modelo, sistema, historial, inicioTurn
 
 // Una respuesta suelta, sin conversación (borradores de correo).
 export async function textoGroq({ apiKey, modelo, sistema, usuario, fetch }) {
-  const respuesta = await pedir(apiKey, '/chat/completions', {
-    fetch,
-    cuerpo: {
-      model: modelo,
-      messages: [
-        { role: 'system', content: sistema },
-        { role: 'user', content: usuario },
-      ],
-      max_completion_tokens: MAX_RESPUESTA,
-      ...parametrosModelo(modelo),
-    },
-  });
+  const respuesta = await conRespaldo(modelo, (m) =>
+    pedir(apiKey, '/chat/completions', {
+      fetch,
+      cuerpo: {
+        model: m,
+        messages: [
+          { role: 'system', content: sistema },
+          { role: 'user', content: usuario },
+        ],
+        max_completion_tokens: 2000,
+        ...parametrosModelo(m),
+      },
+    }),
+  );
   const datos = await respuesta.json();
   return (datos.choices?.[0]?.message?.content ?? '').trim();
 }
@@ -218,28 +274,11 @@ function fuentesDeBusqueda(mensaje, texto) {
   return [...urls].slice(0, 5).map(([url, titulo]) => ({ url, titulo: titulo || new URL(url).hostname.replace(/^www\./, '') }));
 }
 
-export async function buscarEnInternetGroq({ apiKey, consulta, signal, fetch }) {
-  const respuesta = await pedir(apiKey, '/chat/completions', {
-    signal,
-    fetch,
-    cuerpo: {
-      model: MODELO_BUSQUEDA,
-      messages: [
-        {
-          role: 'system',
-          content:
-            `Hoy es ${new Date().toLocaleDateString('es-ES', { dateStyle: 'full' })}. Busca en internet y responde en español ` +
-            'con los datos concretos que encuentres (cifras, fechas, nombres), en menos de 120 palabras. Si no encuentras ' +
-            'nada fiable, dilo. Al final, en una línea, las direcciones de las páginas que has usado.',
-        },
-        { role: 'user', content: consulta },
-      ],
-      tools: [{ type: 'browser_search' }],
-      tool_choice: 'required',
-      max_completion_tokens: 2000,
-      reasoning_effort: 'low',
-    },
-  });
+export async function buscarEnInternetGroq({ apiKey, consulta, signal, alEsperar, fetch }) {
+  const pedirBusqueda = (modelo) =>
+    pedir(apiKey, '/chat/completions', { signal, fetch, alEsperar, cuerpo: cuerpoBusqueda(modelo, consulta) });
+  // browser_search solo existe en los modelos GPT-OSS.
+  const respuesta = await conRespaldo(MODELO_BUSQUEDA, pedirBusqueda, ['openai/gpt-oss-20b', 'openai/gpt-oss-120b']);
   const datos = await respuesta.json();
   const mensaje = datos.choices?.[0]?.message ?? {};
   // Si el modelo no llega a escribir el resumen, se usa lo que leyó.
@@ -247,6 +286,26 @@ export async function buscarEnInternetGroq({ apiKey, consulta, signal, fetch }) 
   const texto = limpiarCitas(mensaje.content || '') || limpiarCitas(leido).slice(0, 3000);
   if (!texto) throw new ErrorGroq('La búsqueda no ha devuelto resultados.');
   return { resultado: texto, fuentes: fuentesDeBusqueda(mensaje, texto) };
+}
+
+function cuerpoBusqueda(modelo, consulta) {
+  return {
+    model: modelo,
+    messages: [
+      {
+        role: 'system',
+        content:
+          `Hoy es ${new Date().toLocaleDateString('es-ES', { dateStyle: 'full' })}. Busca en internet y responde en español ` +
+          'con los datos concretos que encuentres (cifras, fechas, nombres), en menos de 120 palabras. Si no encuentras ' +
+          'nada fiable, dilo. Al final, en una línea, las direcciones de las páginas que has usado.',
+      },
+      { role: 'user', content: consulta },
+    ],
+    tools: [{ type: 'browser_search' }],
+    tool_choice: 'required',
+    max_completion_tokens: MAX_RESPUESTA,
+    reasoning_effort: 'low',
+  };
 }
 
 // Comprueba la clave sin gastar nada: pide la lista de modelos.

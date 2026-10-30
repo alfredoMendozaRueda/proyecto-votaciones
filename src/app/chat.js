@@ -374,6 +374,10 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
         ponerEstado(ETIQUETAS_HERRAMIENTA[e.nombre] ?? 'Un momento…');
         alEstado('pensar');
         break;
+      case 'esperando':
+        // Límite por minuto de Groq: se repite solo en unos segundos.
+        ponerEstado(`Groq va al límite gratuito, sigo en ${e.segundos} s…`);
+        break;
       case 'recordatorio':
         notaRecordatorio(e.recordatorio);
         break;
