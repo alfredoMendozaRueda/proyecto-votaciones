@@ -213,6 +213,8 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
           ${perfil.habilidades.length ? `<ul class="chips empleo-perfil__chips">${perfil.habilidades.slice(0, 10).map((h) => `<li class="chip">${escapar(h)}</li>`).join('')}</ul>` : ''}
         </section>
 
+        <section class="empleo-seccion" id="empleo-candidaturas"></section>
+
         <form class="empleo-busqueda" id="empleo-busqueda">
           <p class="empleo-etiqueta">(qué buscas)</p>
           <label class="empleo-campo"><span>Puestos</span><input class="campo" name="puestos" maxlength="300" value="${escapar(pref.puestos)}" placeholder="Desarrolladora frontend, React…"></label>
@@ -238,7 +240,6 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
         <p class="apartado__mensaje" role="alert" hidden></p>
 
         <section class="empleo-seccion" id="empleo-ofertas"></section>
-        <section class="empleo-seccion" id="empleo-candidaturas"></section>
 
         <div class="apartado__pie"><button type="button" class="boton" id="empleo-borrar-todo">Borrar mis datos de empleo</button></div>
       </div>`;
@@ -263,6 +264,8 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       e.preventDefault();
       const entrada = e.target.oferta.value.trim();
       if (!entrada) return mensaje('Pega el enlace o el texto de la oferta.');
+      const yaHecha = /^https?:\/\/\S+$/.test(entrada) && datos.postulaciones.find((p) => p.oferta.url === entrada);
+      if (yaHecha) return detalle(yaHecha);
       tarea(async () => {
         progreso(/^https?:\/\//.test(entrada) ? 'Abriendo la oferta…' : 'Leyendo la oferta…');
         const oferta = await leerOferta(ia, entrada, { detalle: detallePortal });
@@ -306,6 +309,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
 
   function tarjetaOferta(o, i) {
     const nivel = nivelEncaje(o.encaje);
+    const hecha = candidaturaDe(o);
     return `
       <article class="oferta" data-id="${escapar(o.id)}">
         <div class="oferta__num" aria-hidden="true">${dosCifras(i + 1)}</div>
@@ -314,6 +318,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
           <h4 class="oferta__puesto">${escapar(o.puesto)}</h4>
           <p class="oferta__empresa">${escapar([o.empresa, o.ubicacion].filter(Boolean).join(' · '))}</p>
           <ul class="chips">
+            ${hecha ? `<li class="chip chip--si">CV adaptado · ${fechaCorta(hecha.fecha)}</li>` : ''}
             ${o.encaje != null ? `<li class="chip chip--encaje" data-nivel="${o.puerta === 'no' ? 'bajo' : nivel}">${o.encaje} · ${escapar(o.veredicto || 'encaje')}</li>` : ''}
             ${o.modalidad ? `<li class="chip">${escapar(o.modalidad)}</li>` : ''}
             ${o.salario ? `<li class="chip">${escapar(o.salario)}</li>` : ''}
@@ -324,7 +329,11 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
           ${o.motivos.length ? `<ul class="oferta__lista oferta__lista--si">${o.motivos.map((m) => `<li>${escapar(m)}</li>`).join('')}</ul>` : ''}
           ${o.faltan.length ? `<ul class="oferta__lista oferta__lista--no">${o.faltan.map((m) => `<li>${escapar(m)}</li>`).join('')}</ul>` : ''}
           <div class="oferta__acciones">
-            <button type="button" class="boton boton--primario" data-adaptar="${escapar(o.id)}" data-bloquear>${icono('chispa', 15)} Adaptar CV</button>
+            ${
+              hecha
+                ? `<button type="button" class="boton boton--primario" data-ver="${escapar(hecha.id)}">${icono('documento', 15)} Ver mi candidatura</button>`
+                : `<button type="button" class="boton boton--primario" data-adaptar="${escapar(o.id)}" data-bloquear>${icono('chispa', 15)} Adaptar CV</button>`
+            }
             ${o.url ? `<button type="button" class="boton" data-abrir="${escapar(o.url)}">${icono('enlace', 15)} Ver oferta</button>` : ''}
           </div>
         </div>
@@ -350,6 +359,12 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
         if (oferta) tarea(() => candidatura(oferta));
       }),
     );
+    seccion.querySelectorAll('[data-ver]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const p = datos.postulaciones.find((x) => x.id === b.dataset.ver);
+        if (p) detalle(p);
+      }),
+    );
     seccion.querySelectorAll('[data-abrir]').forEach((b) => b.addEventListener('click', () => api.ventana.abrirEnlace(b.dataset.abrir)));
   }
 
@@ -361,7 +376,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       return;
     }
     seccion.innerHTML = `
-      <p class="empleo-etiqueta">(tus candidaturas)</p>
+      <p class="empleo-etiqueta">(tus candidaturas · ${datos.postulaciones.length})</p>
       <ul class="filas">
         ${datos.postulaciones
           .map(
@@ -383,8 +398,15 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     );
   }
 
+  // La candidatura ya preparada para una oferta (misma dirección o misma oferta).
+  const mismaOferta = (a, b) => Boolean((a.url && a.url === b.url) || (a.id && a.id === b.id) || (a.puesto && a.puesto === b.puesto && a.empresa && a.empresa === b.empresa));
+  const candidaturaDe = (oferta) => datos.postulaciones.find((p) => mismaOferta(p.oferta, oferta));
+
   // Redacta (y revisa) el CV y la carta para una oferta y abre el resultado.
-  async function candidatura(oferta, { yaLeida = false } = {}) {
+  // Si ya está hecha, se abre la guardada; solo «Rehacer» la vuelve a generar.
+  async function candidatura(oferta, { yaLeida = false, rehacer = null } = {}) {
+    const hecha = !rehacer && candidaturaDe(oferta);
+    if (hecha) return detalle(hecha);
     let completa = oferta;
     if (!yaLeida && oferta.url && !oferta.descripcion) {
       progreso('Leyendo la oferta completa…');
@@ -402,13 +424,14 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     };
     const resultado = await adaptarCV(ia, datos.cv.perfil, completa, { alPaso: (p) => progreso(pasos[p]) });
     const nueva = {
-      id: `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      id: rehacer?.id ?? `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       fecha: Date.now(),
-      estado: 'preparada',
+      estado: rehacer?.estado ?? 'preparada',
       oferta: { ...completa, encaje: resultado.encaje ?? completa.encaje },
       ...resultado,
+      entrevista: null,
     };
-    datos.postulaciones = [nueva, ...datos.postulaciones].slice(0, MAX_POSTULACIONES);
+    datos.postulaciones = [nueva, ...datos.postulaciones.filter((x) => x.id !== nueva.id)].slice(0, MAX_POSTULACIONES);
     await guardar();
     detalle(nueva);
   }
@@ -512,7 +535,10 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
           ${o.url ? `<button type="button" class="boton" id="cand-oferta">${icono('enlace', 15)} Ver oferta</button>` : ''}
         </div>
         <p class="apartado__mensaje" role="alert" hidden></p>
-        <div class="apartado__pie"><button type="button" class="boton" id="cand-borrar">Borrar esta candidatura</button></div>
+        <div class="apartado__pie">
+          <button type="button" class="boton" id="cand-rehacer-todo" data-bloquear>${icono('actualizar', 15)} Rehacer con la IA</button>
+          <button type="button" class="boton" id="cand-borrar">Borrar esta candidatura</button>
+        </div>
       </div>`;
 
     const contenido = contenedor.querySelector('#cand-contenido');
@@ -641,6 +667,15 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       }
     });
     contenedor.querySelector('#cand-oferta')?.addEventListener('click', () => api.ventana.abrirEnlace(o.url));
+    const rehacerTodo = contenedor.querySelector('#cand-rehacer-todo');
+    rehacerTodo.addEventListener('click', () => {
+      if (rehacerTodo.dataset.confirmar !== 'si') {
+        rehacerTodo.dataset.confirmar = 'si';
+        rehacerTodo.textContent = '¿Seguro? Se cambiará el CV y la carta guardados';
+        return;
+      }
+      tarea(() => candidatura(p.oferta, { yaLeida: Boolean(p.oferta.descripcion), rehacer: p }));
+    });
     const borrar = contenedor.querySelector('#cand-borrar');
     borrar.addEventListener('click', async () => {
       if (borrar.dataset.confirmar !== 'si') {
