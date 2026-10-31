@@ -341,6 +341,7 @@ export function crearDemo() {
     personalidad: 'Tutéame y sé directo. Si algo es urgente, dímelo primero.',
     correoCadaMin: 5,
     avisarCorreo: true,
+    fotosRemitentes: true,
     googleClientId: '123456789-kitsune.apps.googleusercontent.com',
     pulsoDiario: true,
     proveedor: 'groq',

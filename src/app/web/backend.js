@@ -7,6 +7,7 @@ import { Conversaciones, nuevoIdConversacion } from '../../compartido/conversaci
 import { GOOGLE } from '../../compartido/google.js';
 import { leerSecreto, guardarSecreto, borrarSecreto } from './secretos.js';
 import { crearAvisos } from './avisos.js';
+import { aviso } from '../../compartido/notificaciones.js';
 
 // Versión web (PWA): el mismo contrato que window.asistente en Electron,
 // pero todo ocurre en el navegador. Claude se llama directamente desde aquí
@@ -218,8 +219,8 @@ export function crearBackendWeb() {
       if (ajustes.avisarCorreo && !avisos.pushActivo() && document.visibilityState !== 'visible' && 'Notification' in window && Notification.permission === 'granted') {
         const registro = await navigator.serviceWorker?.getRegistration();
         const [primero] = nuevos;
-        const titulo = nuevos.length === 1 ? `Correo de ${primero.de.nombre}` : `${nuevos.length} correos nuevos`;
-        if (registro) registro.showNotification(titulo, { body: primero.asunto, icon: 'iconos/icono-192.png', tag: 'kitsune-correo' });
+        const { titulo, cuerpo } = nuevos.length === 1 ? aviso(primero.asunto || '(sin asunto)', `De ${primero.de.nombre}`) : aviso(`${nuevos.length} correos nuevos`, `De ${primero.de.nombre} y más`);
+        if (registro) registro.showNotification(titulo, { body: cuerpo, icon: 'iconos/icono-192.png', tag: 'kitsune-correo' });
       }
     } catch {
       // Sin conexión o sesión caducada: se reintenta en la siguiente comprobación.
@@ -241,7 +242,7 @@ export function crearBackendWeb() {
       for (const cita of await calendario.proximas(15)) {
         emitir('cita', cita);
         const hora = new Date(cita.inicio).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-        notificar(`A las ${hora}: ${cita.titulo}`, cita.lugar || 'Dentro de poco', `kitsune-cita-${cita.id}`);
+        notificar(aviso(cita.titulo, [`a las ${hora}`, cita.lugar].filter(Boolean).join(' · ')), `kitsune-cita-${cita.id}`);
       }
     } catch {
       // Sin conexión o sesión caducada: se reintenta en la siguiente comprobación.
@@ -264,7 +265,7 @@ export function crearBackendWeb() {
 
   // ---------- Recordatorios ----------
 
-  async function notificar(titulo, cuerpo, etiqueta) {
+  async function notificar({ titulo, cuerpo }, etiqueta) {
     // Con el push activo el aviso ya lo manda el servidor: no se repite.
     if (avisos.pushActivo() || document.visibilityState === 'visible' || !('Notification' in window) || Notification.permission !== 'granted') return;
     const registro = await navigator.serviceWorker?.getRegistration();
@@ -281,7 +282,7 @@ export function crearBackendWeb() {
     },
     avisar: (r) => {
       emitir('recordatorio', r);
-      notificar('Kitsune te recuerda', r.texto, `kitsune-${r.id}`);
+      notificar(aviso(r.texto), `kitsune-${r.id}`);
     },
   });
   recordatorios.programar();

@@ -325,6 +325,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
             <div style="width:150px">${selector('correoCadaMin', 'ajuste-frecuencia', [[1, 'Cada minuto'], [5, 'Cada 5 min'], [15, 'Cada 15 min'], [30, 'Cada 30 min']])}</div>
           </div>
           ${interruptor('avisarCorreo', 'Avisar de los correos nuevos', 'Kitsune da un salto y aparece una notificación.')}
+          ${interruptor('fotosRemitentes', 'Fotos y logos de quien te escribe', 'Los logos se piden a Google y las fotos a Gravatar. Si no hay, se ve la inicial.')}
           ${interruptor('avisarCitas', 'Avisar antes de las citas', 'Un cuarto de hora antes de cada evento de tu calendario.')}
         </section>
       </div>`;

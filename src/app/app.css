@@ -37,8 +37,10 @@
   --papel-tinta: #241c17;
   --papel-tinta-2: #6d6155;
 
-  --display: 'Shippori Mincho B1', 'Yu Mincho', 'Hiragino Mincho ProN', Georgia, serif;
-  --ui: 'Zen Kaku Gothic New', 'Yu Gothic UI', 'Yu Gothic', 'Segoe UI', system-ui, sans-serif;
+  /* La letra del propio sistema: SF Pro en iPhone y Mac, Segoe UI en Windows,
+     Roboto en Android. Como una app nativa, sin fuentes descargadas. */
+  --display: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --ui: -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
 
   --radio: 18px;
@@ -4291,4 +4293,148 @@ html {
   font-family: var(--mono);
   font-size: 20px;
   letter-spacing: 0.12em;
+}
+
+/* ---------- Deslizar un correo (como en WhatsApp) ----------
+   El contenido de la fila se mueve con --desliz y, en el hueco que deja a la
+   derecha, aparecen dos cajas: Eliminar y Archivar. */
+.lista-correos .fila {
+  --desliz: 0px;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.lista-correos .fila__abrir,
+.lista-correos .fila .estrella,
+.lista-correos .fila.no-leida::before {
+  transform: translateX(var(--desliz));
+  transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lista-correos .fila .estrella:active {
+  transform: translateX(var(--desliz)) scale(0.88);
+}
+
+.fila__bajo {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  width: calc(-1 * var(--desliz));
+  overflow: hidden;
+  transition: width 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lista-correos .fila.deslizando .fila__abrir,
+.lista-correos .fila.deslizando .estrella,
+.lista-correos .fila.deslizando::before,
+.fila.deslizando .fila__bajo {
+  transition: none;
+}
+
+.fila__deslizada {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  overflow: hidden;
+  border: 0;
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: flex-grow 0.22s ease, filter 0.15s ease;
+}
+
+.fila__deslizada:active {
+  filter: brightness(0.88);
+}
+
+.fila__deslizada--borrar {
+  background: var(--acento);
+}
+
+.fila__deslizada--archivar {
+  background: #6f5a3e;
+}
+
+/* Hasta el fondo: Archivar ocupa todo el hueco (y al soltar, archiva). */
+.fila.a-fondo .fila__deslizada--borrar,
+.fila.sale-archivar .fila__deslizada--borrar,
+.fila.sale-papelera .fila__deslizada--archivar {
+  flex-grow: 0;
+}
+
+.fila.saliendo {
+  pointer-events: none;
+}
+
+.fila.plegando {
+  transition: height 0.2s ease;
+}
+
+.lista-correos .fila.abierta,
+.lista-correos .fila.deslizando,
+.lista-correos .fila.saliendo {
+  border-radius: 0;
+}
+
+/* ---------- Tipografía del sistema ----------
+   Con SF Pro / Segoe UI el 800 queda demasiado negro: los títulos van en 700
+   y algo más apretados, como los títulos de las apps del iPhone. */
+.marca__nombre,
+.tarjeta-aviso h2,
+.chat__saludo,
+.lectura__asunto,
+.ajustes__titulo h2,
+.pulso__titulo,
+.apartado__cabecera h2,
+.calendario__mes,
+.calendario__dia h3,
+.hoja__titulo {
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.marca__nombre {
+  letter-spacing: -0.01em;
+}
+
+.chat__saludo,
+:root.movil .lectura__asunto,
+:root.movil .apartado__cabecera h2 {
+  letter-spacing: -0.02em;
+}
+
+/* ---------- Fotos de remitentes ----------
+   La foto (o el logo) aparece sobre la inicial cuando ha cargado. */
+.avatar {
+  position: relative;
+  overflow: hidden;
+}
+
+.avatar__foto {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.avatar__foto--logo {
+  padding: 17%;
+  background: #fbf7f2;
+  object-fit: contain;
+}
+
+.avatar.con-foto .avatar__foto {
+  opacity: 1;
 }

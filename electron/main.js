@@ -19,6 +19,7 @@ import { Recordatorios } from '../src/compartido/recordatorios.js';
 import { Memoria } from '../src/compartido/memoria.js';
 import { Conversaciones, ID_CONVERSACION } from '../src/compartido/conversaciones.js';
 import { servidor, sincronizarRecordatorios, automatizacionesChat } from './avisos.js';
+import { aviso } from '../src/compartido/notificaciones.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const URL_DESARROLLO = process.env.KITSUNE_DEV_URL;
@@ -111,7 +112,8 @@ function exigirCalendario() {
 // A su hora: notificación del sistema y el zorro aparece con el aviso.
 function avisarRecordatorio(recordatorio) {
   if (Notification.isSupported()) {
-    const notificacion = new Notification({ title: 'Kitsune te recuerda', body: recordatorio.texto });
+    const { titulo, cuerpo } = aviso(recordatorio.texto);
+    const notificacion = new Notification({ title: titulo, body: cuerpo });
     notificacion.on('click', mostrar);
     notificacion.show();
   }
@@ -235,11 +237,8 @@ async function comprobarCorreo() {
     ventana?.webContents.send('correo:nuevo', { cantidad: nuevos.length, ultimo: nuevos[0] });
     if (obtenerAjustes().avisarCorreo && Notification.isSupported()) {
       const [primero] = nuevos;
-      const notificacion = new Notification({
-        title: nuevos.length === 1 ? `Correo de ${primero.de.nombre}` : `${nuevos.length} correos nuevos`,
-        body: primero.asunto,
-        silent: true,
-      });
+      const { titulo, cuerpo } = nuevos.length === 1 ? aviso(primero.asunto || '(sin asunto)', `De ${primero.de.nombre}`) : aviso(`${nuevos.length} correos nuevos`, `De ${primero.de.nombre} y más`);
+      const notificacion = new Notification({ title: titulo, body: cuerpo, silent: true });
       notificacion.on('click', mostrar);
       notificacion.show();
     }
@@ -261,7 +260,8 @@ async function comprobarCitas() {
     for (const cita of await gmail.calendario.proximas(15)) {
       const hora = new Date(cita.inicio).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
       if (Notification.isSupported()) {
-        const notificacion = new Notification({ title: `A las ${hora}: ${cita.titulo}`, body: cita.lugar || 'Dentro de poco' });
+        const { titulo, cuerpo } = aviso(cita.titulo, [`a las ${hora}`, cita.lugar].filter(Boolean).join(' · '));
+        const notificacion = new Notification({ title: titulo, body: cuerpo });
         notificacion.on('click', mostrar);
         notificacion.show();
       }

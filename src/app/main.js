@@ -205,6 +205,7 @@ async function iniciar() {
     abrirAjustes: (seccion) => mostrarVista('ajustes', seccion),
     alNoLeidos: ponerNoLeidos,
     alLeer: () => gesto('olfatear'),
+    conFotos: () => ajustes?.fotosRemitentes !== false,
   });
   panelAjustes = crearAjustes({
     contenedor: vistas.ajustes,

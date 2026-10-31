@@ -9,6 +9,7 @@ import { aleatorio, huella, cifrarTexto, descifrarTexto } from './cifrado.js';
 import { partesLocales } from './tiempo.js';
 import { normalizarAutomatizacion, MAX_AUTOMATIZACIONES } from '../../src/compartido/automatizaciones.js';
 import { ClienteGmail } from '../../src/compartido/gmail.js';
+import { aviso } from '../../src/compartido/notificaciones.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -318,7 +319,7 @@ async function atender(peticion, env) {
     return json({ ok: true });
   }
   if (m === 'POST' && ruta === '/probar') {
-    const enviados = await n.notificar({ titulo: 'Kitsune', cuerpo: 'Así te avisaré aunque la app esté cerrada.', url: './', etiqueta: 'prueba' }, { soloDispositivo: d.id });
+    const enviados = await n.notificar({ ...aviso('avisos activados', 'Así te avisaré aunque la app esté cerrada.'), url: './', etiqueta: 'prueba' }, { soloDispositivo: d.id });
     if (!enviados) throw new ErrorHttp(400, 'Este dispositivo no tiene las notificaciones activadas.');
     return json({ ok: true });
   }

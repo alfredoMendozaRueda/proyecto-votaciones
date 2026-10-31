@@ -6,6 +6,7 @@ import { Nucleo } from './nucleo.js';
 import { partesLocales, desdeLocal, horaLocal, fechaLegible, enSilencio, aMinutos } from './tiempo.js';
 import { coincideCorreo, coincideCita, duracion } from '../../src/compartido/automatizaciones.js';
 import { extraerEvento } from './ia.js';
+import { aviso } from '../../src/compartido/notificaciones.js';
 
 // Pestañas de Gmail de las que no se avisa si «solo lo principal» está activo.
 const CATEGORIAS_SECUNDARIAS = /^CATEGORY_(PROMOTIONS|SOCIAL|FORUMS)$/;
@@ -53,7 +54,7 @@ async function fallo(n, error) {
     if (!(await n.avisados([clave])).has(clave)) {
       await n.marcar([clave]);
       await n.registrar('error', 'Google ha retirado el permiso: vuelve a conectar la cuenta en Kitsune.');
-      await n.notificar({ titulo: 'Kitsune necesita tu permiso', cuerpo: 'Vuelve a conectar Google en Ajustes para seguir avisándote.', url: './?ajustes', etiqueta: 'google' });
+      await n.notificar({ ...aviso('vuelve a conectar Google', 'Ve a Ajustes para seguir recibiendo avisos de correo y agenda.'), url: './?ajustes', etiqueta: 'google' });
     }
     return;
   }
@@ -65,7 +66,7 @@ async function fallo(n, error) {
 async function recordatorios(n) {
   const { results } = await n.db.prepare('SELECT id, texto FROM recordatorios WHERE avisado = 0 AND cuando <= ? ORDER BY cuando LIMIT 20').bind(n.ahora).all();
   for (const r of results) {
-    await n.notificar({ titulo: 'Kitsune te recuerda', cuerpo: r.texto, url: './?recordatorios', etiqueta: `r-${r.id}` });
+    await n.notificar({ ...aviso(r.texto), url: './?recordatorios', etiqueta: `r-${r.id}` });
     await n.db.prepare('UPDATE recordatorios SET avisado = 1 WHERE id = ?').bind(r.id).run();
   }
 }
@@ -83,10 +84,10 @@ async function horarios(n, activas, local, zona, conGoogle) {
     const h = auto.hacer;
     if (h.resumen) {
       const { titulo, cuerpo } = await resumenDelDia(n, local, zona, conGoogle);
-      await n.notificar({ titulo, cuerpo, url: './', etiqueta: 'resumen' });
+      await n.notificar({ ...aviso(titulo, cuerpo), url: './', etiqueta: 'resumen' });
     }
     if (h.notificar || h.recordatorio) {
-      await n.notificar({ titulo: auto.nombre, cuerpo: h.texto || auto.nombre, url: './', etiqueta: `h-${auto.id}` });
+      await n.notificar({ ...aviso(h.texto || auto.nombre, h.texto ? auto.nombre : ''), url: './', etiqueta: `h-${auto.id}` });
     }
     await n.registrar('automatizacion', `${auto.nombre}: hecho a las ${auto.cuando.hora}.`);
   }
@@ -113,7 +114,7 @@ export async function resumenDelDia(n, local, zona, conGoogle) {
   const pendientes = results[0]?.total ?? 0;
   if (pendientes) partes.push(`${pendientes} ${pendientes === 1 ? 'recordatorio' : 'recordatorios'}`);
   const saludo = local.minutos < 13 * 60 ? 'Buenos días' : local.minutos < 20 * 60 ? 'Buenas tardes' : 'Buenas noches';
-  return { titulo: `${saludo}: tu día`, cuerpo: partes.join(' · ') || 'Nada pendiente hoy.' };
+  return { titulo: `${saludo}, este es tu día`, cuerpo: partes.join(' · ') || 'Nada pendiente hoy.' };
 }
 
 // ---------- Correo nuevo ----------
@@ -153,9 +154,9 @@ async function correos(n, activas, local, avisos, zona) {
   const avisar = sinRegla.filter((m) => !avisos.soloPrincipal || !(m.etiquetas ?? []).some((e) => CATEGORIAS_SECUNDARIAS.test(e)));
   if (avisar.length > 3) {
     const nombres = [...new Set(avisar.map(remitente))].slice(0, 4).join(', ');
-    await n.notificar({ titulo: `${avisar.length} correos nuevos`, cuerpo: `De ${nombres}`, url: './?correo', etiqueta: 'correo' });
+    await n.notificar({ ...aviso(`${avisar.length} correos nuevos`, `De ${nombres}`), url: './?correo', etiqueta: 'correo' });
   } else {
-    for (const m of avisar) await n.notificar({ titulo: `Correo de ${remitente(m)}`, cuerpo: m.asunto, url: './?correo', etiqueta: `m-${m.id}` });
+    for (const m of avisar) await n.notificar({ ...aviso(m.asunto || '(sin asunto)', `De ${remitente(m)}`), url: './?correo', etiqueta: `m-${m.id}` });
   }
 }
 
@@ -179,8 +180,10 @@ async function ejecutarEnCorreo(n, r, m, gmail, zona) {
   }
   if (h.notificar) {
     await n.notificar({
-      titulo: h.texto || `Correo de ${remitente(m)}`,
-      cuerpo: evento ? `${evento.titulo} · añadido a tu agenda para el ${fechaLegible(evento.ms, zona)}` : m.asunto,
+      ...aviso(
+        h.texto || m.asunto || '(sin asunto)',
+        evento ? `${evento.titulo} · añadido a tu agenda para el ${fechaLegible(evento.ms, zona)}` : h.texto ? m.asunto : `De ${remitente(m)}`,
+      ),
       url: evento ? './?agenda' : './?correo',
       etiqueta: `m-${m.id}`,
     });
@@ -237,8 +240,10 @@ async function citas(n, activas, avisos, zona) {
   for (const c of pendientes) {
     const minutos = Math.max(1, Math.round(c.faltan / 60_000));
     await n.notificar({
-      titulo: c.texto || `A las ${horaLocal(c.e.inicio, zona)}: ${c.e.titulo}`,
-      cuerpo: c.texto ? `${c.e.titulo} · en ${minutos} min` : c.e.lugar || `Dentro de ${minutos} min`,
+      ...aviso(
+        c.texto || c.e.titulo,
+        [c.texto && c.e.titulo, `a las ${horaLocal(c.e.inicio, zona)} (en ${minutos} min)`, c.e.lugar].filter(Boolean).join(' · '),
+      ),
       url: './?agenda',
       etiqueta: `e-${c.e.id}`,
     });

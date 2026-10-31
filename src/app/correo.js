@@ -1,6 +1,7 @@
 import DOMPurify from 'dompurify';
 import { icono } from './iconos.js';
 import { deslizar } from './animaciones.js';
+import { candidatosFoto, claveFoto } from '../compartido/fotos.js';
 
 const FILTROS = [
   ['recibidos', 'Recibidos'],
@@ -32,7 +33,89 @@ function tonoDe(texto = '') {
 const inicialDe = (de) => (de.nombre || de.email || '?').trim().charAt(0).toUpperCase();
 
 const avatar = (de, clase = '') =>
-  `<span class="avatar ${clase}" style="--tono: ${tonoDe(de.email || de.nombre)}" aria-hidden="true">${escapar(inicialDe(de))}</span>`;
+  `<span class="avatar ${clase}" style="--tono: ${tonoDe(de.email || de.nombre)}" data-email="${escapar(de.email || '')}" aria-hidden="true">${escapar(inicialDe(de))}</span>`;
+
+// ---------- Fotos de remitentes ----------
+// Se recuerda qué foto tiene cada remitente (o que no tiene) para no pedirla
+// cada vez: una semana si la hay, dos días si no.
+const CLAVE_FOTOS = 'kitsune.fotos';
+const VIDA_CON_FOTO = 7 * 86_400_000;
+const VIDA_SIN_FOTO = 2 * 86_400_000;
+const MAX_FOTOS = 400;
+let cacheFotos = null;
+const fotosEnCurso = new Map();
+
+function leerFotos() {
+  if (cacheFotos) return cacheFotos;
+  try {
+    cacheFotos = JSON.parse(localStorage.getItem(CLAVE_FOTOS)) ?? {};
+  } catch {
+    cacheFotos = {};
+  }
+  return cacheFotos;
+}
+
+function recordarFoto(clave, valor) {
+  const fotos = leerFotos();
+  fotos[clave] = { ...valor, t: Date.now() };
+  const claves = Object.keys(fotos);
+  if (claves.length > MAX_FOTOS) claves.sort((a, b) => fotos[a].t - fotos[b].t).slice(0, claves.length - MAX_FOTOS).forEach((c) => delete fotos[c]);
+  try {
+    localStorage.setItem(CLAVE_FOTOS, JSON.stringify(fotos));
+  } catch {
+    // Sin almacenamiento: se vuelve a buscar la próxima vez.
+  }
+}
+
+// Carga de prueba: vale si llega una imagen de verdad (el icono genérico de 16 px no cuenta).
+function cargaBien(url) {
+  return new Promise((resolver) => {
+    const img = new Image();
+    img.referrerPolicy = 'no-referrer';
+    img.onload = () => resolver(img.naturalWidth > 16);
+    img.onerror = () => resolver(false);
+    setTimeout(() => resolver(false), 8000);
+    img.src = url;
+  });
+}
+
+function fotoDe(email) {
+  const clave = claveFoto(email);
+  if (!clave) return Promise.resolve(null);
+  const guardada = leerFotos()[clave];
+  if (guardada && Date.now() - guardada.t < (guardada.url ? VIDA_CON_FOTO : VIDA_SIN_FOTO)) return Promise.resolve(guardada.url ? guardada : null);
+  if (fotosEnCurso.has(clave)) return fotosEnCurso.get(clave);
+  const busqueda = (async () => {
+    for (const candidato of await candidatosFoto(email)) {
+      if (await cargaBien(candidato.url)) {
+        recordarFoto(clave, candidato);
+        return candidato;
+      }
+    }
+    // Sin conexión no se apunta que no hay foto.
+    if (navigator.onLine !== false) recordarFoto(clave, { url: '' });
+    return null;
+  })().finally(() => fotosEnCurso.delete(clave));
+  fotosEnCurso.set(clave, busqueda);
+  return busqueda;
+}
+
+function ponerFotos(raiz) {
+  raiz.querySelectorAll('.avatar[data-email]:not([data-con-foto])').forEach((el) => {
+    el.dataset.conFoto = '';
+    fotoDe(el.dataset.email).then((foto) => {
+      if (!foto || !el.isConnected) return;
+      const img = document.createElement('img');
+      img.className = `avatar__foto avatar__foto--${foto.tipo}`;
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      img.decoding = 'async';
+      img.addEventListener('load', () => el.classList.add('con-foto'), { once: true });
+      img.src = foto.url;
+      el.append(img);
+    });
+  });
+}
 
 // Grupo de la bandeja: Hoy, Ayer, el día de la semana (esta semana) o el mes.
 function grupoDe(ms) {
@@ -90,7 +173,7 @@ function prepararHtml(html, permitirImagenes) {
   // se sale, escala el correo entero.
   const srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>
     html{overflow:hidden}
-    body{margin:0;padding:16px 18px;font:15px/1.6 'Segoe UI',system-ui,sans-serif;color:#231e18;background:#e9e1d0;overflow-wrap:break-word;-webkit-text-size-adjust:100%}
+    body{margin:0;padding:16px 18px;font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#231e18;background:#e9e1d0;overflow-wrap:break-word;-webkit-text-size-adjust:100%}
     *{box-sizing:border-box}
     img,video{max-width:100%!important;height:auto!important}
     pre{white-space:pre-wrap}
@@ -100,7 +183,8 @@ function prepararHtml(html, permitirImagenes) {
   return { srcdoc, bloqueadas };
 }
 
-export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos, alLeer = () => {} }) {
+export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos, alLeer = () => {}, conFotos = () => true }) {
+  const fotos = (raiz) => conFotos() && ponerFotos(raiz);
   const estado = { filtro: 'recibidos', consulta: '', mensajes: [], siguiente: null, actual: null, imagenes: false };
   let ultimaCarga = 0;
 
@@ -148,6 +232,7 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos, alLeer 
         ${FILTROS.map(([valor, nombre]) => `<button type="button" data-filtro="${valor}" aria-pressed="${valor === estado.filtro}">${nombre}</button>`).join('')}
       </div>
       <ul class="lista-correos desplazable" id="correo-lista" aria-label="Correos"></ul>`;
+    prepararDeslizar(contenedor.querySelector('#correo-lista'));
 
     const buscar = contenedor.querySelector('#correo-buscar');
     buscar.value = estado.consulta;
@@ -186,6 +271,10 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos, alLeer 
         grupoAnterior = grupo;
         return `${cabecera}
         <li class="fila${m.noLeido ? ' no-leida' : ''}" data-id="${m.id}">
+          <div class="fila__bajo" aria-hidden="true">
+            <button type="button" class="fila__deslizada fila__deslizada--borrar" data-accion="papelera" tabindex="-1">${icono('papelera', 20)}<span>Eliminar</span></button>
+            <button type="button" class="fila__deslizada fila__deslizada--archivar" data-accion="archivar" tabindex="-1">${icono('archivar', 20)}<span>Archivar</span></button>
+          </div>
           <button type="button" class="fila__abrir" data-accion="abrir" aria-label="${m.noLeido ? 'Sin leer. ' : ''}${escapar(m.de.nombre)}: ${escapar(m.asunto)}">
             ${avatar(m.de, 'avatar--fila')}
             <span class="fila__de">${escapar(m.de.nombre)}</span>
@@ -202,12 +291,126 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos, alLeer 
         </li>`;
       })
       .join('');
+    fotos(lista);
     lista.querySelectorAll('[data-accion]').forEach((b) =>
       b.addEventListener('click', (e) => {
         e.stopPropagation();
-        accionFila(b.closest('.fila').dataset.id, b.dataset.accion);
+        const fila = b.closest('.fila');
+        if (b.closest('.fila__bajo')) quitarFila(fila, b.dataset.accion);
+        else accionFila(fila.dataset.id, b.dataset.accion);
       }),
     );
+  }
+
+  // ---------- Deslizar (como en WhatsApp) ----------
+  // Con el dedo, un correo deslizado a la izquierda descubre dos cajas,
+  // Eliminar y Archivar; si se desliza hasta el fondo, se archiva sin más.
+  const ANCHO_CAJAS = 152;
+  const A_FONDO = 0.6;
+
+  function prepararDeslizar(lista) {
+    let gesto = null;
+    let abierta = null;
+    const mover = (fila, x) => fila.style.setProperty('--desliz', `${Math.round(x)}px`);
+    const cerrar = (fila = abierta) => {
+      if (!fila) return;
+      fila.classList.remove('abierta', 'a-fondo');
+      mover(fila, 0);
+      if (fila === abierta) abierta = null;
+    };
+
+    lista.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' || !e.isPrimary) return;
+      const fila = e.target.closest('.fila');
+      if (!fila?.dataset.id || fila.classList.contains('saliendo') || e.target.closest('.fila__bajo')) return;
+      if (abierta && abierta !== fila) cerrar();
+      gesto = { fila, id: e.pointerId, x0: e.clientX, y0: e.clientY, base: fila === abierta ? -ANCHO_CAJAS : 0, x: 0, activo: false, muestras: [{ x: e.clientX, t: e.timeStamp }] };
+    });
+
+    lista.addEventListener('pointermove', (e) => {
+      if (!gesto || e.pointerId !== gesto.id) return;
+      const dx = e.clientX - gesto.x0;
+      const dy = e.clientY - gesto.y0;
+      if (!gesto.activo) {
+        // Hasta saber hacia dónde va el dedo no se decide: en vertical es desplazar la lista.
+        if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) return (gesto = null);
+        if (Math.abs(dx) < 10) return;
+        if (gesto.base === 0 && dx > 0) return (gesto = null);
+        gesto.activo = true;
+        gesto.x0 = e.clientX - Math.sign(dx) * 10;
+        gesto.fila.setPointerCapture(e.pointerId);
+        gesto.fila.classList.add('deslizando');
+      }
+      const ancho = gesto.fila.offsetWidth;
+      gesto.x = Math.max(-ancho, Math.min(0, gesto.base + e.clientX - gesto.x0));
+      gesto.muestras = [...gesto.muestras.slice(-4), { x: e.clientX, t: e.timeStamp }];
+      mover(gesto.fila, gesto.x);
+      gesto.fila.classList.toggle('a-fondo', gesto.x < -ancho * A_FONDO);
+    });
+
+    const soltar = (e) => {
+      if (!gesto || e.pointerId !== gesto.id) return;
+      const { fila, activo, x, muestras } = gesto;
+      gesto = null;
+      if (!activo) return;
+      fila.classList.remove('deslizando');
+      // El toque que acaba un deslizamiento no abre el correo.
+      fila.dataset.deslizada = '1';
+      setTimeout(() => delete fila.dataset.deslizada, 0);
+      const [a, b] = [muestras[0], muestras.at(-1)];
+      const velocidad = b.t > a.t ? (b.x - a.x) / (b.t - a.t) : 0; // px/ms
+      if (x < -fila.offsetWidth * A_FONDO) {
+        abierta = null;
+        return quitarFila(fila, 'archivar');
+      }
+      fila.classList.remove('a-fondo');
+      if (velocidad < 0.35 && (x < -ANCHO_CAJAS / 2 || velocidad < -0.4)) {
+        mover(fila, -ANCHO_CAJAS);
+        fila.classList.add('abierta');
+        abierta = fila;
+      } else {
+        cerrar(fila);
+      }
+    };
+    lista.addEventListener('pointerup', soltar);
+    lista.addEventListener('pointercancel', soltar);
+    // En iPhone, mientras se desliza un correo la lista no se mueve.
+    lista.addEventListener('touchmove', (e) => gesto?.activo && e.cancelable && e.preventDefault(), { passive: false });
+
+    // Con un correo abierto, cualquier toque fuera de sus cajas solo lo cierra.
+    lista.addEventListener(
+      'click',
+      (e) => {
+        const fila = e.target.closest('.fila');
+        if (fila?.dataset.deslizada || (abierta && !e.target.closest('.fila__bajo'))) {
+          e.stopPropagation();
+          e.preventDefault();
+          if (!fila?.dataset.deslizada) cerrar();
+        }
+      },
+      true,
+    );
+    lista.addEventListener('scroll', () => cerrar(), { passive: true });
+  }
+
+  // La fila se va hacia la izquierda, el hueco se cierra y luego se archiva o
+  // se borra de verdad; si falla, vuelve a aparecer.
+  function quitarFila(fila, accion) {
+    if (!fila || fila.classList.contains('saliendo')) return;
+    const id = fila.dataset.id;
+    fila.classList.remove('abierta', 'deslizando');
+    fila.classList.add('saliendo', `sale-${accion}`);
+    fila.style.setProperty('--desliz', `${-fila.offsetWidth}px`);
+    setTimeout(() => {
+      fila.style.height = `${fila.offsetHeight}px`;
+      void fila.offsetHeight;
+      fila.classList.add('plegando');
+      fila.style.height = '0px';
+    }, 240);
+    setTimeout(async () => {
+      await accionFila(id, accion);
+      if (estado.mensajes.some((m) => m.id === id)) pintarLista();
+    }, 460);
   }
 
   function contarNoLeidos() {
@@ -323,6 +526,7 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos, alLeer 
         </div>
       </article>`;
 
+    fotos(contenedor);
     pintarCuerpo();
     contenedor.querySelector('#lectura-volver').addEventListener('click', () => {
       bandeja();

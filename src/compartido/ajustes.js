@@ -29,6 +29,8 @@ export const AJUSTES_POR_DEFECTO = {
   personalidad: '',
   correoCadaMin: 5,
   avisarCorreo: true,
+  // Logos de empresas (Google) y fotos de Gravatar en la bandeja.
+  fotosRemitentes: true,
   googleClientId: '',
   // Servidor de avisos propio, si no se usa el que trae la app (ver servidor/).
   servidorUrl: '',

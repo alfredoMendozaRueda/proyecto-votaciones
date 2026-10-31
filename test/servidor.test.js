@@ -201,8 +201,7 @@ test('recordatorios: la app los sincroniza y el servidor avisa una sola vez', as
   const llamadas = internet();
   await revisar(env, ahora + 60_000);
   const avisos = await Promise.all(llamadas.push.map((p) => nav.descifrar(p.cuerpo).then(JSON.parse)));
-  assert.deepEqual(avisos.map((a) => a.cuerpo), ['Llamar a Lucía']);
-  assert.equal(avisos[0].titulo, 'Kitsune te recuerda');
+  assert.deepEqual(avisos.map((a) => a.titulo), ['Kitsune: Llamar a Lucía']);
   assert.match(llamadas.push[0].cabeceras.Authorization, /^vapid t=.+, k=.+/);
   await revisar(env, ahora + 120_000);
   assert.equal(llamadas.push.length, 1);
@@ -242,7 +241,7 @@ test('correo nuevo: automatización de reservas crea el evento y el resto avisa 
   assert.deepEqual(creado.start, { dateTime: '2026-11-14T08:35:00', timeZone: 'Europe/Madrid' });
   assert.equal(creado.location, 'Atocha');
   const avisos = await Promise.all(llamadas.push.map((p) => nav.descifrar(p.cuerpo).then(JSON.parse)));
-  assert.deepEqual(avisos.map((a) => a.titulo), ['Correo de Renfe', 'Correo de Lucía Pérez']);
+  assert.deepEqual(avisos.map((a) => a.titulo), ['Kitsune: Confirmación de tu billete', 'Kitsune: Presupuesto cocina']);
   assert.match(avisos[0].cuerpo, /añadido a tu agenda/);
   const registro = await (await pedir(env, '/registro', { token })).json();
   assert.ok(registro.some((r) => /Reservas a la agenda/.test(r.texto)));
@@ -263,7 +262,8 @@ test('citas: un aviso 15 minutos antes, y otro de la automatización de media ho
   const avisos = await Promise.all(llamadas.push.map((p) => nav.descifrar(p.cuerpo).then(JSON.parse)));
   assert.equal(avisos.length, 2);
   assert.ok(avisos.every((a) => /Dentista/.test(a.titulo)));
-  assert.equal(avisos[0].cuerpo, 'Calle Mayor 3');
+  assert.equal(avisos[0].titulo, 'Kitsune: Dentista');
+  assert.match(avisos[0].cuerpo, /^a las \d\d:\d\d \(en 10 min\) · Calle Mayor 3$/);
 });
 
 test('horario: el resumen de la mañana llega a las 8 en la zona del usuario, una vez', async () => {
@@ -287,7 +287,7 @@ test('horario: el resumen de la mañana llega a las 8 en la zona del usuario, un
   const avisos = await Promise.all(llamadas.push.map((p) => nav.descifrar(p.cuerpo).then(JSON.parse)));
   const resumen = avisos.filter((a) => a.etiqueta === 'resumen');
   assert.equal(resumen.length, 1);
-  assert.equal(resumen[0].titulo, 'Buenos días: tu día');
+  assert.equal(resumen[0].titulo, 'Kitsune: Buenos días, este es tu día');
   assert.match(resumen[0].cuerpo, /1 cita: 10:00 Dentista/);
 });
 
