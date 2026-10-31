@@ -85,10 +85,17 @@ function prepararHtml(html, permitirImagenes) {
     a.setAttribute('target', '_blank');
     a.setAttribute('rel', 'noopener noreferrer');
   });
+  // Los correos suelen venir maquetados a 600-700 px. ajustar() apila las
+  // columnas de las tablas que no caben (clase k-apilar) y, si aun así algo
+  // se sale, escala el correo entero.
   const srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>
-    html{overflow-y:hidden}
-    body{margin:0;padding:16px 18px;font:15px/1.6 'Segoe UI',system-ui,sans-serif;color:#231e18;background:#e9e1d0;overflow-wrap:anywhere}
-    img{max-width:100%;height:auto} table{max-width:100%} a{color:#8f2e1c}
+    html{overflow:hidden}
+    body{margin:0;padding:16px 18px;font:15px/1.6 'Segoe UI',system-ui,sans-serif;color:#231e18;background:#e9e1d0;overflow-wrap:break-word;-webkit-text-size-adjust:100%}
+    *{box-sizing:border-box}
+    img,video{max-width:100%!important;height:auto!important}
+    pre{white-space:pre-wrap}
+    a{color:#8f2e1c}
+    table.k-apilar,table.k-apilar>*,table.k-apilar>*>tr,table.k-apilar>tr,table.k-apilar>*>tr>td,table.k-apilar>*>tr>th,table.k-apilar>tr>td,table.k-apilar>tr>th{display:block;width:100%!important;min-width:0!important;max-width:100%!important;height:auto!important}
   </style></head><body>${doc.body.innerHTML}</body></html>`;
   return { srcdoc, bloqueadas };
 }
@@ -367,7 +374,7 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos, alLeer 
       // solo sirve para medir su altura y que la lectura se desplace entera.
       marco.setAttribute('sandbox', 'allow-same-origin allow-popups allow-popups-to-escape-sandbox');
       marco.setAttribute('referrerpolicy', 'no-referrer');
-      marco.addEventListener('load', () => ajustarAltura(marco));
+      marco.addEventListener('load', () => ajustar(marco));
       marco.srcdoc = srcdoc;
       destino.replaceChildren(marco);
       aviso.hidden = bloqueadas === 0;
@@ -380,14 +387,35 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos, alLeer 
     }
   }
 
-  // El marco crece hasta su contenido (también cuando cargan las imágenes o cambia el ancho).
-  function ajustarAltura(marco) {
+  // El correo cabe a lo ancho (si es más ancho que la pantalla se escala,
+  // como hace Gmail) y el marco crece hasta su contenido. Se repite cuando
+  // cargan las imágenes o cambia el ancho.
+  function ajustar(marco) {
     const doc = marco.contentDocument;
     if (!doc?.documentElement) return;
     const medir = () => {
       if (!marco.isConnected) return;
+      const cuerpo = doc.body;
+      cuerpo.style.zoom = '1';
+      const disponible = marco.clientWidth;
+      // Primero se apilan las columnas de las tablas más anchas que el hueco
+      // (de fuera hacia dentro: al apilar una, las de dentro pueden caber ya).
+      doc.querySelectorAll('table.k-apilar').forEach((t) => t.classList.remove('k-apilar'));
+      const hueco = cuerpo.clientWidth - (parseFloat(getComputedStyle(cuerpo).paddingLeft) || 0) - (parseFloat(getComputedStyle(cuerpo).paddingRight) || 0);
+      for (const tabla of doc.querySelectorAll('table')) {
+        if (tabla.getBoundingClientRect().right > cuerpo.getBoundingClientRect().left + cuerpo.clientWidth + 1 || tabla.offsetWidth > hueco + 1) {
+          tabla.classList.add('k-apilar');
+        }
+      }
+      let natural = Math.max(doc.documentElement.scrollWidth, cuerpo.scrollWidth);
+      // Lo que se sale no cuenta el margen derecho del cuerpo: se suma para que no quede pegado.
+      if (natural > disponible + 1) natural += parseFloat(getComputedStyle(cuerpo).paddingRight) || 0;
+      // Por debajo del 45 % ya no se lee: entonces se deja desplazar.
+      const escala = natural > disponible + 1 ? Math.max(0.45, disponible / natural) : 1;
+      cuerpo.style.zoom = String(escala);
+      doc.documentElement.style.overflowX = escala === 0.45 ? 'auto' : 'hidden';
       marco.style.height = '0px';
-      marco.style.height = `${Math.max(120, doc.documentElement.scrollHeight)}px`;
+      marco.style.height = `${Math.max(120, Math.ceil(doc.documentElement.scrollHeight))}px`;
     };
     medir();
     doc.querySelectorAll('img').forEach((img) => img.complete || img.addEventListener('load', medir, { once: true }));

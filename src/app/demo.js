@@ -65,6 +65,23 @@ Marcos`,
 </div>`,
   },
   {
+    id: 'demo10',
+    de: { nombre: 'Librería Hoja Roja', email: 'boletin@hojaroja.es' },
+    asunto: 'Novedades de noviembre: 20 % en novela japonesa',
+    fecha: ahora - 9 * HORA,
+    noLeido: false,
+    destacado: false,
+    extracto: 'Este mes, «La casa de los zorros» de Aiko Mori y una selección de clásicos con descuento…',
+    // Boletín maquetado a 640 px, como la mayoría: sirve para ver que se ajusta al móvil.
+    html: `<table width="640" cellpadding="0" cellspacing="0" style="width:640px;background:#fff;font-family:Georgia,serif">
+<tr><td colspan="2" style="background:#8f1a20;color:#fff;padding:22px 28px;font-size:26px">Hoja Roja · Noviembre</td></tr>
+<tr><td width="300" style="padding:20px 28px;vertical-align:top"><h3 style="margin:0 0 8px">La casa de los zorros</h3><p style="margin:0">La nueva novela de Aiko Mori: una familia, un santuario en las montañas de Nara y nueve colas que nadie debería ver.</p></td>
+<td width="340" style="padding:20px 28px 20px 0;vertical-align:top"><img src="https://ejemplo.invalid/portada.jpg" width="300" height="200" alt="Portada de La casa de los zorros" style="display:block;width:300px"></td></tr>
+<tr><td colspan="2" style="padding:0 28px 22px"><p>Hasta el 30 de noviembre, <b>20 % de descuento</b> en novela japonesa con el código <b>KITSUNE20</b>.</p>
+<p style="font-size:12px;color:#777">¿No quieres recibir más correos? Date de baja en https://hojaroja.es/boletin/baja?usuario=tu.cuenta%40gmail.com&amp;lista=novedades-noviembre</p></td></tr>
+</table>`,
+  },
+  {
     id: 'demo04',
     de: { nombre: 'Inés Prieto', email: 'ines.prieto@gmail.com' },
     asunto: 'Fotos del viaje a Kioto',
