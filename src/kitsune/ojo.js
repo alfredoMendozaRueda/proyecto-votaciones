@@ -9,7 +9,8 @@ export const PARCHE_OJO = { mitadU: W * 1.9, mitadV: H * 2.6 };
 
 // lado: +1 para el ojo en +x, -1 para el de -x. Todo se dibuja en el shader:
 // parpadear, entornar, mirar o dilatar la pupila es cambiar un uniform.
-export function crearMaterialOjo(lado) {
+// medio y parche: tamaño del ojo y del parche si el modelo los quiere distintos.
+export function crearMaterialOjo(lado, { medio = [W, H], parche = [PARCHE_OJO.mitadU, PARCHE_OJO.mitadV] } = {}) {
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
@@ -18,8 +19,8 @@ export function crearMaterialOjo(lado) {
     polygonOffsetUnits: -2,
     uniforms: {
       uLado: { value: lado },
-      uMedio: { value: new THREE.Vector2(W, H) },
-      uParche: { value: new THREE.Vector2(PARCHE_OJO.mitadU, PARCHE_OJO.mitadV) },
+      uMedio: { value: new THREE.Vector2(...medio) },
+      uParche: { value: new THREE.Vector2(...parche) },
       uApertura: { value: 1 },
       uAlegria: { value: 0 },
       uDilatacion: { value: 0.25 },
@@ -91,7 +92,7 @@ export function crearMaterialOjo(lado) {
 
         // Iris: llena la abertura; aro oscuro, fibras y reflejo del cielo arriba.
         float rI = mix(0.98, 1.3, k) * H;
-        vec2 cI = vec2(uMirada.x * 0.016, uMirada.y * 0.01 + mix(0.1, 0.08, k) * H);
+        vec2 cI = vec2(uMirada.x * 0.25 * W, uMirada.y * 0.25 * H + mix(0.1, 0.08, k) * H);
         vec2 dI = q - cI;
         float t = length(dI) / rI;
         float aaT = max(fwidth(t), 1e-4);
@@ -121,7 +122,7 @@ export function crearMaterialOjo(lado) {
         color = mix(color, vec3(1.0), (0.95 * b1 + 0.6 * b2) * dentro);
 
         // Borde negro de los párpados, más grueso arriba.
-        float gs = (0.0045 + 0.004 * smoothstep(-0.5, 1.0, xn)) * smoothstep(-1.05, -0.8, xn) * mix(1.0, 1.35, k);
+        float gs = (0.0045 + 0.004 * smoothstep(-0.5, 1.0, xn)) * smoothstep(-1.05, -0.8, xn) * mix(1.0, 1.35, k) * (W / 0.0845);
         float gi = 0.0035 * smoothstep(-1.0, -0.6, xn);
         float extra = max(xn - 1.0, 0.0);
         float baseSup = supEf + extra * 0.35 * H;

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // Estilos de dibujo del zorro. No cambian la geometría: cambian el material
 // (pelo por capas o sombreado de dibujo animado), el contorno, las
 // proporciones (la cría de cabeza grande) y el tamaño de la pupila.
-//   ilustracion: el dibujo de referencia, animado encima del lienzo.
+//   ilustracion: la cría de la ilustración de referencia, con su propio modelo.
 //   realista: pelo por capas y luz suave (el de siempre).
 //   anime:    sombreado en dos tonos, colores vivos y contorno marcado.
 //   kawaii:   cría, colores pastel, contorno suave, pupilas grandes y coloretes.
@@ -29,12 +29,43 @@ const BASE = {
   colas: 1, // grosor de las colas
   punta: 0.86, // dónde empieza la punta clara de las colas (0 = raíz, 1 = punta)
   retoques: null, // ajustes de color sobre el pelaje elegido
-  imagen: false, // el zorro es la ilustración (una imagen) en vez del modelo 3D
+  modelo: 'zorro', // 'zorro' o 'cria' (la de la ilustración, ver cria.js)
+  ladeo: 0, // cabeza ladeada en reposo (rad)
 };
 
 export const ESTILOS = {
-  // La ilustración de referencia tal cual, animada como lámina (ver lamina.js).
-  ilustracion: { ...BASE, nombre: 'Ilustración', imagen: true },
+  // La cría de la ilustración de referencia: su propio modelo (cria.js), ojos
+  // de dibujo, cejas y sonrisa, sin marca ni bigotes, y colas con la punta
+  // crema larga. En carmesí, los colores exactos del dibujo.
+  ilustracion: {
+    ...BASE,
+    nombre: 'Ilustración',
+    modelo: 'cria',
+    caricatura: 1,
+    rasgos: true,
+    marca: false,
+    bigotes: 0,
+    dilatacion: 0.35,
+    apertura: 1.1,
+    punta: 0.72,
+    ladeo: -0.13,
+    retoques: (p) =>
+      p.nombre === 'Carmesí'
+        ? {
+            flanco: '#e8661c',
+            lomo: '#d9561a',
+            crema: '#f7ecdf',
+            medias: '#4a2414',
+            orejaDorso: '#33190f',
+            orejaDentro: '#f5e3d4',
+            bandaCola: '#e8661c',
+            puntaCola: '#f8efe4',
+            iris: '#6b3a17',
+            esclera: '#ffffff',
+            nariz: '#17100e',
+          }
+        : { bandaCola: p.flanco, iris: '#6b3a17' },
+  },
   realista: { ...BASE, nombre: 'Realista' },
   anime: {
     ...BASE,

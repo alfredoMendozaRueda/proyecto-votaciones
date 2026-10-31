@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { PALETAS, PALETA_POR_DEFECTO } from './paletas.js';
-import { Cola } from './cola.js';
+import { Cola, FORMAS_COLA } from './cola.js';
 import { FuegosFatuos } from './fuegos.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { construirZorro } from './anatomia.js';
+import { construirCria } from './cria.js';
 import { crearMaterialesPelaje } from './pelaje.js';
 import { colorearOjo } from './ojo.js';
 import { ESTILOS, crearMaterialDibujo, crearMaterialContorno, crearColoretes } from './estilos.js';
 import { GestorCalidad, indiceNivel } from './rendimiento.js';
-import { Lamina } from './lamina.js';
 import {
   clamp01,
   lerp,
@@ -29,6 +29,8 @@ const GESTOS_OCIO = ['bostezo', 'curiosear', 'sacudir'];
 
 const NUM_COLAS = 9;
 const DESVIO_ZETA = new THREE.Vector3(0.35, 0.45, 0.2);
+// Dónde va la cabeza del zorro (la cría trae la suya).
+const CABEZA_ZORRO = new THREE.Vector3(0, 1.37, 0.17);
 
 const REPOSO = {
   orejas: 0,
@@ -211,8 +213,6 @@ export class Kitsune {
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
     contenedor.appendChild(this.renderer.domElement);
-    // En el estilo Ilustración el zorro es el dibujo, detrás del lienzo de los fuegos.
-    this.lamina = new Lamina(contenedor);
 
     this.escena = new THREE.Scene();
     this.camara = new THREE.PerspectiveCamera(28, 1, 0.1, 50);
@@ -344,7 +344,6 @@ export class Kitsune {
     // El estilo puede retocar algunos colores del pelaje (p. ej., la cola sin banda oscura).
     const pal = { ...PALETAS[nombre], ...(this._estilo?.retoques?.(PALETAS[nombre]) ?? {}) };
     this.paleta = nombre;
-    this.lamina.setPaleta(nombre);
     const colores = Object.fromEntries(
       Object.entries(pal)
         .filter(([, v]) => typeof v === 'string' && v.startsWith('#'))
@@ -381,8 +380,8 @@ export class Kitsune {
     const estilo = ESTILOS[nombre] ?? ESTILOS.realista;
     this.estilo = ESTILOS[nombre] ? nombre : 'realista';
     this._estilo = estilo;
-    this._modoImagen = estilo.imagen;
-    this.lamina.activa = estilo.imagen;
+    // Cada estilo dibuja uno de los dos modelos: el zorro o la cría de la ilustración.
+    this._usarModelo(estilo.modelo);
     this._materialesEstilo ??= {};
     const cache = (this._materialesEstilo[this.estilo] ??= {
       dibujo: estilo.toon ? crearMaterialDibujo(estilo.toon) : null,
@@ -452,12 +451,15 @@ export class Kitsune {
 
   // Menos capas de pelo = menos trabajo para la tarjeta gráfica.
   _aplicarFraccionPelo(fraccion) {
-    for (const materiales of [this.mat.cuerpo, this.mat.colas]) {
-      const capas = Math.max(3, Math.round(materiales.capas * fraccion));
-      materiales.uniforms.uCapas.value = capas;
-      this.raiz.traverse((o) => {
-        if (o.isInstancedMesh && o.material === materiales.pelo) o.count = capas;
-      });
+    this._fraccionPelo = fraccion;
+    for (const modelo of Object.values(this._modelos)) {
+      for (const materiales of modelo.materiales) {
+        const capas = Math.max(3, Math.round(materiales.capas * fraccion));
+        materiales.uniforms.uCapas.value = capas;
+        modelo.zorro.raiz.traverse((o) => {
+          if (o.isInstancedMesh && o.material === materiales.pelo) o.count = capas;
+        });
+      }
     }
   }
 
@@ -475,7 +477,6 @@ export class Kitsune {
     window.removeEventListener('pointercancel', this._alSoltar);
     this.renderer.dispose();
     this.renderer.domElement.remove();
-    this.lamina.destruir();
   }
 
   // ---------- Construcción ----------
@@ -497,43 +498,10 @@ export class Kitsune {
       }),
     };
 
-    this.zorro = construirZorro(this.mat.cuerpo);
-    const z = this.zorro;
-    this.raiz = z.raiz;
-    this.raiz.rotation.y = 0.32;
-    this.escena.add(this.raiz);
-    Object.assign(this, {
-      cuerpo: z.cuerpo,
-      pecho: z.pecho,
-      cabeza: z.cabeza,
-      mandibula: z.mandibula,
-      boca: z.boca,
-      orejas: z.orejas,
-      patas: z.patas,
-      colasBase: z.colasBase,
-    });
-
-    const suelo = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), new THREE.ShadowMaterial({ opacity: 0.32 }));
-    suelo.rotation.x = -Math.PI / 2;
-    suelo.position.y = 0.001;
-    suelo.receiveShadow = true;
-    this.raiz.add(suelo);
-
-    this.sombra = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.2), this.mat.sombra);
-    this.sombra.rotation.x = -Math.PI / 2;
-    this.sombra.position.set(0, 0.002, -0.05);
-    this.raiz.add(this.sombra);
-
     this.anillo = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 72), this.mat.anillo);
     this.anillo.rotation.x = -Math.PI / 2;
     this.anillo.position.y = 0.01;
     this.escena.add(this.anillo);
-
-    this.colas = Array.from({ length: NUM_COLAS }, (_, i) => {
-      const cola = new Cola(i, NUM_COLAS, this.mat.colas);
-      this.colasBase.add(cola.malla);
-      return cola;
-    });
 
     const particulas = (cantidad) =>
       Array.from({ length: cantidad }, () => {
@@ -546,10 +514,73 @@ export class Kitsune {
     this.zetas3d = particulas(3);
     this.corazones3d = particulas(5);
 
-    this._mallasCuerpo = [...z.mallas, ...this.colas.map((c) => c.malla)];
-
     this.coloretes = crearColoretes();
+    this._modelos = {};
+    this._usarModelo(ESTILOS[this.opciones.estilo]?.modelo ?? 'zorro');
+  }
+
+  // Los modelos se construyen la primera vez que hacen falta y se guardan:
+  // cambiar de estilo solo cambia cuál está en la escena.
+  _crearModelo(nombre) {
+    const cria = nombre === 'cria';
+    // La cría tiene el pelo más corto y suave, y las colas más esponjosas.
+    const materiales = cria
+      ? [
+          crearMaterialesPelaje({ largo: 0.024, capas: 14, densidad: 120, gravedad: 0.35 }),
+          crearMaterialesPelaje({ largo: 0.045, capas: 16, densidad: 95, gravedad: 0.15 }),
+        ]
+      : [this.mat.cuerpo, this.mat.colas];
+    const zorro = (cria ? construirCria : construirZorro)(materiales[0]);
+
+    const suelo = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), new THREE.ShadowMaterial({ opacity: 0.32 }));
+    suelo.rotation.x = -Math.PI / 2;
+    suelo.position.y = 0.001;
+    suelo.receiveShadow = true;
+    zorro.raiz.add(suelo);
+    const sombra = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.2), this.mat.sombra);
+    sombra.rotation.x = -Math.PI / 2;
+    sombra.position.set(0, 0.002, -0.05);
+    zorro.raiz.add(sombra);
+
+    const colas = Array.from({ length: NUM_COLAS }, (_, i) => {
+      const cola = new Cola(i, NUM_COLAS, materiales[1], FORMAS_COLA[cria ? 'cria' : 'zorro']);
+      zorro.colasBase.add(cola.malla);
+      return cola;
+    });
+    return { zorro, sombra, colas, materiales, mallas: [...zorro.mallas, ...colas.map((c) => c.malla)] };
+  }
+
+  _usarModelo(nombre = 'zorro') {
+    if (this._modelo === nombre) return;
+    const modelo = (this._modelos[nombre] ??= this._crearModelo(nombre));
+    const anterior = this.raiz;
+    if (anterior) {
+      this.escena.remove(anterior);
+      modelo.zorro.raiz.rotation.copy(anterior.rotation);
+      modelo.zorro.raiz.scale.copy(anterior.scale);
+    } else {
+      modelo.zorro.raiz.rotation.y = 0.32;
+    }
+    this._modelo = nombre;
+    const z = (this.zorro = modelo.zorro);
+    this.raiz = z.raiz;
+    this.escena.add(this.raiz);
+    Object.assign(this, {
+      cuerpo: z.cuerpo,
+      pecho: z.pecho,
+      cabeza: z.cabeza,
+      mandibula: z.mandibula,
+      boca: z.boca,
+      orejas: z.orejas,
+      patas: z.patas,
+      colasBase: z.colasBase,
+      sombra: modelo.sombra,
+      colas: modelo.colas,
+      _mallasCuerpo: modelo.mallas,
+    });
     this.cabeza.add(this.coloretes);
+    if (this._fraccionPelo !== undefined) this._aplicarFraccionPelo(this._fraccionPelo);
+    this._pendientePintar = true;
   }
 
   // ---------- Bucle ----------
@@ -645,20 +676,22 @@ export class Kitsune {
 
     // Cabeza
     const habla = this._habla(dt, p.habla);
-    this.cabeza.position.set(0, 1.37 - 0.12 * p.agachado + respiracion * 0.006 + 0.05 * bebe, 0.17 + 0.05 * p.agachado);
-    const escalaCabeza = (1 + 0.42 * bebe) * this._estilo.cabeza;
+    const base = this.zorro.posCabeza ?? CABEZA_ZORRO;
+    this.cabeza.position.set(base.x, base.y - 0.12 * p.agachado + respiracion * 0.006 + 0.05 * bebe, base.z + 0.05 * p.agachado);
+    // La cría ya tiene la cabeza grande: en la esquina crece menos.
+    const escalaCabeza = (1 + (this.zorro.posCabeza ? 0.12 : 0.42) * bebe) * this._estilo.cabeza;
     this.cabeza.scale.set(escalaCabeza, escalaCabeza, escalaCabeza * this._estilo.hocico);
     this.cabeza.rotation.set(
       p.cabeceo + o.cabeceo + this.mirada.y * -0.28 + p.habla * 0.04 * Math.sin(t * 6.8) - 0.05 * habla,
       this.mirada.x * 0.55 + o.giro,
-      p.inclinacion + o.inclinacion + 0.03 * Math.sin(t * 0.5) * reducido,
+      p.inclinacion + o.inclinacion + this._estilo.ladeo + 0.03 * Math.sin(t * 0.5) * reducido,
     );
     // Hasta 1 al hablar; el bostezo la abre más.
     const abertura = Math.min(1.7, Math.max(0, habla * 0.9 + o.boca));
     this.mandibula.rotation.x = abertura * 0.45;
     // El interior de la boca crece con ella: si no, al abrirla se vería el hueco.
     this.boca.scale.y = 0.013 + 0.03 * abertura;
-    this.boca.position.y = -0.03 - 0.03 * abertura;
+    this.boca.position.y = (this.zorro.bocaY ?? -0.03) - 0.03 * abertura;
 
     const apertura = Math.max(0, Math.min(1.25, p.apertura * o.apertura * micro.parpadeo * this._estilo.apertura));
     for (const ojo of this.zorro.ojos) {
@@ -669,24 +702,6 @@ export class Kitsune {
         Math.max(-1, Math.min(1, p.miradaX + this.mirada.x * 0.8 + o.giro * 0.7)),
         Math.max(-1, Math.min(1, p.miradaY + this.mirada.y * 0.8)),
       );
-    }
-    if (this._modoImagen) {
-      this.raiz.visible = false;
-      this.lamina.pintar({
-        escala,
-        salto: clamp01(o.saltoY / 0.55),
-        sx: o.sx,
-        sy: o.sy,
-        giro: o.vuelta,
-        inclinacion: p.inclinacion + o.inclinacion,
-        cabeceo: p.cabeceo + o.cabeceo,
-        respiracion,
-        habla,
-        apertura,
-        alegria: clamp01(o.alegria),
-        mirada: this.mirada.x,
-        bebe: this.bebe.valor,
-      });
     }
     this.zorro.marca.uniforms.uBrillo.value = p.remolino * (0.5 + 0.5 * Math.sin(t * 5));
 
@@ -1049,7 +1064,6 @@ export class Kitsune {
   }
 
   _tocaKitsune(evento) {
-    if (this._modoImagen) return this.lamina.toca(evento.clientX, evento.clientY);
     const rect = this.renderer.domElement.getBoundingClientRect();
     this._puntero.set(
       ((evento.clientX - rect.left) / rect.width) * 2 - 1,
