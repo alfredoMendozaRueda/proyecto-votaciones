@@ -15,7 +15,7 @@ import { smoothstep } from './easing.js';
 const OJO = { medio: [0.1, 0.072], parche: [0.21, 0.18] };
 const OJOS = [-1, 1].map((lado) => ({
   lado,
-  centro: new THREE.Vector3(0.2 * lado, 0.06, 0.36),
+  centro: new THREE.Vector3(0.185 * lado, 0.06, 0.37),
   normal: new THREE.Vector3(0.4 * lado, 0.06, 0.91).normalize(),
 }));
 
@@ -99,11 +99,11 @@ const elipsoide = (rx, ry, rz, extra = null) =>
 // Cabeza de cría de zorro: frente más estrecha, mejillas anchas y un hocico
 // corto que sale hacia delante con la trufa en la punta.
 function formaCabeza(d) {
-  let rx = 0.48;
-  let ry = 0.4;
-  const rz = 0.4;
-  // Mejillas anchas abajo; la frente se estrecha hacia las orejas.
-  rx *= 1 + 0.2 * smoothstep(0.15, -0.45, d.y) * smoothstep(-1, -0.8, d.y) - 0.1 * smoothstep(0.25, 0.9, d.y);
+  let rx = 0.43;
+  let ry = 0.42;
+  const rz = 0.41;
+  // Redonda, con las mejillas algo más anchas abajo y la frente hacia las orejas.
+  rx *= 1 + 0.1 * smoothstep(0.15, -0.45, d.y) * smoothstep(-1, -0.8, d.y) - 0.06 * smoothstep(0.25, 0.9, d.y);
   ry *= 1 - 0.07 * smoothstep(0.5, 1, d.y) - 0.12 * smoothstep(-0.55, -1, d.y);
   const p = new THREE.Vector3(d.x * rx, d.y * ry, d.z * rz);
   // Hocico: sale bajo y estrecho, entre las mejillas.
@@ -119,7 +119,7 @@ function pintorCabeza(p, n, u, v, pal, c) {
   c.copy(pal.flanco).lerp(pal.lomo, smoothstep(0.4, 0.95, n.y) * smoothstep(0.1, -0.2, p.z) * 0.6);
   // Blanco: hocico y mejillas, por debajo de una línea que pasa bajo los ojos.
   const ax = Math.abs(p.x);
-  const linea = -0.05 - 0.06 * smoothstep(0.03, 0.18, ax) + 0.1 * smoothstep(0.28, 0.5, ax);
+  const linea = -0.05 - 0.06 * smoothstep(0.03, 0.17, ax) + 0.1 * smoothstep(0.26, 0.46, ax);
   const blanco = smoothstep(linea + 0.025, linea - 0.025, p.y) * smoothstep(-0.25, -0.02, p.z);
   c.lerp(pal.crema, blanco);
   let pelo = 0.55;
@@ -242,10 +242,10 @@ export function construirCria(materialesCuerpo) {
     crearTubo({
       puntos: [
         [0, 0.08, -0.12],
-        [0, 0.3, -0.08],
-        [0, 0.56, 0.0],
-        [0, 0.8, 0.06],
-        [0, 1.02, 0.08],
+        [0, 0.26, -0.08],
+        [0, 0.47, 0.0],
+        [0, 0.67, 0.06],
+        [0, 0.86, 0.08],
       ].map(([x, y, z]) => [x, y - 0.6, z]),
       ancho: perfil([[0, 0.3], [0.25, 0.32], [0.55, 0.27], [0.8, 0.23], [1, 0.2]]),
       alto: perfil([[0, 0.28], [0.25, 0.3], [0.55, 0.25], [0.8, 0.22], [1, 0.19]]),
@@ -268,14 +268,14 @@ export function construirCria(materialesCuerpo) {
   // Patas delanteras: rectas hasta el suelo, gorditas, con calcetín y zarpa.
   const patas = [-1, 1].map((lado) => {
     const hombro = new THREE.Group();
-    hombro.position.set(0.125 * lado, 0.7, 0.14);
+    hombro.position.set(0.125 * lado, 0.63, 0.14);
     cuerpo.add(hombro);
     pieza(
       crearTubo({
         puntos: [
           [0, 0.06, 0],
-          [0, -0.15, 0.02],
-          [0, -0.36, 0.03],
+          [0, -0.12, 0.02],
+          [0, -0.3, 0.03],
         ],
         ancho: perfil([[0, 0.12], [0.5, 0.105], [1, 0.1]]),
         alto: perfil([[0, 0.13], [0.5, 0.11], [1, 0.1]]),
@@ -290,14 +290,14 @@ export function construirCria(materialesCuerpo) {
       hombro,
     );
     const antebrazo = new THREE.Group();
-    antebrazo.position.set(0, -0.34, 0.03);
+    antebrazo.position.set(0, -0.28, 0.03);
     hombro.add(antebrazo);
     pieza(
       crearTubo({
         puntos: [
           [0, 0.05, 0],
-          [0, -0.12, 0.005],
-          [0, -0.3, 0.01],
+          [0, -0.1, 0.005],
+          [0, -0.25, 0.01],
         ],
         ancho: perfil([[0, 0.1], [0.5, 0.095], [1, 0.094]]),
         alto: perfil([[0, 0.102], [0.5, 0.096], [1, 0.094]]),
@@ -309,14 +309,14 @@ export function construirCria(materialesCuerpo) {
       (p, n, u, v, pal, c) => pintorPata(p, n, u, 0.3 + 0.7 * v, pal, c),
       antebrazo,
     );
-    pieza(elipsoide(0.12, 0.07, 0.15), pintorZarpa, antebrazo, { pos: [0, -0.33, 0.06] });
+    pieza(elipsoide(0.12, 0.07, 0.15), pintorZarpa, antebrazo, { pos: [0, -0.28, 0.06] });
     return { hombro, antebrazo };
   });
 
   // ---------- Cabeza ----------
   const cabeza = new THREE.Group();
   cabeza.rotation.order = 'YXZ';
-  const posCabeza = new THREE.Vector3(0, 1.32, 0.14);
+  const posCabeza = new THREE.Vector3(0, 1.2, 0.14);
   cabeza.position.copy(posCabeza);
   cuerpo.add(cabeza);
 
@@ -347,7 +347,7 @@ export function construirCria(materialesCuerpo) {
   // Orejas grandes y anchas, abiertas hacia los lados.
   const orejas = [-1, 1].map((lado) => {
     const pivote = new THREE.Group();
-    pivote.position.set(0.23 * lado, 0.26, -0.07);
+    pivote.position.set(0.21 * lado, 0.28, -0.07);
     cabeza.add(pivote);
     const apertura = new THREE.Group();
     apertura.rotation.set(-0.08, 0.28 * lado, -0.2 * lado);
@@ -378,10 +378,10 @@ export function construirCria(materialesCuerpo) {
   const colorTrazo = '#2b150c';
   for (const lado of [-1, 1]) {
     const ceja = [
-      [0.12, 0.22, 0.35],
-      [0.17, 0.25, 0.35],
-      [0.23, 0.255, 0.33],
-      [0.29, 0.235, 0.3],
+      [0.11, 0.22, 0.35],
+      [0.16, 0.25, 0.35],
+      [0.21, 0.255, 0.33],
+      [0.27, 0.235, 0.3],
     ].map(([x, y, z]) => [x * lado, y, z]);
     rasgos.add(trazo(geoCabeza, ceja, new THREE.Vector3(0.3 * lado, 0.35, 1), { radio: 0.019, color: colorTrazo }));
   }
@@ -402,7 +402,7 @@ export function construirCria(materialesCuerpo) {
 
   // Las colas nacen de la parte baja de la espalda.
   const colasBase = new THREE.Group();
-  colasBase.position.set(0, 0.4, -0.22);
+  colasBase.position.set(0, 0.36, -0.22);
   cuerpo.add(colasBase);
 
   return {

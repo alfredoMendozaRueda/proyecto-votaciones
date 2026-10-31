@@ -49,6 +49,7 @@ export const ESTILOS = {
     apertura: 1.1,
     punta: 0.72,
     ladeo: -0.13,
+    cabeza: 1.12,
     retoques: (p) =>
       p.nombre === 'Carmesí'
         ? {
