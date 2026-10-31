@@ -50,17 +50,43 @@ self.addEventListener('fetch', (evento) => {
   evento.respondWith(caches.match(request, { ignoreVary: true }).then((guardada) => guardada ?? fetch(request)));
 });
 
-// Tocar el aviso de correo nuevo abre (o trae al frente) la app en la bandeja.
+// Avisos del servidor de Kitsune (push): llegan aunque la app esté cerrada.
+// En iPhone cada push tiene que mostrar una notificación, así que siempre se muestra.
+self.addEventListener('push', (evento) => {
+  let datos = {};
+  try {
+    datos = evento.data?.json() ?? {};
+  } catch {
+    datos = { cuerpo: evento.data?.text() ?? '' };
+  }
+  evento.waitUntil(
+    self.registration.showNotification(datos.titulo || 'Kitsune', {
+      body: datos.cuerpo || '',
+      icon: 'iconos/icono-192.png',
+      badge: 'iconos/icono-192.png',
+      tag: datos.etiqueta || undefined,
+      data: { url: datos.url || './' },
+    }),
+  );
+});
+
+// Si el navegador cambia la suscripción, la app la renovará al abrirse
+// (Ajustes → Avisos en el móvil); aquí no hay token con el que avisar al servidor.
+
+// Tocar un aviso abre (o trae al frente) la app en el apartado que toca.
+const DESTINOS = { '?correo': 'correo', '?agenda': 'agenda', '?recordatorios': 'recordatorios', '?ajustes': 'ajustes' };
 self.addEventListener('notificationclick', (evento) => {
   evento.notification.close();
+  const destino = evento.notification.data?.url ?? './?correo';
+  const vista = DESTINOS[new URL(destino, self.registration.scope).search] ?? null;
   evento.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((ventanas) => {
       const abierta = ventanas.find((v) => new URL(v.url).pathname.startsWith(new URL(self.registration.scope).pathname));
       if (abierta) {
-        abierta.postMessage({ tipo: 'abrir-correo' });
+        abierta.postMessage(vista ? { tipo: 'abrir-vista', vista } : { tipo: 'abrir-app' });
         return abierta.focus();
       }
-      return self.clients.openWindow('./?correo');
+      return self.clients.openWindow(destino);
     }),
   );
 });

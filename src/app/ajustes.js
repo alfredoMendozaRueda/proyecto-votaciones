@@ -109,7 +109,11 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
     const escritorio = api.plataforma !== 'web';
     const tactil = matchMedia('(pointer: coarse)').matches;
     const dondeSeGuarda = escritorio ? 'en este equipo' : 'en este navegador';
-    const [estadoClaude, estadoCorreo] = await Promise.all([api.claude.estado(), api.correo.estado()]);
+    const [estadoClaude, estadoCorreo, estadoAvisos] = await Promise.all([
+      api.claude.estado(),
+      api.correo.estado(),
+      api.servidor?.estado().catch((e) => ({ configurado: true, vinculado: false, error: e.message })) ?? null,
+    ]);
     const ia = IA[ajustes.proveedor] ?? IA.claude;
 
     // Pasos para quien prefiera su propio proyecto de Google Cloud.
@@ -200,6 +204,8 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
           ${interruptor('voz', 'Leer las respuestas en voz alta', escritorio ? 'Usa las voces en español de Windows.' : 'Usa las voces en español del dispositivo.')}
           ${interruptor('pulsoDiario', 'Pulso del día', 'La primera vez que abres Kitsune cada día te ofrece un resumen de correo y recordatorios.')}
         </section>
+
+        ${estadoAvisos ? seccionAvisos(estadoAvisos) : ''}
 
         <section class="grupo" id="seccion-permisos" aria-label="Permisos">
           <h3>Permisos</h3>
@@ -324,7 +330,247 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
       </div>`;
 
     conectar();
+    if (estadoAvisos) conectarAvisos(estadoAvisos);
     if (seccion) contenedor.querySelector(`#seccion-${seccion}`)?.scrollIntoView({ block: 'start' });
+  }
+
+  // ---------- Avisos en el móvil (servidor de avisos) ----------
+
+  const horas = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`);
+  const opciones = (lista, actual) => lista.map(([v, n]) => `<option value="${v}" ${String(actual) === String(v) ? 'selected' : ''}>${n}</option>`).join('');
+
+  function seccionAvisos(e) {
+    // El ordenador (Electron) no recibe push ni se vincula con Google: usa un código.
+    const escritorio = !e.puedeVincularConGoogle;
+    const cabecera = `<h3>Avisos en el móvil</h3>
+          <p class="ajuste__ayuda">Para que Kitsune te avise aunque esté cerrado (correos, citas, recordatorios) y haga automatizaciones, usa tu propio servidor de avisos, gratuito, en Cloudflare.</p>`;
+    const campoUrl = `<details class="avanzado"${e.configurado ? '' : ' open'}>
+            <summary>Dirección del servidor</summary>
+            <div class="ajuste"><label class="ajuste__etiqueta" for="srv-url">Dirección</label>
+              <input class="campo" id="srv-url" type="url" inputmode="url" placeholder="https://kitsune.tu-cuenta.workers.dev" value="${escapar(ajustes.servidorUrl)}" spellcheck="false">
+              <p class="ajuste__ayuda">${e.integrado ? 'Déjala vacía para usar la que trae la app.' : 'La da el despliegue del servidor (ver servidor/LEEME.md en el repositorio).'}</p></div>
+          </details>`;
+    if (!e.configurado) {
+      return `<section class="grupo" id="seccion-avisos" aria-label="Avisos en el móvil">${cabecera}
+          <div class="estado-cuenta"><span class="punto"></span>Servidor de avisos sin montar</div>
+          ${campoUrl}
+          <p class="mensaje-ajuste" id="mensaje-avisos" role="status"></p></section>`;
+    }
+    if (!e.vinculado) {
+      return `<section class="grupo" id="seccion-avisos" aria-label="Avisos en el móvil">${cabecera}
+          <div class="estado-cuenta"><span class="punto"></span>${escritorio ? 'Este ordenador no está vinculado' : 'Sin conectar'}</div>
+          ${
+            e.puedeVincularConGoogle
+              ? `<p class="ajuste__ayuda">Se abrirá Google para que des permiso al servidor (correo y calendario). Después vuelve a Kitsune: se conecta solo.</p>
+          <div><button type="button" class="boton boton--primario" id="srv-conectar">${icono('campana', 15)} Conectar los avisos</button></div>`
+              : '<p class="ajuste__ayuda">En el móvil, abre Ajustes → Avisos en el móvil → «Vincular otro dispositivo» y escribe aquí el código.</p>'
+          }
+          <form class="formulario formulario--linea" id="srv-canje">
+            <input class="campo" name="codigo" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="Código de 6 cifras" aria-label="Código de otro dispositivo" autocomplete="one-time-code">
+            <button type="submit" class="boton">${e.puedeVincularConGoogle ? 'Tengo un código' : 'Vincular'}</button>
+          </form>
+          ${campoUrl}
+          <p class="mensaje-ajuste" id="mensaje-avisos" role="status"></p></section>`;
+    }
+    const a = e.avisos ?? {};
+    const yo = e.dispositivos?.find((d) => d.yo);
+    let push;
+    if (escritorio) push = '<p class="ajuste__ayuda">Este ordenador ya te avisa por sí mismo; los avisos push van a tus móviles vinculados.</p>';
+    else if (e.pushAqui) {
+      push = `<div class="estado-cuenta ok"><span class="punto"></span>Este ${escapar(yo?.nombre ?? 'dispositivo')} recibe los avisos</div>
+          <div class="botonera"><button type="button" class="boton" id="srv-probar">Enviar un aviso de prueba</button><button type="button" class="boton" id="srv-push-no">Desactivar aquí</button></div>`;
+    } else if (e.ios && !e.instalada) {
+      push = '<p class="ajuste__ayuda aviso-instalar">Para recibir avisos en el iPhone, instala Kitsune: en Safari, <strong>Compartir → Añadir a pantalla de inicio</strong>, y ábrelo desde ese icono.</p>';
+    } else {
+      push = `<div><button type="button" class="boton boton--primario" id="srv-push">${icono('campana', 15)} Activar avisos en este ${escapar(yo?.nombre ?? 'dispositivo')}</button></div>`;
+    }
+    return `<section class="grupo" id="seccion-avisos" aria-label="Avisos en el móvil">${cabecera}
+          <div class="estado-cuenta ${e.error || e.googleCaducado ? '' : 'ok'}"><span class="punto"></span>${
+            e.error ? escapar(e.error) : `<span>Conectado como <strong>${escapar(e.email ?? '')}</strong></span>`
+          }</div>
+          ${
+            e.googleCaducado
+              ? `<p class="ajuste__ayuda aviso-instalar">Google ha retirado el permiso del servidor: ${e.puedeVincularConGoogle ? 'vuelve a conectar.' : 'vuelve a conectar desde el móvil.'}</p>${
+                  e.puedeVincularConGoogle ? `<div><button type="button" class="boton boton--primario" id="srv-conectar">Volver a conectar</button></div>` : ''
+                }`
+              : ''
+          }
+          ${push}
+          <p class="mensaje-ajuste" id="mensaje-avisos" role="status"></p>
+          <div class="permisos">
+            <span class="permisos__grupo">Qué te aviso</span>
+            ${interruptorAviso('correo', 'Correos nuevos', a.correo, 'Las automatizaciones avisan aparte, a su manera.')}
+            ${interruptorAviso('soloPrincipal', 'Solo lo principal', a.soloPrincipal, 'Sin promociones, redes sociales ni foros.')}
+            <div class="ajuste ajuste--fila">
+              <label class="ajuste__etiqueta" for="srv-cada">Mirar el correo</label>
+              <div style="width:150px"><select class="campo" id="srv-cada">${opciones([[1, 'Cada minuto'], [2, 'Cada 2 min'], [5, 'Cada 5 min'], [15, 'Cada 15 min']], a.correoCadaMin)}</select></div>
+            </div>
+            <div class="ajuste ajuste--fila">
+              <label class="ajuste__etiqueta" for="srv-citas">Antes de cada cita</label>
+              <div style="width:150px"><select class="campo" id="srv-citas">${opciones([[0, 'No avisar'], [5, '5 min antes'], [10, '10 min antes'], [15, '15 min antes'], [30, '30 min antes'], [60, '1 hora antes']], a.citas)}</select></div>
+            </div>
+            ${interruptorAviso('silencio', 'Silencio de noche', a.silencio?.activo, 'Sin avisos de correo en esas horas; los recordatorios y las citas sí suenan.')}
+            <div class="formulario__fila" ${a.silencio?.activo ? '' : 'hidden'} id="srv-horas">
+              <select class="campo" id="srv-desde" aria-label="Desde">${opciones(horas.map((h) => [h, `Desde las ${h}`]), a.silencio?.desde)}</select>
+              <select class="campo" id="srv-hasta" aria-label="Hasta">${opciones(horas.map((h) => [h, `Hasta las ${h}`]), a.silencio?.hasta)}</select>
+            </div>
+            <span class="permisos__grupo">IA en el servidor</span>
+            ${interruptorAviso('groq', 'Usar mi clave de Groq en el servidor', e.groq, 'Para que las automatizaciones puedan crear eventos a partir de los correos. Se guarda cifrada en tu servidor.')}
+            <span class="permisos__grupo">Dispositivos</span>
+            <ul class="dispositivos">
+              ${(e.dispositivos ?? [])
+                .map(
+                  (d) => `<li><span>${escapar(d.nombre)}${d.yo ? ' <em>(este)</em>' : ''}</span><span class="dispositivos__estado">${d.push ? 'Avisos activos' : 'Sin avisos push'}</span>${
+                    d.yo ? '' : `<button type="button" class="boton-borrar" data-quitar="${escapar(d.id)}" aria-label="Quitar ${escapar(d.nombre)}">${icono('papelera', 15)}</button>`
+                  }</li>`,
+                )
+                .join('')}
+            </ul>
+            <div class="botonera"><button type="button" class="boton" id="srv-codigo">Vincular otro dispositivo</button></div>
+            <p class="codigo-vinculo" id="srv-codigo-ver" hidden></p>
+          </div>
+          ${campoUrl}
+          <div class="botonera"><button type="button" class="boton boton--peligro" id="srv-desvincular">${escritorio ? 'Desvincular este ordenador' : 'Desconectar y borrar los datos del servidor'}</button></div>
+        </section>`;
+  }
+
+  const interruptorAviso = (clave, etiqueta, valor, ayuda) => `
+    <div class="ajuste ajuste--fila">
+      <div><div class="ajuste__etiqueta" id="et-srv-${clave}">${etiqueta}</div>${ayuda ? `<p class="ajuste__ayuda">${ayuda}</p>` : ''}</div>
+      <button type="button" class="interruptor" role="switch" aria-labelledby="et-srv-${clave}" data-aviso="${clave}" aria-checked="${Boolean(valor)}"></button>
+    </div>`;
+
+  function conectarAvisos(e) {
+    const $ = (sel) => contenedor.querySelector(sel);
+    const mensaje = (texto, ok = true) => mostrarMensaje('mensaje-avisos', texto, ok);
+    const repintar = async (texto) => {
+      await pintar('avisos');
+      if (texto) mostrarMensaje('mensaje-avisos', texto, true);
+    };
+    const accion = (boton, funcion) =>
+      boton?.addEventListener('click', async () => {
+        boton.disabled = true;
+        try {
+          await funcion();
+        } catch (error) {
+          mensaje(error.message, false);
+        } finally {
+          boton.disabled = false;
+        }
+      });
+
+    $('#srv-url')?.addEventListener('change', async (ev) => {
+      const valor = ev.target.value.trim().replace(/\/+$/, '');
+      if (valor && !/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(valor)) return mensaje('La dirección debe empezar por https:// y no llevar ruta.', false);
+      if (await guardar({ servidorUrl: valor })) await repintar('Dirección guardada.');
+    });
+
+    // Sin esperas antes de abrir Google: Safari solo deja abrir la ventana dentro del toque.
+    $('#srv-conectar')?.addEventListener('click', () => {
+      const espera = api.servidor.conectar();
+      mensaje('Da permiso en la ventana de Google y vuelve aquí…');
+      espera.then(() => repintar('Conectado. Ahora activa los avisos en este dispositivo.')).catch((error) => mensaje(error.message, false));
+    });
+    $('#srv-canje')?.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        await api.servidor.canjear(ev.target.codigo.value);
+        await repintar('Vinculado.');
+      } catch (error) {
+        mensaje(error.message, false);
+      }
+    });
+    // El permiso de notificaciones se pide en el propio toque.
+    $('#srv-push')?.addEventListener('click', () => {
+      api.servidor
+        .activarPush()
+        .then(() => api.servidor.probar())
+        .then(() => repintar('Listo: te acaba de llegar un aviso de prueba.'))
+        .catch((error) => mensaje(error.message, false));
+    });
+    accion($('#srv-push-no'), async () => {
+      await api.servidor.desactivarPush();
+      await repintar('Avisos desactivados en este dispositivo.');
+    });
+    accion($('#srv-probar'), async () => {
+      await api.servidor.probar();
+      mensaje('Enviado: debería llegarte en unos segundos.');
+    });
+
+    const avisos = structuredClone(e.avisos ?? {});
+    const guardarAvisos = async () => {
+      try {
+        Object.assign(avisos, await api.servidor.avisos(avisos));
+      } catch (error) {
+        mensaje(error.message, false);
+      }
+    };
+    contenedor.querySelectorAll('[data-aviso]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const clave = b.dataset.aviso;
+        const nuevo = b.getAttribute('aria-checked') !== 'true';
+        b.disabled = true;
+        try {
+          if (clave === 'groq') await api.servidor.groq(nuevo);
+          else if (clave === 'silencio') {
+            avisos.silencio = { ...avisos.silencio, activo: nuevo };
+            $('#srv-horas').hidden = !nuevo;
+            await guardarAvisos();
+          } else {
+            avisos[clave] = nuevo;
+            await guardarAvisos();
+          }
+          b.setAttribute('aria-checked', String(nuevo));
+        } catch (error) {
+          mensaje(error.message, false);
+        } finally {
+          b.disabled = false;
+        }
+      }),
+    );
+    $('#srv-cada')?.addEventListener('change', (ev) => {
+      avisos.correoCadaMin = Number(ev.target.value);
+      guardarAvisos();
+    });
+    $('#srv-citas')?.addEventListener('change', (ev) => {
+      avisos.citas = Number(ev.target.value);
+      guardarAvisos();
+    });
+    for (const [id, campo] of [['#srv-desde', 'desde'], ['#srv-hasta', 'hasta']]) {
+      $(id)?.addEventListener('change', (ev) => {
+        avisos.silencio = { ...avisos.silencio, [campo]: ev.target.value };
+        guardarAvisos();
+      });
+    }
+
+    contenedor.querySelectorAll('[data-quitar]').forEach((b) =>
+      accion(b, async () => {
+        await api.servidor.quitarDispositivo(b.dataset.quitar);
+        await repintar('Dispositivo quitado.');
+      }),
+    );
+    accion($('#srv-codigo'), async () => {
+      const { codigo } = await api.servidor.crearCodigo();
+      const ver = $('#srv-codigo-ver');
+      ver.innerHTML = `Escribe <strong>${codigo.slice(0, 3)} ${codigo.slice(3)}</strong> en el otro dispositivo (Ajustes → Avisos en el móvil). Vale 10 minutos.`;
+      ver.hidden = false;
+    });
+    let confirmando = false;
+    accion($('#srv-desvincular'), async () => {
+      const boton = $('#srv-desvincular');
+      if (!confirmando) {
+        confirmando = true;
+        boton.dataset.texto = boton.textContent;
+        boton.textContent = '¿Seguro? Pulsa otra vez';
+        setTimeout(() => {
+          confirmando = false;
+          if (boton.isConnected) boton.textContent = boton.dataset.texto;
+        }, 4000);
+        return;
+      }
+      await api.servidor.desvincular();
+      await repintar('Desconectado.');
+    });
   }
 
   function conectar() {

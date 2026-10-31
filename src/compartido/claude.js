@@ -4,6 +4,7 @@ import { nuevoIdConversacion } from './conversaciones.js';
 import { turnoGroq, textoGroq, probarClaveGroq, buscarEnInternetGroq } from './groq.js';
 import { verTiempo } from './tiempo.js';
 import { PERMISOS, nivel, nivelHerramienta } from './permisos.js';
+import { normalizarAutomatizacion, describirCuando, describirHacer } from './automatizaciones.js';
 
 export { mensajesVisibles, recortarHistorial } from './historial.js';
 
@@ -225,6 +226,60 @@ const HERRAMIENTAS_MEMORIA = [
   },
 ];
 
+const HERRAMIENTAS_AUTOMATIZACION = [
+  {
+    name: 'crear_automatizacion',
+    description:
+      'Crea una automatización que el servidor de Kitsune ejecuta solo, aunque la app esté cerrada. Se activa al llegar ' +
+      'un correo que coincide (de quién, palabras del asunto o del texto; varias opciones separadas por comas), unos ' +
+      'minutos antes de una cita, o a una hora fija ciertos días (1 = lunes … 7 = domingo). Puede: avisar con una ' +
+      'notificación (con un texto propio si se da), crear el evento en la agenda a partir del correo, recordarlo más ' +
+      'tarde (minutos), marcarlo como leído, archivarlo o, por horario, mandar el resumen del día. Úsala cuando el ' +
+      'usuario pida que le avises o hagas algo automáticamente a partir de ahora.',
+    eager_input_streaming: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nombre: { type: 'string', description: 'Nombre corto, por ejemplo «Correos de Lucía».' },
+        cuando: {
+          type: 'object',
+          properties: {
+            tipo: { type: 'string', enum: ['correo', 'cita', 'horario'] },
+            de: { type: 'string', description: 'Remitente (nombre o dirección), para correo.' },
+            asunto: { type: 'string', description: 'Palabras del asunto, para correo.' },
+            contiene: { type: 'string', description: 'Palabras del asunto o del texto, para correo.' },
+            minutos: { type: 'integer', description: 'Minutos antes de la cita.' },
+            titulo: { type: 'string', description: 'Solo citas cuyo título contenga esto.' },
+            hora: { type: 'string', description: 'Hora local HH:MM, para horario.' },
+            dias: { type: 'array', items: { type: 'integer' }, description: 'Días de la semana, 1 = lunes … 7 = domingo.' },
+          },
+          required: ['tipo'],
+        },
+        hacer: {
+          type: 'object',
+          properties: {
+            notificar: { type: 'boolean' },
+            texto: { type: 'string', description: 'Texto propio del aviso.' },
+            recordatorio: { type: 'integer', description: 'Recordárselo pasados estos minutos (correo).' },
+            evento: { type: 'boolean', description: 'Crear el evento en la agenda a partir del correo.' },
+            leido: { type: 'boolean' },
+            archivar: { type: 'boolean' },
+            resumen: { type: 'boolean', description: 'Mandar el resumen del día (horario).' },
+          },
+        },
+      },
+      required: ['cuando', 'hacer'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'ver_automatizaciones',
+    description: 'Devuelve las automatizaciones del usuario: nombre, si está activa y qué hace.',
+    eager_input_streaming: true,
+    input_schema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+];
+
 const HERRAMIENTA_TIEMPO = {
   name: 'ver_tiempo',
   description:
@@ -411,6 +466,11 @@ function validarEntrada(nombre, entrada) {
     }
     case 'buscar_en_internet':
       return typeof entrada.consulta === 'string' && entrada.consulta.trim() ? { consulta: entrada.consulta.trim().slice(0, 400) } : null;
+    case 'crear_automatizacion':
+      // La validación de fondo (con mensajes para el modelo) la hace normalizarAutomatizacion.
+      return entrada.cuando && typeof entrada.cuando === 'object' && entrada.hacer && typeof entrada.hacer === 'object' ? entrada : null;
+    case 'ver_automatizaciones':
+      return {};
     default:
       return null;
   }
@@ -418,7 +478,13 @@ function validarEntrada(nombre, entrada) {
 
 // Lo que el usuario deja hacer a Kitsune (Ajustes → Permisos), en palabras para el modelo.
 function resumenPermisos(ajustes, servicios) {
-  const grupos = { Correo: servicios.correo, Agenda: servicios.calendario, Avisos: servicios.conRecordatorios, Memoria: servicios.memoria };
+  const grupos = {
+    Correo: servicios.correo,
+    Agenda: servicios.calendario,
+    Avisos: servicios.conRecordatorios,
+    Memoria: servicios.memoria,
+    Automatizaciones: servicios.automatizaciones,
+  };
   const por = { si: [], preguntar: [], no: [] };
   for (const p of PERMISOS) if (grupos[p.grupo]) por[nivel(ajustes, p.clave)].push(p.nombre.toLowerCase());
   return [
@@ -436,7 +502,7 @@ function resumenPermisos(ajustes, servicios) {
     .join(' ');
 }
 
-function promptSistema({ ajustes, correo, calendario, conRecordatorios, memoria, busqueda }) {
+function promptSistema({ ajustes, correo, calendario, conRecordatorios, memoria, busqueda, automatizaciones }) {
   return [
     'Eres Kitsune, el asistente personal del usuario: un zorro de nueve colas que vive en su escritorio o en su móvil ' +
       'y habla con él en un diálogo pequeño que aparece encima de ti.',
@@ -448,7 +514,12 @@ function promptSistema({ ajustes, correo, calendario, conRecordatorios, memoria,
         'en Ajustes, sección Google.',
     calendario ? 'Tienes acceso a su Google Calendar.' : '',
     conRecordatorios ? 'Puedes apuntar y consultar recordatorios. Al crear uno, confirma en una frase qué y cuándo.' : '',
-    resumenPermisos(ajustes, { correo: correo.conectado, calendario, conRecordatorios, memoria: Boolean(memoria) }),
+    automatizaciones
+      ? 'Puedes crear automatizaciones con crear_automatizacion: avisos y acciones que el servidor de Kitsune hace solo, ' +
+        'aunque la app esté cerrada (al llegar ciertos correos, antes de las citas o a una hora). Para algo puntual usa un ' +
+        'recordatorio; para «cada vez que…» o «a partir de ahora…», una automatización.'
+      : '',
+    resumenPermisos(ajustes, { correo: correo.conectado, calendario, conRecordatorios, memoria: Boolean(memoria), automatizaciones }),
     'Para el tiempo de un lugar usa ver_tiempo. Si no sabes de qué lugar se trata, mira tu memoria o pregúntaselo.',
     busqueda
       ? 'Puedes buscar en internet cuando haga falta información actual o que no sepas (noticias, precios, horarios, ' +
@@ -519,6 +590,7 @@ export class ConversacionClaude {
     calendario = null,
     recordatorios = null,
     memoria = null,
+    automatizaciones = null,
     emitir,
     alCambiarHistorial = () => {},
     opcionesCliente = {},
@@ -529,6 +601,7 @@ export class ConversacionClaude {
     this.calendario = calendario;
     this.recordatorios = recordatorios;
     this.memoria = memoria;
+    this.automatizaciones = automatizaciones;
     this.emitir = emitir;
     this.alCambiarHistorial = alCambiarHistorial;
     this.opcionesCliente = opcionesCliente;
@@ -579,10 +652,11 @@ export class ConversacionClaude {
   // caché del prefijo (herramientas y sistema) se reutilice entre turnos.
   async #preparar(proveedor) {
     const ajustes = this.obtenerAjustes();
-    const [correo, calendario, memoria] = await Promise.all([
+    const [correo, calendario, memoria, automatizaciones] = await Promise.all([
       this.gmail.estado(),
       this.calendario ? this.calendario.estado().catch(() => ({ conectado: false })) : { conectado: false },
       this.memoria && ajustes.usarMemoria ? this.memoria.listar() : null,
+      this.automatizaciones ? this.automatizaciones.disponible().catch(() => false) : false,
     ]);
     const conCalendario = Boolean(calendario.conectado);
     const conRecordatorios = Boolean(this.recordatorios);
@@ -592,11 +666,12 @@ export class ConversacionClaude {
       ...(conCalendario ? HERRAMIENTAS_CALENDARIO : []),
       ...(conRecordatorios ? HERRAMIENTAS_RECORDATORIOS : []),
       ...(memoria ? HERRAMIENTAS_MEMORIA : []),
+      ...(automatizaciones ? HERRAMIENTAS_AUTOMATIZACION : []),
       HERRAMIENTA_TIEMPO,
       ...(busqueda ? [proveedor === 'groq' ? HERRAMIENTA_BUSQUEDA_GROQ : herramientaBusqueda(ajustes.modelo)] : []),
       // Lo que el usuario no permite ni se ofrece.
     ].filter((h) => nivelHerramienta(ajustes, h.name) !== 'no');
-    const sistema = promptSistema({ ajustes, correo, calendario: conCalendario, conRecordatorios, memoria, busqueda });
+    const sistema = promptSistema({ ajustes, correo, calendario: conCalendario, conRecordatorios, memoria, busqueda, automatizaciones });
     return { sistema, herramientas };
   }
 
@@ -858,6 +933,13 @@ export class ConversacionClaude {
       }
       case 'recordar':
         return { tipo: 'memoria', icono: 'memoria', pregunta: '¿Lo apunto en mi memoria?', titulo: e.dato, boton: 'Apuntar', hecho: 'Lo recordaré' };
+      case 'crear_automatizacion': {
+        const a = normalizarAutomatizacion(e);
+        return {
+          tipo: 'automatizacion', icono: 'chispa', pregunta: '¿Creo esta automatización?', titulo: a.nombre,
+          detalle: `${describirCuando(a.cuando)}: ${describirHacer(a.hacer, a.cuando.tipo)}`, boton: 'Crear', hecho: 'Automatización creada',
+        };
+      }
       case 'olvidar': {
         const dato = (await this.memoria.listar()).find((x) => x.id === e.id);
         return {
@@ -945,6 +1027,18 @@ export class ConversacionClaude {
       }
       case 'olvidar':
         return this.memoria.olvidar(entrada.id);
+      case 'crear_automatizacion': {
+        const creada = await this.automatizaciones.crear(normalizarAutomatizacion(entrada));
+        this.emitir({ tipo: 'automatizacion', automatizacion: creada });
+        return { creada: true, id: creada.id, nombre: creada.nombre, que: `${describirCuando(creada.cuando)}: ${describirHacer(creada.hacer, creada.cuando.tipo)}` };
+      }
+      case 'ver_automatizaciones':
+        return (await this.automatizaciones.listar()).map((a) => ({
+          id: a.id,
+          nombre: a.nombre,
+          activa: a.activa,
+          que: `${describirCuando(a.cuando)}: ${describirHacer(a.hacer, a.cuando.tipo)}`,
+        }));
       case 'ver_tiempo':
         return verTiempo(entrada, this.opcionesCliente.fetch ?? fetch);
       case 'buscar_en_internet': {

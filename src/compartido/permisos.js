@@ -19,6 +19,7 @@ export const PERMISOS = [
   { clave: 'permisoRecordatorioCrear', grupo: 'Avisos', nombre: 'Crear recordatorios', defecto: 'si', herramientas: ['crear_recordatorio'] },
   { clave: 'permisoRecordatorioBorrar', grupo: 'Avisos', nombre: 'Borrar recordatorios', defecto: 'si', herramientas: ['borrar_recordatorio'] },
   { clave: 'permisoMemoria', grupo: 'Memoria', nombre: 'Apuntar y olvidar cosas sobre ti', defecto: 'si', herramientas: ['recordar', 'olvidar'] },
+  { clave: 'permisoAutomatizacion', grupo: 'Automatizaciones', nombre: 'Crear automatizaciones', defecto: 'preguntar', herramientas: ['crear_automatizacion'] },
 ];
 
 export const NOMBRES_NIVEL = { si: 'Sí', preguntar: 'Preguntar', no: 'No' };

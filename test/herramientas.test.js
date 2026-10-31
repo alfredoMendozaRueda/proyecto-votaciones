@@ -281,3 +281,32 @@ test('calendario: modificar conserva la duración y cambia entre hora y todo el 
   assert.deepEqual(llamadas.at(-1).cuerpo.start, { date: '2026-11-05', dateTime: null });
   assert.deepEqual(llamadas.at(-1).cuerpo.end, { date: '2026-11-06', dateTime: null });
 });
+
+test('automatizaciones desde el chat: solo con el servidor vinculado y con la tarjeta de confirmación', async () => {
+  const creadas = [];
+  const servicio = (disponible) => ({
+    disponible: async () => disponible,
+    listar: async () => creadas,
+    crear: async (a) => (creadas.push(a), a),
+  });
+  const sinServidor = apiSimulada([[inicio('m0'), ...texto(0, 'Hola.'), ...fin('end_turn')]]);
+  await conPermisos(sinServidor.fetch, {}, { automatizaciones: servicio(false) }).c.enviar('Hola');
+  assert.ok(!sinServidor.peticiones[0].tools.some((t) => t.name === 'crear_automatizacion'));
+
+  const { fetch, peticiones } = apiSimulada([
+    [inicio('m1'), ...herramienta(0, 'tu1', 'crear_automatizacion', { nombre: 'Correos de Lucía', cuando: { tipo: 'correo', de: 'lucia' }, hacer: { notificar: true, texto: 'Te ha escrito Lucía' } }), ...fin('tool_use')],
+    [inicio('m2'), ...texto(0, 'Hecho.'), ...fin('end_turn')],
+  ]);
+  const { c, eventos } = conPermisos(fetch, {}, { automatizaciones: servicio(true) });
+  const turno = c.enviar('Avísame cada vez que me escriba Lucía');
+  while (!eventos.some((e) => e.tipo === 'confirmar')) await new Promise((r) => setTimeout(r, 5));
+  const pregunta = eventos.find((e) => e.tipo === 'confirmar');
+  assert.equal(pregunta.accion.titulo, 'Correos de Lucía');
+  assert.match(pregunta.accion.detalle, /Correo de «lucia»: avisarte: «Te ha escrito Lucía»/);
+  assert.match(peticiones[0].system, /crear_automatizacion/);
+  c.responderConfirmacion(pregunta.id, true);
+  await turno;
+  assert.equal(creadas.length, 1);
+  assert.equal(creadas[0].cuando.de, 'lucia');
+  assert.ok(eventos.some((e) => e.tipo === 'automatizacion'));
+});

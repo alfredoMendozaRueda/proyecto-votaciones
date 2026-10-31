@@ -30,6 +30,8 @@ export const AJUSTES_POR_DEFECTO = {
   correoCadaMin: 5,
   avisarCorreo: true,
   googleClientId: '',
+  // Servidor de avisos propio, si no se usa el que trae la app (ver servidor/).
+  servidorUrl: '',
   // Qué puede hacer Kitsune por su cuenta (ver permisos.js).
   ...permisosPorDefecto(),
   // Sube cuando un cambio de la app tiene que corregir ajustes guardados antes.
@@ -48,7 +50,7 @@ const OPCIONES = {
   ...opcionesPermisos(),
 };
 const RANGOS = { dormirTrasMin: [0, 120], correoCadaMin: [1, 120] };
-const LARGOS = { atajo: 60, personalidad: 2000, googleClientId: 200 };
+const LARGOS = { atajo: 60, personalidad: 2000, googleClientId: 200, servidorUrl: 200 };
 
 export function valorValido(clave, valor) {
   const defecto = AJUSTES_POR_DEFECTO[clave];

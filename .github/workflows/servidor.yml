@@ -1,0 +1,122 @@
+# Despliega el servidor de avisos de Kitsune (servidor/) en Cloudflare Workers:
+# crea la base de datos D1 si no existe, aplica el esquema, sube el Worker,
+# pone sus secretos y guarda su dirección para que la app la use.
+# Necesita los secretos CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID y
+# GOOGLE_WEB_CLIENT_SECRET (ver servidor/LEEME.md). Sin ellos no hace nada.
+name: Kitsune servidor
+
+on:
+  push:
+    branches: [kitsune-asistente]
+    paths: ['servidor/**', 'src/compartido/**', '.github/workflows/servidor.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: kitsune-servidor
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER: npx --yes wrangler@4
+    defaults:
+      run:
+        working-directory: servidor
+    steps:
+      - uses: actions/checkout@v5
+      - name: ¿Está Cloudflare configurado?
+        id: listo
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "### Servidor de avisos sin desplegar" >> "$GITHUB_STEP_SUMMARY"
+            echo "Faltan los secretos CLOUDFLARE_API_TOKEN y CLOUDFLARE_ACCOUNT_ID. Sigue servidor/LEEME.md." >> "$GITHUB_STEP_SUMMARY"
+            echo "si=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "si=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v5
+        if: steps.listo.outputs.si == 'true'
+        with:
+          node-version: 22
+      - name: Base de datos D1
+        if: steps.listo.outputs.si == 'true'
+        run: |
+          buscar() { $WRANGLER d1 list --json | node -e "const l=JSON.parse(require('fs').readFileSync(0,'utf8'));const d=l.find(x=>x.name==='kitsune');process.stdout.write(d?(d.uuid||d.id):'')"; }
+          ID=$(buscar)
+          if [ -z "$ID" ]; then
+            $WRANGLER d1 create kitsune
+            ID=$(buscar)
+          fi
+          test -n "$ID"
+          sed -i "s/00000000-0000-0000-0000-000000000000/$ID/" wrangler.toml
+          $WRANGLER d1 execute kitsune --remote --file esquema.sql
+      - name: Cliente de Google
+        if: steps.listo.outputs.si == 'true'
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
+        run: |
+          if echo "$GOOGLE_WEB_CLIENT_ID" | grep -Eq '^[0-9]+-[0-9a-z]+\.apps\.googleusercontent\.com$'; then
+            sed -i "s/^GOOGLE_CLIENT_ID = \"\"/GOOGLE_CLIENT_ID = \"$GOOGLE_WEB_CLIENT_ID\"/" wrangler.toml
+          else
+            echo "Falta la variable GOOGLE_WEB_CLIENT_ID." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Desplegar el Worker
+        if: steps.listo.outputs.si == 'true'
+        id: despliegue
+        run: |
+          $WRANGLER deploy 2>&1 | tee despliegue.txt
+          URL=$(grep -Eo 'https://[a-zA-Z0-9.-]+\.workers\.dev' despliegue.txt | head -1)
+          if [ -z "$URL" ]; then
+            echo "No se ha podido leer la dirección del Worker. ¿Has abierto «Workers y Pages» en Cloudflare para crear tu subdominio workers.dev?" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+      - name: Secretos del Worker
+        if: steps.listo.outputs.si == 'true'
+        env:
+          GOOGLE_WEB_CLIENT_SECRET: ${{ secrets.GOOGLE_WEB_CLIENT_SECRET }}
+          DUENO_EMAIL: ${{ vars.KITSUNE_DUENO_EMAIL }}
+        run: |
+          EXISTENTES=$($WRANGLER secret list --format json || echo '[]')
+          # La clave de cifrado se crea una sola vez: cambiarla haría ilegible lo guardado.
+          if ! echo "$EXISTENTES" | grep -q '"CLAVE_CIFRADO"'; then
+            node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64url'))" | $WRANGLER secret put CLAVE_CIFRADO
+          fi
+          if [ -n "$GOOGLE_WEB_CLIENT_SECRET" ]; then
+            printf '%s' "$GOOGLE_WEB_CLIENT_SECRET" | $WRANGLER secret put GOOGLE_CLIENT_SECRET
+          else
+            echo "Falta el secreto GOOGLE_WEB_CLIENT_SECRET: sin él no se puede conectar Google." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -n "$DUENO_EMAIL" ]; then printf '%s' "$DUENO_EMAIL" | $WRANGLER secret put DUENO_EMAIL; fi
+      - name: Guardar la dirección para la app
+        if: steps.listo.outputs.si == 'true'
+        env:
+          URL: ${{ steps.despliegue.outputs.url }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "### Servidor de avisos desplegado"
+            echo "Dirección: $URL"
+            echo ""
+            echo "En Google Cloud, añade esta URI de redireccionamiento autorizada al cliente OAuth web de Kitsune:"
+            echo ""
+            echo "    $URL/google/vuelta"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$(cat url.txt 2>/dev/null)" != "$URL" ]; then
+            echo "$URL" > url.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add url.txt
+            git commit -m "Servidor de avisos: dirección $URL"
+            git push
+            # Los commits del propio Actions no lanzan otros flujos: se piden a mano.
+            gh workflow run web.yml --ref "$GITHUB_REF_NAME"
+            gh workflow run windows.yml --ref "$GITHUB_REF_NAME"
+          fi

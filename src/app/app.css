@@ -4025,3 +4025,270 @@ html {
 .permisos .ajuste--fila {
   padding-top: 6px;
 }
+
+/* ---------- Avisos: pestañas, automatizaciones y actividad ---------- */
+
+.pestanas-avisos {
+  margin-bottom: 14px;
+}
+
+.apartado__cabecera--sub h3 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--texto);
+}
+
+/* Plantillas: tarjetas que se deslizan en horizontal. */
+.plantillas {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding-bottom: 4px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.plantillas::-webkit-scrollbar {
+  display: none;
+}
+
+.plantilla {
+  flex: 0 0 min(220px, 72%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 11px 13px;
+  border: 1px solid var(--linea-suave);
+  border-radius: var(--radio-sm);
+  background:
+    radial-gradient(120% 140% at 0% 0%, var(--kin-velo), transparent 60%),
+    var(--carbon-2);
+  color: var(--texto-2);
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: left;
+  scroll-snap-align: start;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.plantilla strong {
+  color: var(--texto);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.plantilla:hover {
+  border-color: var(--kin-hondo);
+}
+
+.plantilla:active {
+  transform: scale(0.98);
+}
+
+.editor-auto {
+  margin-bottom: 14px;
+}
+
+.editor-auto__titulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.editor-auto__etiqueta {
+  margin-top: 4px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--kin);
+}
+
+.editor-auto__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editor-auto__grupo[hidden] {
+  display: none;
+}
+
+.editor-auto__nota {
+  margin: -4px 0 0 26px;
+}
+
+.casilla {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  font-size: 13.5px;
+  color: var(--texto);
+}
+
+.casilla input[type='checkbox'] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--acento);
+}
+
+.casilla--select {
+  display: flex;
+  justify-content: space-between;
+}
+
+.casilla--select .campo {
+  width: auto;
+  min-width: 130px;
+}
+
+.dias {
+  display: flex;
+  gap: 6px;
+}
+
+.dia {
+  flex: 1;
+  height: 34px;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  background: var(--negro);
+  color: var(--texto-2);
+  font-weight: 600;
+}
+
+.dia[aria-pressed='true'] {
+  border-color: var(--acento);
+  background: var(--acento-velo);
+  color: var(--texto);
+}
+
+.fila__boton {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.fila--auto .fila__detalle {
+  white-space: normal;
+}
+
+.fila--apagada .fila__titulo,
+.fila--apagada .fila__detalle {
+  opacity: 0.5;
+}
+
+.interruptor--pequeno {
+  transform: scale(0.88);
+}
+
+.fila--actividad .fila__titulo {
+  white-space: normal;
+  font-weight: 400;
+  font-size: 13px;
+}
+
+.fila--error .fila__icono {
+  color: var(--acento-vivo);
+}
+
+.tarjeta-aviso {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--linea);
+  border-radius: var(--radio-sm);
+  background:
+    radial-gradient(140% 120% at 0% 0%, var(--kin-velo), transparent 60%),
+    var(--carbon-2);
+}
+
+.tarjeta-aviso__icono {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: var(--acento-velo);
+  color: var(--acento-vivo);
+}
+
+.tarjeta-aviso strong {
+  font-size: 15px;
+  color: var(--texto);
+}
+
+.tarjeta-aviso p {
+  margin: 6px 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--texto-2);
+}
+
+/* ---------- Ajustes: avisos en el móvil ---------- */
+
+.botonera {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aviso-instalar {
+  padding: 10px 12px;
+  border-radius: var(--radio-sm);
+  border: 1px solid var(--kin-hondo);
+  background: var(--kin-velo);
+  color: var(--texto);
+}
+
+.dispositivos {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0;
+}
+
+.dispositivos li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--linea-suave);
+  font-size: 13.5px;
+}
+
+.dispositivos li > span:first-child {
+  flex: 1;
+}
+
+.dispositivos em {
+  color: var(--texto-3);
+  font-style: normal;
+}
+
+.dispositivos__estado {
+  font-size: 12px;
+  color: var(--texto-3);
+}
+
+.codigo-vinculo {
+  margin: 8px 0 0;
+  padding: 12px;
+  border-radius: var(--radio-sm);
+  background: var(--papel);
+  color: var(--papel-tinta);
+  font-size: 13.5px;
+}
+
+.codigo-vinculo strong {
+  font-family: var(--mono);
+  font-size: 20px;
+  letter-spacing: 0.12em;
+}

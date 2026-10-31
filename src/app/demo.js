@@ -1,5 +1,6 @@
 // Modo de ejemplo: misma interfaz que window.asistente (el puente de Electron),
 // con correos y respuestas inventados. Se usa al abrir la app en un navegador.
+import { PLANTILLAS, normalizarAutomatizacion } from '../compartido/automatizaciones.js';
 
 const MINUTO = 60 * 1000;
 const HORA = 60 * MINUTO;
@@ -531,6 +532,75 @@ export function crearDemo() {
       },
       alAviso: (f) => escuchar('aviso', f),
     },
+    // Servidor de avisos simulado: vinculado, con push y dos automatizaciones.
+    servidor: (() => {
+      let autos = PLANTILLAS.slice(0, 2).map((p, i) => normalizarAutomatizacion(p.automatizacion, `ademo${i}`));
+      let avisos = { correo: true, soloPrincipal: true, correoCadaMin: 2, citas: 15, silencio: { activo: true, desde: '23:00', hasta: '08:00' } };
+      let pushAqui = false;
+      const registro = [
+        { cuando: Date.now() - 40 * MINUTO, tipo: 'automatizacion', texto: 'Reservas a la agenda · «Confirmación de tu billete»: añadido «Tren Madrid → Valencia» a la agenda, aviso enviado.' },
+        { cuando: Date.now() - 3 * HORA, tipo: 'aviso', texto: 'Kitsune te recordó: Llamar a Lucía.' },
+      ];
+      const estado = async () => ({
+        configurado: true,
+        integrado: true,
+        vinculado: true,
+        soportaPush: true,
+        instalada: true,
+        ios: false,
+        puedeVincularConGoogle: true,
+        email: 'tu.cuenta@gmail.com',
+        google: true,
+        groq: true,
+        avisos,
+        pushAqui,
+        dispositivos: [
+          { id: 'd1', nombre: 'iPhone', push: pushAqui, yo: true },
+          { id: 'd2', nombre: 'Windows (CASA)', push: false, yo: false },
+        ],
+      });
+      return {
+        estado,
+        conectar: estado,
+        canjear: estado,
+        async activarPush() {
+          pushAqui = true;
+          return estado();
+        },
+        async desactivarPush() {
+          pushAqui = false;
+          return estado();
+        },
+        probar: async () => ({ ok: true }),
+        resumen: async () => ({ titulo: 'Buenos días: tu día', cuerpo: '1 cita: 10:00 Dentista · 3 correos sin leer' }),
+        crearCodigo: async () => ({ codigo: '482913', caduca: Date.now() + 10 * MINUTO }),
+        async avisos(nuevos) {
+          avisos = { ...avisos, ...nuevos };
+          return avisos;
+        },
+        groq: async () => ({ ok: true }),
+        automatizaciones: {
+          listar: async () => autos,
+          async crear(datos) {
+            const a = normalizarAutomatizacion(datos);
+            autos.push(a);
+            return a;
+          },
+          async actualizar(id, datos) {
+            const a = normalizarAutomatizacion(datos, id);
+            autos = autos.map((x) => (x.id === id ? a : x));
+            return a;
+          },
+          async borrar(id) {
+            autos = autos.filter((x) => x.id !== id);
+            return { ok: true };
+          },
+        },
+        registro: async () => registro,
+        quitarDispositivo: async () => ({ ok: true }),
+        desvincular: estado,
+      };
+    })(),
     ventana: {
       alAlternar: (f) => escuchar('alternar', f),
       alAbrirAjustes: (f) => escuchar('ajustes', f),

@@ -30,6 +30,10 @@ jobs:
         env:
           GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.GOOGLE_DESKTOP_CLIENT_ID }}
           GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
+      # Dirección del servidor de avisos (la guarda el flujo «Kitsune servidor»).
+      - run: node scripts/nube.mjs
+        env:
+          KITSUNE_SERVIDOR: ${{ vars.KITSUNE_SERVIDOR }}
       - run: npm run dist -- --publish never
         env:
           # Sin certificado de firma: el instalador se genera sin firmar.

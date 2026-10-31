@@ -6,6 +6,7 @@ import { ClienteCalendario, PERMISO_CALENDARIO } from '../../compartido/calendar
 import { Conversaciones, nuevoIdConversacion } from '../../compartido/conversaciones.js';
 import { GOOGLE } from '../../compartido/google.js';
 import { leerSecreto, guardarSecreto, borrarSecreto } from './secretos.js';
+import { crearAvisos } from './avisos.js';
 
 // Versión web (PWA): el mismo contrato que window.asistente en Electron,
 // pero todo ocurre en el navegador. Claude se llama directamente desde aquí
@@ -65,6 +66,14 @@ export function crearBackendWeb() {
   // El cliente propio (Ajustes) manda; si no hay, el que trae la app.
   const idCliente = () => ajustes.googleClientId || GOOGLE.web;
   const emitir = (lista, dato) => oyentes[lista].forEach((f) => f(dato));
+  // Avisos con la app cerrada: servidor propio, push y automatizaciones.
+  const avisos = crearAvisos({
+    leerSecreto,
+    guardarSecreto,
+    borrarSecreto,
+    obtenerAjustes: () => ajustes,
+    leerRecordatorios: () => leerLocal(CLAVE_RECORDATORIOS) ?? [],
+  });
   const escuchar = (lista, f) => {
     oyentes[lista].push(f);
     return () => (oyentes[lista] = oyentes[lista].filter((x) => x !== f));
@@ -206,7 +215,7 @@ export function crearBackendWeb() {
       const nuevos = await gmail.nuevos();
       if (!nuevos.length) return;
       emitir('nuevo', { cantidad: nuevos.length, ultimo: nuevos[0] });
-      if (ajustes.avisarCorreo && document.visibilityState !== 'visible' && 'Notification' in window && Notification.permission === 'granted') {
+      if (ajustes.avisarCorreo && !avisos.pushActivo() && document.visibilityState !== 'visible' && 'Notification' in window && Notification.permission === 'granted') {
         const registro = await navigator.serviceWorker?.getRegistration();
         const [primero] = nuevos;
         const titulo = nuevos.length === 1 ? `Correo de ${primero.de.nombre}` : `${nuevos.length} correos nuevos`;
@@ -256,7 +265,8 @@ export function crearBackendWeb() {
   // ---------- Recordatorios ----------
 
   async function notificar(titulo, cuerpo, etiqueta) {
-    if (document.visibilityState === 'visible' || !('Notification' in window) || Notification.permission !== 'granted') return;
+    // Con el push activo el aviso ya lo manda el servidor: no se repite.
+    if (avisos.pushActivo() || document.visibilityState === 'visible' || !('Notification' in window) || Notification.permission !== 'granted') return;
     const registro = await navigator.serviceWorker?.getRegistration();
     registro?.showNotification(titulo, { body: cuerpo, icon: 'iconos/icono-192.png', tag: etiqueta });
   }
@@ -265,7 +275,10 @@ export function crearBackendWeb() {
   // reciente); los vencidos con la app cerrada se avisan al abrirla.
   const recordatorios = new Recordatorios({
     leer: () => leerLocal(CLAVE_RECORDATORIOS) ?? [],
-    guardar: (lista) => guardarLocal(CLAVE_RECORDATORIOS, lista),
+    guardar: (lista) => {
+      guardarLocal(CLAVE_RECORDATORIOS, lista);
+      avisos.sincronizar();
+    },
     avisar: (r) => {
       emitir('recordatorio', r);
       notificar('Kitsune te recuerda', r.texto, `kitsune-${r.id}`);
@@ -351,6 +364,7 @@ export function crearBackendWeb() {
           modificar: (id, cambios) => gmail.modificar(id, cambios),
           enviar: (datos) => gmail.enviar(datos),
         },
+        automatizaciones: avisos.automatizaciones,
         emitir: (evento) => emitir('claude', evento),
         opcionesCliente: OPCIONES_CLAUDE,
       });
@@ -466,6 +480,7 @@ export function crearBackendWeb() {
       borrar: (id) => recordatorios.borrar(id),
       alAviso: (f) => escuchar('recordatorio', f),
     },
+    servidor: avisos.servidor,
     ventana: {
       alAlternar: () => () => {},
       alAbrirAjustes: () => () => {},

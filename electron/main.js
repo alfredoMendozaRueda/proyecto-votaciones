@@ -18,6 +18,7 @@ import { ConversacionClaude, mensajeDeError } from '../src/compartido/claude.js'
 import { Recordatorios } from '../src/compartido/recordatorios.js';
 import { Memoria } from '../src/compartido/memoria.js';
 import { Conversaciones, ID_CONVERSACION } from '../src/compartido/conversaciones.js';
+import { servidor, sincronizarRecordatorios, automatizacionesChat } from './avisos.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const URL_DESARROLLO = process.env.KITSUNE_DEV_URL;
@@ -37,7 +38,10 @@ let textoOfrecido = '';
 const gmail = new Gmail(obtenerAjustes);
 const recordatorios = new Recordatorios({
   leer: () => leerDatos('recordatorios'),
-  guardar: (lista) => guardarDatos('recordatorios', lista),
+  guardar: (lista) => {
+    guardarDatos('recordatorios', lista);
+    sincronizarRecordatorios();
+  },
   avisar: avisarRecordatorio,
 });
 // Lo que el usuario pide recordar es personal: va cifrado, como las claves.
@@ -84,6 +88,7 @@ const claude = new ConversacionClaude({
   },
   recordatorios,
   memoria,
+  automatizaciones: automatizacionesChat,
   emitir: (evento) => ventana?.webContents.send('claude:evento', evento),
   alCambiarHistorial: (historial, id) => conversaciones.guardar(id, historial).catch(() => {}),
 });
@@ -391,6 +396,21 @@ function registrarCanales() {
   manejar('recordatorios:listar', () => recordatorios.listar());
   manejar('recordatorios:crear', (datos) => recordatorios.crear({ texto: String(datos?.texto ?? ''), cuando: Number(datos?.cuando) }));
   manejar('recordatorios:borrar', (id) => recordatorios.borrar(String(id ?? '')));
+
+  manejar('servidor:estado', () => servidor.estado());
+  manejar('servidor:canjear', (codigo) => servidor.canjear(String(codigo ?? '')));
+  manejar('servidor:probar', () => servidor.probar());
+  manejar('servidor:resumen', () => servidor.resumen());
+  manejar('servidor:codigo', () => servidor.crearCodigo());
+  manejar('servidor:avisos', (avisos) => servidor.avisos(avisos));
+  manejar('servidor:groq', (activar) => servidor.groq(activar === true));
+  manejar('servidor:automatizaciones', () => servidor.automatizaciones.listar());
+  manejar('servidor:crearAutomatizacion', (datos) => servidor.automatizaciones.crear(datos));
+  manejar('servidor:actualizarAutomatizacion', (id, datos) => servidor.automatizaciones.actualizar(String(id), datos));
+  manejar('servidor:borrarAutomatizacion', (id) => servidor.automatizaciones.borrar(String(id)));
+  manejar('servidor:registro', () => servidor.registro());
+  manejar('servidor:quitarDispositivo', (id) => servidor.quitarDispositivo(id));
+  manejar('servidor:desvincular', () => servidor.desvincular());
 
   manejar('enlace:abrir', (url) => abrirEnlaceSeguro(url));
 

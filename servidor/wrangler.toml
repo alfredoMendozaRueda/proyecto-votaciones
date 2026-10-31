@@ -1,0 +1,18 @@
+# Servidor de avisos de Kitsune. Lo despliega .github/workflows/servidor.yml,
+# que crea la base de datos D1 y rellena su id y los secretos.
+name = "kitsune"
+main = "src/indice.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+# La revisión de recordatorios, correo, citas y automatizaciones: cada minuto.
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "kitsune"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[vars]
+GOOGLE_CLIENT_ID = ""

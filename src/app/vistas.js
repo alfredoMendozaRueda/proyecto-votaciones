@@ -1,6 +1,7 @@
 import { icono } from './iconos.js';
 import { retirar } from './animaciones.js';
 import { cuandoLegible, haceCuanto } from './fechas.js';
+import { crearPanelAutomatizaciones, mostrarActividad, sinServidor } from './automatizaciones.js';
 
 // Apartados de Agenda, Recordatorios, Memoria e Historial. Cada uno pinta su
 // lista al mostrarse (mostrar) y permite añadir y borrar a mano lo mismo que
@@ -22,10 +23,10 @@ const inicioDelDia = (ms) => {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 };
 
-const cargando = '<p class="apartado__cargando"><span class="puntos" aria-hidden="true"><i></i><i></i><i></i></span>Cargando…</p>';
+export const cargando = '<p class="apartado__cargando"><span class="puntos" aria-hidden="true"><i></i><i></i><i></i></span>Cargando…</p>';
 
 // Borrar pide un segundo toque: el primero convierte el icono en "¿Borrar?".
-function botonBorrar(etiqueta, accion) {
+export function botonBorrar(etiqueta, accion) {
   const boton = document.createElement('button');
   boton.type = 'button';
   boton.className = 'boton-borrar';
@@ -368,10 +369,16 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
 
 // ---------- Recordatorios ----------
 
-export function crearRecordatorios({ contenedor, api, web, alCambiar }) {
+export function crearRecordatorios({ contenedor, api, web, alCambiar, alConfigurarAvisos }) {
+  // Pestañas del apartado: recordatorios, automatizaciones y lo que ha hecho el servidor.
+  let pestana = 'recordatorios';
+  let panel = null;
+
   async function mostrar() {
+    if (pestana !== 'recordatorios') return mostrarPestana(pestana);
     contenedor.innerHTML = `
       <div class="apartado desplazable">
+        ${barraPestanas()}
         <div class="apartado__cabecera">
           <h2>Recordatorios</h2>
           <button type="button" class="boton boton--primario" id="rec-nuevo">${icono('nueva', 15)} Nuevo</button>
@@ -395,9 +402,10 @@ export function crearRecordatorios({ contenedor, api, web, alCambiar }) {
         </form>
         <ul class="filas" id="rec-lista">${cargando}</ul>
         <p class="ajuste__ayuda apartado__nota">También puedes pedírselos a Kitsune en el chat: «recuérdame llamar a Lucía mañana a las 10».${
-          web ? ' En el móvil suenan con la app abierta o en segundo plano; si estaba cerrada, te avisa al abrirla.' : ''
+          web ? ' Con los avisos en el móvil activados suenan aunque la app esté cerrada.' : ''
         }</p>
       </div>`;
+    conectarPestanas();
     const formulario = contenedor.querySelector('#rec-formulario');
     const poner = (d) => {
       formulario.fecha.value = fechaCampo(d);
@@ -440,6 +448,36 @@ export function crearRecordatorios({ contenedor, api, web, alCambiar }) {
     await pintarLista();
   }
 
+  function barraPestanas() {
+    if (!api.servidor) return '';
+    return `<div class="segmentado pestanas-avisos" role="tablist" aria-label="Avisos">
+      ${[['recordatorios', 'Recordatorios'], ['automatizaciones', 'Automatizaciones'], ['actividad', 'Actividad']]
+        .map(([v, n]) => `<button type="button" role="tab" data-pestana="${v}" aria-selected="${pestana === v}" aria-pressed="${pestana === v}">${n}</button>`)
+        .join('')}
+    </div>`;
+  }
+
+  function conectarPestanas() {
+    contenedor.querySelectorAll('[data-pestana]').forEach((b) =>
+      b.addEventListener('click', () => {
+        if (b.dataset.pestana === pestana) return;
+        pestana = b.dataset.pestana;
+        mostrar();
+      }),
+    );
+  }
+
+  async function mostrarPestana(nombre) {
+    contenedor.innerHTML = `<div class="apartado desplazable">${barraPestanas()}<div id="avisos-panel">${cargando}</div></div>`;
+    conectarPestanas();
+    const destino = contenedor.querySelector('#avisos-panel');
+    const estado = await api.servidor.estado().catch(() => null);
+    if (!estado?.vinculado) return sinServidor(destino, estado, alConfigurarAvisos);
+    if (nombre === 'actividad') return mostrarActividad(destino, api);
+    panel = crearPanelAutomatizaciones({ contenedor: destino, api });
+    return panel.mostrar(estado);
+  }
+
   async function pintarLista() {
     const lista = contenedor.querySelector('#rec-lista');
     if (!lista) return;
@@ -465,7 +503,15 @@ export function crearRecordatorios({ contenedor, api, web, alCambiar }) {
     }
   }
 
-  return { mostrar };
+  return {
+    mostrar,
+    // Desde el chat o una notificación: abrir directamente una pestaña.
+    abrirPestana(nombre) {
+      pestana = nombre;
+      return mostrar();
+    },
+    recargarAutomatizaciones: () => pestana === 'automatizaciones' && panel?.recargar(),
+  };
 }
 
 // ---------- Memoria ----------

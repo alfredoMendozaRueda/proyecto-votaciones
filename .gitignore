@@ -3,3 +3,7 @@ dist/
 out/
 *.log
 .DS_Store
+
+# Servidor de avisos: secretos y datos locales de wrangler
+servidor/.dev.vars
+servidor/.wrangler/

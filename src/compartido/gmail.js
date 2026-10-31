@@ -55,6 +55,7 @@ export class ClienteGmail {
       extracto: decodificarEntidades(mensaje.snippet ?? ''),
       noLeido: etiquetas.includes('UNREAD'),
       destacado: etiquetas.includes('STARRED'),
+      etiquetas,
     };
   }
 

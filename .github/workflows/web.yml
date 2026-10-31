@@ -34,6 +34,10 @@ jobs:
       - run: node scripts/google.mjs
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
+      # Dirección del servidor de avisos (la guarda el flujo «Kitsune servidor»).
+      - run: node scripts/nube.mjs
+        env:
+          KITSUNE_SERVIDOR: ${{ vars.KITSUNE_SERVIDOR }}
       - run: npm run build
       - uses: actions/upload-pages-artifact@v4
         with:
