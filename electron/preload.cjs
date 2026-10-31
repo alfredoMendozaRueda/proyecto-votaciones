@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('asistente', {
   },
   ia: {
     tarea: (peticion) => invocar('ia:tarea', peticion),
+    transcribir: (audio, tipo) => invocar('ia:transcribir', audio, tipo),
   },
   empleo: {
     leer: () => invocar('empleo:leer'),

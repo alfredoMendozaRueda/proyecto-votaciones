@@ -553,6 +553,10 @@ export function crearDemo() {
     // Servidor de avisos simulado: vinculado, con push y dos automatizaciones.
     // IA simulada para Empleo: respuestas fijas según la tarea.
     ia: {
+      async transcribir(audio) {
+        await new Promise((r) => setTimeout(r, 500));
+        return audio?.byteLength ? 'Recuérdame mañana a las nueve llamar a Lucía' : '';
+      },
       async tarea({ sistema, usuario }) {
         await new Promise((r) => setTimeout(r, 700));
         const r = respuestaEmpleoDemo(sistema, usuario);

@@ -8,6 +8,7 @@ import { GOOGLE } from '../../compartido/google.js';
 import { leerSecreto, guardarSecreto, borrarSecreto } from './secretos.js';
 import { crearAvisos } from './avisos.js';
 import { aviso } from '../../compartido/notificaciones.js';
+import { transcribirGroq } from '../../compartido/dictado.js';
 
 // Versión web (PWA): el mismo contrato que window.asistente en Electron,
 // pero todo ocurre en el navegador. Claude se llama directamente desde aquí
@@ -485,6 +486,19 @@ export function crearBackendWeb() {
     // Tareas sueltas de IA (Empleo): la IA elegida en Ajustes.
     ia: {
       tarea: async (peticion) => (await obtenerConversacion()).tarea(peticion),
+      // Dictado: Whisper de Groq con tu clave; si no hay, el del servidor de avisos.
+      async transcribir(audio, tipo) {
+        const clave = await leerSecreto('claveGroq');
+        if (clave) {
+          try {
+            return await transcribirGroq({ apiKey: clave, audio, tipo });
+          } catch (error) {
+            if (!(await avisos.automatizaciones.disponible())) throw error;
+          }
+        }
+        if (await avisos.automatizaciones.disponible()) return avisos.servidor.transcribir(audio, tipo);
+        throw new Error('Para dictar necesito tu clave gratuita de Groq (Ajustes → Inteligencia artificial) o el servidor de avisos vinculado.');
+      },
     },
     // CV, búsquedas y candidaturas: datos personales, cifrados como las claves.
     empleo: {

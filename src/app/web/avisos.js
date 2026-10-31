@@ -220,6 +220,7 @@ export function crearAvisos({ leerSecreto, guardarSecreto, borrarSecreto, obtene
       buscar: (datos) => usar((c) => c.empleoBuscar(datos)),
       detalle: (url) => usar((c) => c.empleoDetalle(url)),
     },
+    transcribir: (audio, tipo) => usar((c) => c.transcribir(audio, tipo)),
     // Voz natural: MP3 de un trozo de texto.
     voz: (texto, voz) => usar((c) => c.voz(texto, voz)),
     quitarDispositivo: (id) => usar((c) => c.quitarDispositivo(id)),

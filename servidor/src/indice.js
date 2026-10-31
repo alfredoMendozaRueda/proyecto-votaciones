@@ -11,6 +11,7 @@ import { normalizarAutomatizacion, MAX_AUTOMATIZACIONES } from '../../src/compar
 import { ClienteGmail } from '../../src/compartido/gmail.js';
 import { aviso } from '../../src/compartido/notificaciones.js';
 import { sintetizar, validarVoz } from './voz.js';
+import { limpiarTranscripcion, MAX_AUDIO } from '../../src/compartido/dictado.js';
 import { buscarEnPortales, detalleOferta } from '../../src/compartido/portales.js';
 
 const CORS = {
@@ -406,6 +407,15 @@ async function atender(peticion, env) {
     const oferta = await detalleOferta(direccion.href);
     if (!oferta) throw new ErrorHttp(404, 'La oferta ya no existe.');
     return json(oferta);
+  }
+  if (m === 'POST' && ruta === '/transcribir') {
+    if (!n.env.AI) throw new ErrorHttp(503, 'Este servidor no tiene activada la IA de Cloudflare.');
+    const tipo = peticion.headers.get('Content-Type') ?? '';
+    const largo = Number(peticion.headers.get('Content-Length') ?? 0);
+    if (!/^audio\//.test(tipo) || !peticion.body) throw new ErrorHttp(400, 'Manda el audio grabado.');
+    if (largo > MAX_AUDIO) throw new ErrorHttp(413, 'La grabación es demasiado larga.');
+    const r = await n.env.AI.run('@cf/openai/whisper-large-v3-turbo', { audio: { body: peticion.body, contentType: tipo }, language: 'es', vad_filter: true });
+    return json({ texto: limpiarTranscripcion(r?.text ?? '') });
   }
   if (m === 'POST' && ruta === '/voz') {
     if (!n.env.AI) throw new ErrorHttp(503, 'Este servidor no tiene activada la IA de Cloudflare.');

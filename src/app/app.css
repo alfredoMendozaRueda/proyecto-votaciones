@@ -5113,3 +5113,19 @@ html {
   min-width: 0;
   flex: 1;
 }
+
+/* Pasando la voz a texto: el micrófono late suave mientras Whisper trabaja. */
+.boton-micro.transcribiendo {
+  color: var(--acento-vivo);
+  animation: micro-transcribe 0.9s ease-in-out infinite;
+}
+
+.boton-micro.transcribiendo:disabled {
+  opacity: 1;
+}
+
+@keyframes micro-transcribe {
+  50% {
+    opacity: 0.45;
+  }
+}

@@ -22,6 +22,7 @@ import { servidor, sincronizarRecordatorios, automatizacionesChat } from './avis
 import { aviso } from '../src/compartido/notificaciones.js';
 import { normalizarDatosEmpleo } from '../src/compartido/empleo.js';
 import { hablarVoiceStudio, vocesVoiceStudio } from './voicestudio.js';
+import { transcribirGroq } from '../src/compartido/dictado.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const URL_DESARROLLO = process.env.KITSUNE_DEV_URL;
@@ -388,6 +389,20 @@ function registrarCanales() {
       max: Math.min(16000, Math.max(500, Number(p?.max) || 4000)),
     }),
   );
+  manejar('ia:transcribir', async (audio, tipo) => {
+    const bytes = audio instanceof Uint8Array ? audio : new Uint8Array(audio ?? []);
+    const clave = leerSecreto('claveGroq');
+    const hayServidor = Boolean(leerSecreto('servidorToken'));
+    if (clave) {
+      try {
+        return await transcribirGroq({ apiKey: clave, audio: bytes, tipo: String(tipo ?? '') });
+      } catch (error) {
+        if (!hayServidor) throw error;
+      }
+    }
+    if (hayServidor) return servidor.transcribir(bytes, String(tipo ?? ''));
+    throw new Error('Para dictar necesito tu clave gratuita de Groq (Ajustes → Inteligencia artificial) o vincular el servidor de avisos.');
+  });
   manejar('empleo:leer', () => JSON.parse(leerSecreto('empleo') ?? 'null'));
   manejar('empleo:guardar', (datos) => guardarSecreto('empleo', JSON.stringify(normalizarDatosEmpleo(datos))));
 

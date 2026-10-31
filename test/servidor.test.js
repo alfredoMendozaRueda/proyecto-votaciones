@@ -367,3 +367,36 @@ test('empleo: rutas de portales solo para dispositivos y sin direcciones interna
     assert.equal(r.status, 400, url);
   }
 });
+
+test('dictado: Whisper en el servidor (audio en flujo) y en Groq, sin frases fantasma', async () => {
+  const env = entorno();
+  const { token } = await vincular(env);
+  let entrada = null;
+  env.AI = { run: async (modelo, datos) => ((entrada = { modelo, datos }), { text: '  Recuérdame llamar a Lucía ' }) };
+  const audio = new Uint8Array(2000).fill(3);
+  const r = await servidor.fetch(new Request('https://kitsune.ejemplo.workers.dev/transcribir', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'audio/mp4' }, body: audio }), env);
+  assert.deepEqual(await r.json(), { texto: 'Recuérdame llamar a Lucía' });
+  assert.equal(entrada.modelo, '@cf/openai/whisper-large-v3-turbo');
+  assert.equal(entrada.datos.audio.contentType, 'audio/mp4');
+  assert.equal(entrada.datos.language, 'es');
+  const sinToken = await servidor.fetch(new Request('https://kitsune.ejemplo.workers.dev/transcribir', { method: 'POST', headers: { 'Content-Type': 'audio/mp4' }, body: audio }), env);
+  assert.equal(sinToken.status, 401);
+  const noAudio = await servidor.fetch(new Request('https://kitsune.ejemplo.workers.dev/transcribir', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/plain' }, body: 'hola' }), env);
+  assert.equal(noAudio.status, 400);
+
+  const { transcribirGroq, limpiarTranscripcion } = await import('../src/compartido/dictado.js');
+  let pedido = null;
+  const texto = await transcribirGroq({
+    apiKey: 'gsk_x',
+    audio,
+    tipo: 'audio/mp4',
+    fetch: async (url, opciones) => ((pedido = { url, opciones }), new Response(JSON.stringify({ text: 'Hola, Kitsune' }))),
+  });
+  assert.equal(texto, 'Hola, Kitsune');
+  assert.equal(pedido.url, 'https://api.groq.com/openai/v1/audio/transcriptions');
+  assert.equal(pedido.opciones.body.get('model'), 'whisper-large-v3-turbo');
+  assert.equal(pedido.opciones.body.get('language'), 'es');
+  assert.equal(pedido.opciones.body.get('file').name, 'dictado.m4a');
+  assert.equal(limpiarTranscripcion('Subtítulos realizados por la comunidad de Amara.org'), '');
+  await assert.rejects(transcribirGroq({ apiKey: 'x', audio, tipo: 'audio/webm', fetch: async () => new Response('{}', { status: 429 }) }), /gastado/);
+});

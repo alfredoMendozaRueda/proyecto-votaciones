@@ -73,6 +73,9 @@ function saludoDeLaHora(ahora = new Date()) {
 export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjustes }) {
   // El dictado del navegador no funciona dentro de Electron (necesita los servicios de Google).
   const Reconocimiento = api.plataforma === 'electron' ? null : window.SpeechRecognition || window.webkitSpeechRecognition;
+  // Lo normal es grabar y pasarlo a texto con Whisper: el reconocimiento del
+  // navegador falla en la app instalada del iPhone y no existe en Windows.
+  const puedeGrabar = Boolean(navigator.mediaDevices?.getUserMedia && window.MediaRecorder && api.ia?.transcribir);
   const sugerencias = [
     { texto: '¿Tengo correos sin leer?', icono: 'sobre' },
     { texto: '¿Qué tengo hoy en la agenda?', icono: 'calendario' },
@@ -86,7 +89,7 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     <form class="compositor" id="chat-formulario">
       <button type="button" class="icono-boton" id="chat-nueva" aria-label="Nueva conversación" title="Nueva conversación">${icono('nueva')}</button>
       <textarea id="chat-entrada" rows="1" placeholder="Escribe a Kitsune…" aria-label="Mensaje para Kitsune"></textarea>
-      ${Reconocimiento ? `<button type="button" class="icono-boton boton-micro" id="chat-micro" aria-label="Dictar" aria-pressed="false" title="Dictar">${icono('microfono')}</button>` : ''}
+      ${puedeGrabar || Reconocimiento ? `<button type="button" class="icono-boton boton-micro" id="chat-micro" aria-label="Dictar" aria-pressed="false" title="Dictar">${icono('microfono')}</button>` : ''}
       <button type="submit" class="boton-enviar" id="chat-enviar" aria-label="Enviar">${icono('enviar', 17)}</button>
     </form>`;
 
@@ -601,8 +604,131 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     botonMicro.setAttribute('aria-label', 'Dejar de dictar');
     alEstado('escuchar');
   }
+  // Grabar y transcribir. Como un asistente de voz: al callarte (1,4 s) se
+  // para, se pasa a texto y se envía. Otro toque lo para antes.
+  let grabacion = null;
+  const TIPOS_AUDIO = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+
+  function marcarMicro(estado) {
+    botonMicro.classList.toggle('escuchando', estado === 'escuchando');
+    botonMicro.classList.toggle('transcribiendo', estado === 'transcribiendo');
+    botonMicro.setAttribute('aria-pressed', String(estado === 'escuchando'));
+    botonMicro.setAttribute('aria-label', estado === 'escuchando' ? 'Dejar de dictar' : estado === 'transcribiendo' ? 'Pasando tu voz a texto' : 'Dictar');
+    botonMicro.disabled = estado === 'transcribiendo';
+  }
+
+  async function grabar() {
+    if (grabacion) return grabacion.parar();
+    // En el iPhone, para grabar la sesión de audio tiene que admitir micrófono.
+    if (navigator.audioSession) navigator.audioSession.type = 'play-and-record';
+    let flujo;
+    try {
+      flujo = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    } catch (e) {
+      error(
+        e.name === 'NotAllowedError'
+          ? 'No tengo permiso para usar el micrófono. En el iPhone: Ajustes → Kitsune (o Safari) → Micrófono → Permitir.'
+          : 'No encuentro ningún micrófono.',
+      );
+      return;
+    }
+    const tipo = TIPOS_AUDIO.find((t) => MediaRecorder.isTypeSupported?.(t)) ?? '';
+    const grabador = new MediaRecorder(flujo, tipo ? { mimeType: tipo } : undefined);
+    const trozos = [];
+    grabador.ondataavailable = (e) => e.data.size && trozos.push(e.data);
+
+    // Volumen para saber cuándo has terminado de hablar.
+    const Contexto = window.AudioContext || window.webkitAudioContext;
+    const ctx = Contexto ? new Contexto() : null;
+    let analizador = null;
+    if (ctx) {
+      analizador = ctx.createAnalyser();
+      analizador.fftSize = 1024;
+      ctx.createMediaStreamSource(flujo).connect(analizador);
+    }
+    const muestras = new Uint8Array(1024);
+    const inicio = performance.now();
+    let hablado = false;
+    let ultimoSonido = inicio;
+    // Umbrales que se adaptan: el ruido de fondo (que el control de ganancia
+    // sube en los silencios) y lo fuerte que hablas.
+    let ruido = 0.01;
+    let pico = 0;
+    let sinVoz = false;
+    let reloj = null;
+    const parar = () => {
+      clearInterval(reloj);
+      if (grabador.state !== 'inactive') grabador.stop();
+    };
+    // Cada 100 ms (no con requestAnimationFrame: va a saltos si el zorro está ocupado dibujando).
+    const vigilar = () => {
+      if (grabacion?.grabador !== grabador) return clearInterval(reloj);
+      const ahora = performance.now();
+      if (analizador) {
+        analizador.getByteTimeDomainData(muestras);
+        let suma = 0;
+        for (const m of muestras) suma += ((m - 128) / 128) ** 2;
+        const volumen = Math.sqrt(suma / muestras.length);
+        if (ahora - inicio < 300) ruido = Math.max(ruido, volumen);
+        pico = Math.max(pico * 0.995, volumen);
+        const voz = Math.max(0.045, ruido * 2.5);
+        const silencio = Math.max(0.02, ruido * 1.5, pico * 0.25);
+        if (volumen > voz) hablado = true;
+        if (volumen > silencio) ultimoSonido = ahora;
+        if (hablado && ahora - ultimoSonido > 1400) return parar();
+        if (!hablado && ahora - inicio > 8000) {
+          sinVoz = true;
+          return parar();
+        }
+      }
+      if (ahora - inicio > 60_000) return parar();
+    };
+
+    grabador.onstop = async () => {
+      clearInterval(reloj);
+      flujo.getTracks().forEach((t) => t.stop());
+      ctx?.close().catch(() => {});
+      grabacion = null;
+      if (sinVoz || !trozos.length) {
+        marcarMicro('parado');
+        alEstado(entrada.value.trim() ? 'escuchar' : 'reposo');
+        if (sinVoz) error('No te he oído. Toca el micrófono y habla.');
+        return;
+      }
+      marcarMicro('transcribiendo');
+      alEstado('pensar');
+      try {
+        const audio = new Blob(trozos, { type: grabador.mimeType || tipo || 'audio/webm' });
+        const texto = await api.ia.transcribir(new Uint8Array(await audio.arrayBuffer()), audio.type);
+        marcarMicro('parado');
+        if (!texto) {
+          alEstado('reposo');
+          error('No te he entendido. Prueba otra vez.');
+          return;
+        }
+        const previo = entrada.value.trim();
+        entrada.value = previo ? `${previo} ${texto}` : texto;
+        ajustarAltura();
+        actualizarBoton();
+        preguntar(entrada.value);
+      } catch (e) {
+        marcarMicro('parado');
+        alEstado('reposo');
+        error(e.message);
+      }
+    };
+
+    grabacion = { grabador, parar };
+    grabador.start(250);
+    marcarMicro('escuchando');
+    alEstado('escuchar');
+    reloj = setInterval(vigilar, 100);
+  }
+
   botonMicro?.addEventListener('click', () => {
-    if (!ocupado && !entrada.disabled) dictar();
+    if (ocupado || entrada.disabled) return;
+    if (puedeGrabar) grabar();
+    else dictar();
   });
 
   async function comprobarClave() {

@@ -124,6 +124,19 @@ export class ClienteServidor {
     return this.pedir('/empleo/detalle', { metodo: 'POST', cuerpo: { url } });
   }
 
+  // Dictado: el audio grabado → texto (Whisper en Workers AI).
+  async transcribir(audio, tipo) {
+    let respuesta;
+    try {
+      respuesta = await this.fetch(`${this.url}/transcribir`, { method: 'POST', headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': tipo || 'audio/webm' }, body: audio });
+    } catch {
+      throw new ErrorServidor('No hay conexión con el servidor de avisos.');
+    }
+    const datos = await respuesta.json().catch(() => ({}));
+    if (!respuesta.ok) throw new ErrorServidor(datos.error || `El servidor respondió ${respuesta.status}.`, { desvinculado: respuesta.status === 401 });
+    return datos.texto ?? '';
+  }
+
   // Audio MP3 de un trozo de texto con la voz natural del servidor.
   async voz(texto, voz) {
     let respuesta;
