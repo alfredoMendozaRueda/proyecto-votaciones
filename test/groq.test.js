@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ConversacionClaude } from '../src/compartido/claude.js';
+import { ConversacionClaude, gruposParaGroq } from '../src/compartido/claude.js';
 import { Memoria } from '../src/compartido/memoria.js';
 import { mensajesOpenAI, inicioReciente, segundosDeEspera } from '../src/compartido/groq.js';
 
@@ -97,8 +97,9 @@ test('Groq: con el cupo del día gastado prueba otro modelo, y si todos están g
   assert.equal(b.c.historial.length, 0);
 });
 
-test('Groq: una espera larga no se hace: se prueba otro modelo y si no, se avisa', async () => {
-  const { fetch, peticiones } = groqSimulado([1, 2, 3].map(() => ({ estado: 429, mensaje: limiteMinuto('45s') })));
+test('Groq: con un modelo lleno se prueba otro; si todos lo están y la espera es larga, se avisa', async () => {
+  // Más de un minuto de espera con todos los modelos llenos: se avisa (las esperas más cortas se hacen solas).
+  const { fetch, peticiones } = groqSimulado([1, 2, 3].map(() => ({ estado: 429, mensaje: limiteMinuto('2m') })));
   const { c, eventos } = conversacion(fetch);
   await c.enviar('Hola');
   assert.equal(peticiones.length, 3);
@@ -177,7 +178,9 @@ test('Groq: busca en internet en una petición aparte y muestra las fuentes bajo
   await c.enviar('¿Quién ganó ayer?');
 
   const nombres = peticiones[0].cuerpo.tools.map((t) => t.function.name);
-  assert.ok(nombres.includes('buscar_en_internet') && nombres.includes('ver_tiempo'));
+  // Con Groq solo va lo que encaja con la pregunta (para no gastar el límite por minuto).
+  assert.ok(nombres.includes('buscar_en_internet'));
+  assert.ok(!nombres.includes('recordar') && !nombres.includes('ver_tiempo'));
   const busqueda = peticiones[1].cuerpo;
   assert.equal(busqueda.model, 'openai/gpt-oss-20b');
   assert.deepEqual(busqueda.tools, [{ type: 'browser_search' }]);
@@ -259,4 +262,18 @@ test('Groq: un modelo retirado no corta la respuesta: se pasa al siguiente', asy
   await b.c.enviar('Hola');
   assert.match(b.eventos.at(-1).mensaje, /ya no está disponible/);
   assert.ok(!b.eventos.at(-1).mensaje.includes('`'));
+});
+
+test('Groq: herramientas según lo que se pide (y lo anterior), para no pasar de 8.000 tokens por minuto', () => {
+  const g = (t, antes = '', usadas = []) => [...gruposParaGroq([t, antes], usadas)].sort().join(',');
+  assert.equal(g('Hola'), '');
+  assert.equal(g('¡Gracias!'), '');
+  assert.equal(g('qué tengo pendiente de la semana que viene'), 'agenda,recordatorios');
+  assert.equal(g('¿Llueve mañana en Madrid?'), 'agenda,tiempo');
+  assert.equal(g('Lee el último correo de Lucía'), 'correo');
+  assert.equal(g('cada vez que llegue una factura avísame'), 'automatizaciones,correo,recordatorios');
+  assert.equal(g('bórralo', 'recuérdame llamar a mamá'), 'recordatorios');
+  assert.equal(g('sí, hazlo', '', ['crear_evento']), 'agenda');
+  assert.equal(g('¿Cuál es la capital de Mongolia?'), 'consulta');
+  assert.equal(g('dame mi pulso del día'), 'agenda,correo,pulso,recordatorios,web');
 });

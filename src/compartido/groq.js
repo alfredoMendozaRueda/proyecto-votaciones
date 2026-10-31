@@ -11,10 +11,13 @@ export const MODELOS_GROQ = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/
 // envía y lo que se responde: solo viaja la parte reciente de la conversación.
 // Groq cuenta para ese límite lo que se envía más lo que se reserva para la
 // respuesta, así que las dos cosas se mantienen pequeñas.
-const PRESUPUESTO_HISTORIAL = 8000; // caracteres, unos 2.000 tokens
+const PRESUPUESTO_HISTORIAL = 5000; // caracteres, unos 1.250 tokens
 const MAX_RESPUESTA = 1200; // tokens, razonamiento incluido
 // Si el límite por minuto se libera pronto, se espera y se repite solo.
-const ESPERA_MAXIMA = 30; // segundos
+// Una espera corta se hace en el sitio; si es larga, antes se prueba otro modelo
+// (cada uno tiene su cupo) y solo si todos están llenos se espera hasta un minuto.
+const ESPERA_MAXIMA = 8; // segundos, en el sitio
+const ESPERA_TODOS = 65; // segundos, con todos los modelos llenos
 const MAX_ESPERAS = 2;
 
 export class ErrorGroq extends Error {
@@ -77,7 +80,9 @@ async function pedir(apiKey, ruta, { cuerpo, signal, fetch: hacerFetch = fetch, 
     const limite = /per day|\b[TR]PD\b/i.test(detalle) ? 'dia' : 'minuto';
     const espera = segundosDeEspera(respuesta.headers.get('retry-after'), detalle) ?? 10;
     if (limite === 'dia' || espera > ESPERA_MAXIMA || esperas >= MAX_ESPERAS) {
-      throw new ErrorGroq(mensajeDeEstado(429, detalle, limite), { limite });
+      const error = new ErrorGroq(mensajeDeEstado(429, detalle, limite), { limite });
+      error.espera = espera;
+      throw error;
     }
     alEsperar?.(Math.ceil(espera));
     await dormir(espera * 1000 + 250, signal);
@@ -86,13 +91,26 @@ async function pedir(apiKey, ruta, { cuerpo, signal, fetch: hacerFetch = fetch, 
 
 // Cada modelo tiene su propio cupo gratuito: si el elegido lo ha gastado (o
 // Groq lo ha retirado), se prueba con los demás antes de rendirse.
-async function conRespaldo(modelo, peticion, alternativas = MODELOS_GROQ) {
+async function conRespaldo(modelo, peticion, alternativas = MODELOS_GROQ, { alEsperar, signal } = {}) {
   const modelos = [modelo, ...alternativas.filter((m) => m !== modelo)];
+  const llenos = [];
   for (const [i, m] of modelos.entries()) {
     try {
       return await peticion(m);
     } catch (error) {
-      if (!(error instanceof ErrorGroq) || !error.probarOtro || i === modelos.length - 1) throw error;
+      if (!(error instanceof ErrorGroq) || !error.probarOtro) throw error;
+      if (error.limite === 'minuto') llenos.push(error);
+      if (i < modelos.length - 1) continue;
+      // Todos llenos por el límite de este minuto: se espera lo justo (con aviso) y se repite una vez.
+      if (alEsperar && llenos.length === modelos.length) {
+        const espera = Math.min(...llenos.map((e) => e.espera ?? ESPERA_TODOS));
+        if (espera <= ESPERA_TODOS) {
+          alEsperar(Math.ceil(espera));
+          await dormir(espera * 1000 + 300, signal);
+          return peticion(modelo);
+        }
+      }
+      throw error;
     }
   }
 }
@@ -185,6 +203,8 @@ export async function turnoGroq({ apiKey, modelo, sistema, historial, inicioTurn
         ...parametrosModelo(m),
       },
     }),
+    MODELOS_GROQ,
+    { alEsperar, signal },
   );
 
   let texto = '';
