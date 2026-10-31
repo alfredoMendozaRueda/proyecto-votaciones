@@ -1,7 +1,9 @@
 // Empleo: del CV a ofertas reales y a un CV y una carta a medida de cada una.
-// Como ai-job-search: rastrea portales y ordena las ofertas según el perfil,
-// evalúa el encaje, redacta el CV y la carta, y un segundo agente revisor
-// los critica y pule (y vigila que no se invente nada).
+// Sigue el método de ai-job-search (https://github.com/MadsLorentzen/ai-job-search,
+// MIT): sus portales (LinkedIn y freehire, en portales.js, vía el servidor), su
+// marco de evaluación (puertas de idioma y ubicación y cinco dimensiones con
+// pesos), redactor + revisor que investiga la empresa, la comprobación ATS del
+// PDF y la preparación de entrevista con ejemplos STAR.
 //
 // Todo pasa por ia({ sistema, usuario, web, max }) → { texto, fuentes }, que
 // en la app es la IA elegida en Ajustes (Groq gratis o Claude).
@@ -181,6 +183,12 @@ export function normalizarOferta(o = {}) {
     requisitos: lista(o.requisitos, 15, 200),
     descripcion: typeof o.descripcion === 'string' ? o.descripcion.trim().slice(0, 12000) : '',
     encaje: numero(o.encaje, 0, 100),
+    veredicto: cadena(o.veredicto, 40),
+    puerta: ['pasa', 'aviso', 'no'].includes(o.puerta) ? o.puerta : '',
+    notaPuerta: cadena(o.notaPuerta, 300),
+    dimensiones: o.dimensiones && typeof o.dimensiones === 'object'
+      ? Object.fromEntries(['tecnica', 'experiencia', 'cultura', 'carrera'].map((k) => [k, numero(o.dimensiones[k], 0, 100)]))
+      : null,
     motivos: lista(o.motivos, 5, 200),
     faltan: lista(o.faltan, 5, 200),
   };
@@ -190,43 +198,68 @@ const ESQUEMA_OFERTA =
   '{"puesto":"","empresa":"","ubicacion":"","modalidad":"remoto | híbrido | presencial | ","salario":"si aparece","publicada":"fecha o hace cuánto",' +
   '"url":"enlace directo a la oferta","fuente":"portal","resumen":"2 frases","requisitos":["los principales"]}';
 
-// Rastrea portales con búsqueda web y devuelve ofertas con enlace. Son dos
-// búsquedas más pequeñas (portales grandes; especializados y empresas): así
-// caben en los límites gratuitos de Groq y, si una falla, vale la otra.
-const ENFOQUES = [
-  'LinkedIn Jobs, InfoJobs e Indeed',
-  'Tecnoempleo, Welcome to the Jungle, Manfred, Glassdoor, Talent.com y las páginas de empleo de las propias empresas',
+// Búsqueda: primero los portales de ai-job-search (LinkedIn y freehire, a
+// través del servidor); después, si hacen falta más, la búsqueda web de la IA
+// en lo que esos portales no cubren (InfoJobs, Indeed, webs de empresas…).
+const ENFOQUES_WEB = [
+  'InfoJobs, Indeed, Tecnoempleo, Glassdoor y Welcome to the Jungle',
+  'Manfred, Talent.com y las páginas de empleo de las propias empresas',
 ];
 
-export async function buscarOfertas(ia, perfil, preferencias, { alPaso = () => {} } = {}) {
+async function buscarConIA(ia, perfil, pref, enfoque) {
+  const r = await ia({
+    sistema:
+      `Hoy es ${hoy()}. Eres un buscador de empleo. Busca en internet ofertas de trabajo REALES y vigentes ` +
+      `(publicadas en las últimas semanas) que encajen con el perfil y las preferencias, sobre todo en ${enfoque}. ` +
+      'Prueba el puesto, algún sinónimo y la ciudad. Incluye solo ofertas concretas con su enlace directo (no páginas ' +
+      'de resultados) y no inventes ofertas, empresas ni enlaces: si dudas de una, no la pongas. ' +
+      `Devuelve SOLO JSON: {"ofertas": [${ESQUEMA_OFERTA}]} con 3 a 6 ofertas. ` +
+      NO_INSTRUCCIONES,
+    usuario: `<perfil>\n${perfilBreve(perfil)}\n</perfil>\n<preferencias>\n${textoPreferencias(pref, perfil)}\n</preferencias>`,
+    web: true,
+    max: 6000,
+  });
+  const datos = extraerJson(r.texto);
+  return (Array.isArray(datos) ? datos : datos.ofertas ?? []).map((o) => normalizarOferta({ ...o, fuente: o.fuente || 'web' }));
+}
+
+export async function buscarOfertas(ia, perfil, preferencias, { portales = null, alPaso = () => {} } = {}) {
   const pref = normalizarPreferencias(preferencias);
   const vistas = new Set();
   const ofertas = [];
-  const fuentes = [];
+  const avisos = [];
   let fallo = null;
-  for (const [i, enfoque] of ENFOQUES.entries()) {
-    alPaso(i);
-    try {
-      const r = await ia({
-        sistema:
-          `Hoy es ${hoy()}. Eres un buscador de empleo. Busca en internet ofertas de trabajo REALES y vigentes ` +
-          `(publicadas en las últimas semanas) que encajen con el perfil y las preferencias, sobre todo en ${enfoque}. ` +
-          'Prueba el puesto, algún sinónimo y la ciudad. Incluye solo ofertas concretas con su enlace directo (no páginas ' +
-          'de resultados) y no inventes ofertas, empresas ni enlaces: si dudas de una, no la pongas. ' +
-          `Devuelve SOLO JSON: {"ofertas": [${ESQUEMA_OFERTA}]} con 3 a 6 ofertas. ` +
-          NO_INSTRUCCIONES,
-        usuario: `<perfil>\n${perfilBreve(perfil)}\n</perfil>\n<preferencias>\n${textoPreferencias(pref, perfil)}\n</preferencias>`,
-        web: true,
-        max: 6000,
-      });
-      const datos = extraerJson(r.texto);
-      for (const o of (Array.isArray(datos) ? datos : datos.ofertas ?? []).map(normalizarOferta)) {
-        if (o.puesto && o.url && !vistas.has(o.url)) {
-          vistas.add(o.url);
-          ofertas.push(o);
-        }
+  const anadir = (lista) => {
+    for (const o of lista) {
+      const clave = `${o.puesto}|${o.empresa}`.toLowerCase();
+      if (o.puesto && o.url && !vistas.has(o.url) && !vistas.has(clave)) {
+        vistas.add(o.url);
+        vistas.add(clave);
+        ofertas.push(o);
       }
-      fuentes.push(...(r.fuentes ?? []));
+    }
+  };
+  if (portales) {
+    alPaso('portales');
+    try {
+      const r = await portales({
+        puestos: pref.puestos || perfil.puestosObjetivo.slice(0, 3).join(', ') || perfil.titular,
+        ubicacion: pref.ubicacion || perfil.ubicacion || 'España',
+        modalidad: pref.modalidad,
+        dias: 14,
+      });
+      anadir((r.ofertas ?? []).map(normalizarOferta));
+      if (r.errores?.length) avisos.push(`Algún portal no ha respondido (${r.errores.join('; ')}).`);
+    } catch (error) {
+      fallo = error;
+      avisos.push(`Los portales no han respondido: ${error.message}`);
+    }
+  }
+  const enfoques = portales ? (ofertas.length >= 10 ? [] : ENFOQUES_WEB.slice(0, 1)) : ENFOQUES_WEB;
+  for (const [i, enfoque] of enfoques.entries()) {
+    alPaso('web', i);
+    try {
+      anadir(await buscarConIA(ia, perfil, pref, enfoque));
     } catch (error) {
       fallo ??= error;
     }
@@ -234,41 +267,94 @@ export async function buscarOfertas(ia, perfil, preferencias, { alPaso = () => {
   if (!ofertas.length) {
     throw fallo && !/formato/.test(fallo.message) ? fallo : new Error('No he encontrado ofertas con enlace. Prueba con otro puesto o ciudad, o pega una oferta concreta.');
   }
-  return { ofertas: ofertas.slice(0, 12), fuentes };
+  return { ofertas: ofertas.slice(0, 20), avisos };
 }
 
-// Puntúa cada oferta contra el perfil (sin buscar nada): encaje 0-100,
-// por qué encaja y qué le falta. Devuelve las ofertas ordenadas.
-export async function evaluarEncaje(ia, perfil, ofertas) {
+// Marco de evaluación de ai-job-search (04-job-evaluation.md): dos puertas
+// previas (idioma y ubicación) y cinco dimensiones; la ubicación es pasa/no
+// pasa y el resto pesa técnica 30 %, experiencia 25 %, cultura 15 %, carrera 30 %.
+export const PESOS = { tecnica: 0.3, experiencia: 0.25, cultura: 0.15, carrera: 0.3 };
+
+export function veredicto(encaje, puerta) {
+  if (puerta === 'no') return 'No cumple un requisito';
+  if (encaje == null) return '';
+  if (encaje >= 75) return 'Encaje fuerte';
+  if (encaje >= 60) return 'Buen encaje';
+  if (encaje >= 45) return 'Encaje moderado';
+  if (encaje >= 30) return 'Encaje débil';
+  return 'No encaja';
+}
+
+export function encajePonderado(d) {
+  const valores = Object.entries(PESOS).map(([k, peso]) => [numero(d?.[k], 0, 100), peso]);
+  if (valores.some(([v]) => v == null)) return null;
+  return Math.round(valores.reduce((total, [v, peso]) => total + v * peso, 0));
+}
+
+const SISTEMA_EVALUACION =
+  'Eres técnico de selección y sigues este marco para cada oferta.\n' +
+  '1) Puertas previas, antes de puntuar. IDIOMA: lee los idiomas que el PUESTO exige (no el idioma del anuncio). ' +
+  'Si exige uno que el candidato no tiene, "no"; si lo tiene pero el nivel pedido parece mayor que el suyo, "aviso"; si no, "pasa". ' +
+  'UBICACIÓN: si obliga a mudarse lejos de donde vive o busca y no es remoto, "no"; si pide viajar mucho, "aviso". ' +
+  'En "notaPuerta" cita la frase exacta de la oferta cuando no sea "pasa".\n' +
+  '2) Puntúa de 0 a 100: "tecnica" (las habilidades que pide frente a las suyas: 80+ si lo esencial es su fuerte, 60-79 si faltan 1-2 cosas aprendibles), ' +
+  '"experiencia" (por la función y el tipo de trabajo, no por el título literal), "cultura" (lo que se sabe del equipo y la empresa), ' +
+  '"carrera" (si le hace avanzar según su trayectoria y lo que busca).\n' +
+  '3) "motivos": por qué encaja; "faltan": huecos reales. Frases cortas, sin inventar nada del candidato.\n' +
+  'Devuelve SOLO JSON: {"evaluaciones":[{"id":"","puerta":"pasa | aviso | no","notaPuerta":"","tecnica":0,"experiencia":0,"cultura":0,"carrera":0,"motivos":[""],"faltan":[""]}]}. ' +
+  NO_INSTRUCCIONES;
+
+// Puntúa las ofertas (de 6 en 6, para no pasar los límites de la IA gratuita)
+// y las devuelve ordenadas: las que no pasan una puerta, al final.
+export async function evaluarEncaje(ia, perfil, ofertas, { preferencias = {} } = {}) {
   if (!ofertas.length) return [];
-  const { texto } = await ia({
-    sistema:
-      'Eres técnico de selección. Para cada oferta, puntúa de 0 a 100 cuánto encaja el candidato (experiencia, habilidades, ' +
-      'nivel, idiomas, ubicación y modalidad), y di en frases cortas por qué encaja y qué le falta. Sé realista: 85+ es un ' +
-      'encaje excelente. Devuelve SOLO JSON: {"evaluaciones":[{"id":"","encaje":0,"motivos":[""],"faltan":[""]}]}. ' +
-      NO_INSTRUCCIONES,
-    usuario:
-      `<perfil>\n${perfilBreve(perfil)}\n</perfil>\n` +
-      ofertas
-        .map((o) => `<oferta id="${o.id}">\n${o.puesto} · ${o.empresa} · ${o.ubicacion} ${o.modalidad}\n${o.resumen}\nRequisitos: ${o.requisitos.join('; ')}\n${o.descripcion.slice(0, 1500)}\n</oferta>`)
-        .join('\n'),
-    max: 4000,
-  });
-  const datos = extraerJson(texto);
-  const evaluaciones = new Map((Array.isArray(datos) ? datos : datos.evaluaciones ?? []).map((e) => [String(e?.id), e]));
+  const pref = normalizarPreferencias(preferencias);
+  const evaluaciones = new Map();
+  for (let i = 0; i < ofertas.length; i += 6) {
+    const grupo = ofertas.slice(i, i + 6);
+    const { texto } = await ia({
+      sistema: SISTEMA_EVALUACION,
+      usuario:
+        `<perfil>\n${perfilBreve(perfil)}\n</perfil>\n<busca>\n${textoPreferencias(pref, perfil)}\n</busca>\n` +
+        grupo
+          .map((o) => `<oferta id="${o.id}">\n${o.puesto} · ${o.empresa} · ${o.ubicacion} ${o.modalidad}\n${o.resumen}\n${o.requisitos.length ? `Requisitos: ${o.requisitos.join('; ')}\n` : ''}${o.descripcion.slice(0, 1200)}\n</oferta>`)
+          .join('\n'),
+      max: 4000,
+    });
+    const datos = extraerJson(texto);
+    for (const e of Array.isArray(datos) ? datos : datos.evaluaciones ?? []) evaluaciones.set(String(e?.id), e);
+  }
+  const orden = { pasa: 0, aviso: 0, '': 0, no: 1 };
   return ofertas
     .map((o) => {
       const e = evaluaciones.get(o.id);
-      return e ? normalizarOferta({ ...o, encaje: e.encaje, motivos: e.motivos, faltan: e.faltan }) : o;
+      if (!e) return o;
+      const dimensiones = { tecnica: e.tecnica, experiencia: e.experiencia, cultura: e.cultura, carrera: e.carrera };
+      const encaje = encajePonderado(dimensiones) ?? numero(e.encaje, 0, 100);
+      const puerta = ['pasa', 'aviso', 'no'].includes(e.puerta) ? e.puerta : 'pasa';
+      return normalizarOferta({ ...o, encaje, dimensiones, puerta, notaPuerta: e.notaPuerta, veredicto: veredicto(encaje, puerta), motivos: e.motivos, faltan: e.faltan });
     })
-    .sort((a, b) => (b.encaje ?? -1) - (a.encaje ?? -1));
+    .sort((a, b) => orden[a.puerta] - orden[b.puerta] || (b.encaje ?? -1) - (a.encaje ?? -1));
 }
 
 // Una oferta que trae el usuario: un enlace (se abre con la búsqueda web) o el texto pegado.
-export async function leerOferta(ia, entrada) {
+export async function leerOferta(ia, entrada, { detalle = null } = {}) {
   const texto = String(entrada ?? '').trim();
   if (!texto) throw new Error('Pega el enlace o el texto de la oferta.');
   const url = /^https?:\/\/\S+$/.test(texto) ? urlValida(texto) : '';
+  // Con el servidor, la página se lee de verdad (LinkedIn, freehire o la web de la empresa)
+  // y la IA solo ordena los datos.
+  if (url && detalle) {
+    try {
+      const leida = await detalle(url);
+      if (leida?.descripcion?.length > 200) {
+        const ordenada = await leerOferta(ia, `${leida.puesto ? `${leida.puesto} · ${leida.empresa ?? ''}\n` : ''}${leida.descripcion}`);
+        return normalizarOferta({ ...ordenada, ...Object.fromEntries(Object.entries(leida).filter(([, v]) => v)), url, descripcion: leida.descripcion, requisitos: ordenada.requisitos, resumen: ordenada.resumen });
+      }
+    } catch {
+      // Sin servidor o página que no se deja leer: la IA la abre con su búsqueda web.
+    }
+  }
   const { texto: respuesta } = await ia({
     sistema:
       (url ? 'Abre la página de esta oferta de empleo y lee la oferta completa. ' : '') +
@@ -320,19 +406,49 @@ export function normalizarAdaptado(d = {}, perfil = {}) {
     carta: typeof d.carta === 'string' ? d.carta.trim().slice(0, 6000) : '',
     palabrasClave: lista(d.palabrasClave, 25, 60),
     idioma: /^[a-z]{2}$/.test(d.idioma ?? '') ? d.idioma : 'es',
+    terminosOferta: lista(d.terminosOferta, 25, 60),
+    empresa: cadena(d.empresa, 1500),
     notas: lista(d.notas, 10, 300),
     encaje: numero(d.encaje, 0, 100),
   };
 }
 
 // Redacta el CV y la carta (paso 1) y un revisor los critica y pule (paso 2).
+// Reglas de redacción de ai-job-search (05-cv-templates, 06-cover-letter, 03-writing-style).
+const REGLAS_CV =
+  'Reglas del CV: perfil de 3-4 líneas pensado para ESTA oferta; después competencias, experiencia (de más reciente a más antigua) y formación. ' +
+  'Logros con verbo de acción y resultado medible cuando el CV original lo tenga. Usa el término EXACTO de la oferta cuando sea verdad ' +
+  '(los ATS comparan literalmente) y nunca añadas uno que el CV no respalde: eso es un hueco, no se rellena. ' +
+  'Máximo dos páginas: si sobra, recorta primero lo repetido, luego frases vacías del perfil, luego logros que no tocan la oferta, y por último entradas antiguas. ' +
+  'Fechas como «MM/AAAA - MM/AAAA» con guion normal (un solo año no basta como intervalo). Títulos y textos en el idioma de la oferta. ';
+const REGLAS_CARTA =
+  'Reglas de la carta: 250-300 palabras, una página. Abre diciendo el puesto y conectando tu trayectoria con él (nada de frases de plantilla). ' +
+  'Justo después, por qué ESTA empresa (proyectos, valores o mercado concretos). Luego qué tareas suyas puedes resolver y cómo, con 1-2 ejemplos reales del CV. ' +
+  'Tono cercano y directo, primera persona y voz activa; demuestra en vez de afirmar («trabajo en equipo» se enseña con un ejemplo). Cierra con ganas de hablar y firma con el nombre. ';
+
+// Lo que hace el revisor de ai-job-search antes de criticar: investigar la empresa.
+export async function investigarEmpresa(ia, oferta) {
+  if (!oferta.empresa) return '';
+  const { texto } = await ia({
+    sistema:
+      `Hoy es ${hoy()}. Investiga en internet esta empresa para una candidatura: a qué se dedica, productos o clientes, tamaño, ` +
+      'valores y cultura, noticias recientes y tecnología o métodos que usa. En español, menos de 130 palabras, solo datos que encuentres ' +
+      '(si no encuentras nada fiable, dilo). ' + NO_INSTRUCCIONES,
+    usuario: `Empresa: ${oferta.empresa}\nPuesto: ${oferta.puesto}\n${oferta.url ? `Oferta: ${oferta.url}` : ''}`,
+    web: true,
+    max: 2500,
+  });
+  return cadena(texto.replace(/```[\s\S]*?```/g, ''), 1500);
+}
+
+// Redactor (paso 1); el revisor investiga la empresa y lo critica y pule (paso 2), como /apply.
 export async function adaptarCV(ia, perfil, oferta, { alPaso = () => {}, idioma = '' } = {}) {
   alPaso('redactar');
   const borrador = await ia({
     sistema:
-      'Eres experto en selección de personal y en CV que pasan los filtros ATS. Adapta el CV del candidato a la oferta: ' +
-      'reordena y reescribe para destacar lo más relevante, usa las palabras clave de la oferta solo cuando sean verdad, ' +
-      'empieza los logros con verbos de acción y conserva las cifras que ya existan. Puedes acortar o quitar lo que no aporte. ' +
+      'Eres experto en selección de personal y en CV que pasan los filtros ATS. Adapta el CV del candidato a la oferta. ' +
+      REGLAS_CV +
+      REGLAS_CARTA +
       'PROHIBIDO inventar o exagerar experiencia, empresas, fechas, títulos, cifras o habilidades que no estén en el CV. ' +
       `Escribe en ${idioma || 'el idioma de la oferta'}. Devuelve SOLO JSON con este esquema:\n${ESQUEMA_ADAPTADO}\n` +
       NO_INSTRUCCIONES,
@@ -341,18 +457,28 @@ export async function adaptarCV(ia, perfil, oferta, { alPaso = () => {}, idioma 
   });
   const primero = normalizarAdaptado(extraerJson(borrador.texto), perfil);
 
+  alPaso('investigar');
+  let empresa = '';
+  try {
+    empresa = await investigarEmpresa(ia, oferta);
+  } catch {
+    // Sin investigación, el revisor trabaja con la oferta.
+  }
+
   alPaso('revisar');
   const revision = await ia({
     sistema:
-      'Eres un revisor exigente de candidaturas. Compara el CV adaptado y la carta con la oferta y con el CV ORIGINAL. ' +
-      '1) Cualquier dato que no esté en el original (inventado o exagerado) se corrige o se quita. ' +
-      '2) Mejora la claridad, la concisión, los verbos de acción, la ortografía y el orden según lo que pide la oferta. ' +
-      '3) Que la carta sea concreta (nada genérico), hable de la empresa y del puesto y no repita el CV. ' +
-      'Devuelve SOLO JSON con el mismo esquema y además "notas" (cambios hechos y consejos para la entrevista, frases cortas) ' +
-      `y "encaje" (0-100):\n${ESQUEMA_ADAPTADO.replace(/}\s*$/, ',\n  "notas": [""], "encaje": 0\n}')}\n` +
+      'Eres un revisor exigente de candidaturas, con la cabeza fresca: no has escrito tú el borrador. Compáralo con la oferta, con lo que se sabe ' +
+      'de la empresa y con el CV ORIGINAL. 1) Cualquier dato que no esté en el original (inventado o exagerado) se corrige o se quita. ' +
+      '2) Comprueba que cumple estas reglas y arréglalo si no: ' + REGLAS_CV + REGLAS_CARTA +
+      '3) La carta debe mencionar algo concreto y cierto de la empresa (de <empresa>), no generalidades. ' +
+      'Devuelve SOLO JSON con el mismo esquema y además: "notas" (cambios hechos y consejos, frases cortas), "encaje" (0-100) y ' +
+      '"terminosOferta" (10-25 términos clave de la oferta, cortos y tal cual aparecen: herramientas, habilidades, titulaciones):\n' +
+      `${ESQUEMA_ADAPTADO.replace(/}\s*$/, ',\n  "notas": [""], "encaje": 0, "terminosOferta": [""]\n}')}\n` +
       NO_INSTRUCCIONES,
     usuario:
-      `<cv_original>\n${textoCompleto(perfil)}\n</cv_original>\n<oferta>\n${textoOferta(oferta).slice(0, 9000)}\n</oferta>\n` +
+      `<cv_original>\n${textoCompleto(perfil)}\n</cv_original>\n<oferta>\n${textoOferta(oferta).slice(0, 8000)}\n</oferta>\n` +
+      (empresa ? `<empresa>\n${empresa}\n</empresa>\n` : '') +
       `<propuesta>\n${JSON.stringify({ cv: primero.cv, carta: primero.carta, palabrasClave: primero.palabrasClave })}\n</propuesta>`,
     max: 8000,
   });
@@ -367,7 +493,74 @@ export async function adaptarCV(ia, perfil, oferta, { alPaso = () => {}, idioma 
   if (!final.carta) final.carta = primero.carta;
   if (!final.palabrasClave.length) final.palabrasClave = primero.palabrasClave;
   if (!/^[a-z]{2}$/.test(final.idioma ?? '')) final.idioma = primero.idioma;
+  if (!final.terminosOferta.length) final.terminosOferta = [...new Set([...oferta.requisitos.filter((r) => r.length <= 40), ...final.palabrasClave])].slice(0, 25);
+  final.empresa = empresa;
   return final;
+}
+
+// ---------- Comprobación ATS (verify_pdf de ai-job-search) ----------
+// Se lee la capa de texto del PDF generado, como haría un ATS: el contacto
+// tiene que estar en texto, sin caracteres rotos, y se mira qué términos de la
+// oferta aparecen. Los que faltan son huecos a valorar, nunca se añaden solos.
+const plegar = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[‐-―]/g, '-').toLowerCase().replace(/\s+/g, ' ');
+
+export function comprobarATS(textoPdf, { cv, terminos = [] }) {
+  const texto = plegar(textoPdf);
+  const digitos = String(textoPdf ?? '').replace(/\D/g, '');
+  const mapa = new Map();
+  for (const t of terminos) {
+    const clave = plegar(t).trim();
+    if (clave.length > 1 && !mapa.has(clave)) mapa.set(clave, cadena(t, 60));
+  }
+  const unicos = [...mapa].slice(0, 25);
+  const cubiertos = unicos.filter(([k]) => texto.includes(k)).map(([, t]) => t);
+  const faltan = unicos.filter(([k]) => !texto.includes(k)).map(([, t]) => t);
+  return {
+    email: !cv.email || texto.includes(plegar(cv.email)),
+    telefono: !cv.telefono || digitos.includes(cv.telefono.replace(/\D/g, '')),
+    legible: !/�|\(cid:\d+\)/.test(textoPdf ?? ''),
+    fechas: !/\d\s*[–—]\s*(\d|actualidad|presente|present)/i.test(textoPdf ?? ''),
+    cubiertos,
+    faltan,
+    porcentaje: unicos.length ? Math.round((cubiertos.length / unicos.length) * 100) : null,
+  };
+}
+
+// ---------- Entrevista (/interview de ai-job-search) ----------
+
+export function normalizarEntrevista(e = {}) {
+  return {
+    star: (Array.isArray(e.star) ? e.star : []).slice(0, 6).map((x) => ({
+      titulo: cadena(x?.titulo, 120),
+      competencia: cadena(x?.competencia, 80),
+      s: cadena(x?.s, 500),
+      t: cadena(x?.t, 400),
+      a: cadena(x?.a, 600),
+      r: cadena(x?.r, 400),
+      usarPara: lista(x?.usarPara, 4, 160),
+    })).filter((x) => x.titulo || x.a),
+    dificiles: (Array.isArray(e.dificiles) ? e.dificiles : []).slice(0, 8).map((x) => ({ pregunta: cadena(x?.pregunta, 200), respuesta: cadena(x?.respuesta, 700) })).filter((x) => x.pregunta),
+    paraPreguntar: lista(e.paraPreguntar, 8, 200),
+    porQueEmpresa: cadena(e.porQueEmpresa, 800),
+  };
+}
+
+export async function prepararEntrevista(ia, perfil, oferta, { empresa = '' } = {}) {
+  const { texto } = await ia({
+    sistema:
+      'Preparas entrevistas de trabajo con el método de ai-job-search. Con el CV REAL del candidato (no inventes nada) y la oferta: ' +
+      '1) "star": 4-6 ejemplos STAR sacados de su experiencia real (Situación, Tarea, Acción, Resultado; respuestas de 1-2 minutos), ' +
+      'cada uno con la competencia que demuestra y para qué preguntas sirve. 2) "dificiles": las preguntas difíciles que le harán con esta ' +
+      'oferta (huecos, por qué esta empresa, por qué deja su trabajo…) con una respuesta honesta y en positivo. 3) "paraPreguntar": ' +
+      'preguntas inteligentes que hacer al entrevistador sobre el puesto, el equipo y la cultura. 4) "porQueEmpresa": qué decir de esta empresa ' +
+      'en concreto. Escribe en el idioma de la oferta. Devuelve SOLO JSON: ' +
+      '{"star":[{"titulo":"","competencia":"","s":"","t":"","a":"","r":"","usarPara":[""]}],"dificiles":[{"pregunta":"","respuesta":""}],"paraPreguntar":[""],"porQueEmpresa":""}. ' +
+      NO_INSTRUCCIONES,
+    usuario:
+      `<cv>\n${textoCompleto(perfil)}\n</cv>\n<oferta>\n${textoOferta(oferta).slice(0, 7000)}\n</oferta>` + (empresa ? `\n<empresa>\n${empresa}\n</empresa>` : ''),
+    max: 7000,
+  });
+  return normalizarEntrevista(extraerJson(texto));
 }
 
 // ---------- Datos guardados ----------
@@ -382,12 +575,14 @@ export function normalizarDatosEmpleo(d = {}) {
     preferencias: normalizarPreferencias(d.preferencias),
     ofertas: (Array.isArray(d.ofertas) ? d.ofertas : []).slice(0, 20).map(normalizarOferta),
     busqueda: Number(d.busqueda) || 0,
+    avisosBusqueda: lista(d.avisosBusqueda, 3, 300),
     postulaciones: (Array.isArray(d.postulaciones) ? d.postulaciones : []).slice(0, MAX_POSTULACIONES).map((p) => ({
       id: cadena(p.id, 40),
       fecha: Number(p.fecha) || Date.now(),
       estado: ['preparada', 'enviada', 'entrevista', 'descartada'].includes(p.estado) ? p.estado : 'preparada',
       oferta: normalizarOferta(p.oferta),
       ...normalizarAdaptado(p, p.cv ?? {}),
+      entrevista: p.entrevista ? normalizarEntrevista(p.entrevista) : null,
     })),
   };
 }

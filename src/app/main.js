@@ -159,6 +159,8 @@ let audioCtx = null;
 let fuenteVoz = null;
 let turnoVoz = 0;
 let servidorVoz = { comprobado: 0, disponible: false };
+// Mientras se prueba la voz en Ajustes, los fallos se enseñan en vez de callarse.
+let avisoVoz = null;
 
 function contextoAudio() {
   const Contexto = window.AudioContext || window.webkitAudioContext;
@@ -173,12 +175,16 @@ const despertarAudio = () => ajustes?.voz && ajustes.vozTipo !== 'dispositivo' &
 document.addEventListener('pointerdown', despertarAudio, { passive: true });
 document.addEventListener('keydown', despertarAudio);
 
-async function hayVozNatural() {
-  if (ajustes.vozTipo === 'dispositivo' || !api.servidor?.voz) return false;
-  if (Date.now() - servidorVoz.comprobado < 10 * 60_000) return servidorVoz.disponible;
-  const e = await api.servidor.estado().catch(() => null);
-  servidorVoz = { comprobado: Date.now(), disponible: Boolean(e?.vinculado && e.voz) };
-  return servidorVoz.disponible;
+// Qué genera la voz: VoiceStudio (Windows, en el propio ordenador), la natural
+// del servidor o ninguna (y entonces la del dispositivo).
+async function motorDeVoz() {
+  if (ajustes.vozTipo === 'voicestudio' && api.voicestudio) return (trozo) => api.voicestudio.hablar(trozo);
+  if (ajustes.vozTipo === 'dispositivo' || !api.servidor?.voz) return null;
+  if (Date.now() - servidorVoz.comprobado >= 10 * 60_000) {
+    const e = await api.servidor.estado().catch(() => null);
+    servidorVoz = { comprobado: Date.now(), disponible: Boolean(e?.vinculado && e.voz) };
+  }
+  return servidorVoz.disponible ? (trozo) => api.servidor.voz(trozo, ajustes.vozNombre) : null;
 }
 
 function callarVoz() {
@@ -195,12 +201,14 @@ function callarVoz() {
 async function hablarEnVoz(texto) {
   callarVoz();
   const turno = turnoVoz;
-  if (await hayVozNatural()) {
+  const motor = await motorDeVoz();
+  if (motor) {
     try {
-      const empezo = await hablarNatural(texto, turno);
+      const empezo = await hablarNatural(texto, turno, motor);
       if (empezo) return;
     } catch (error) {
-      console.warn('Voz natural:', error.message);
+      console.warn('Voz:', error.message);
+      avisoVoz?.(error.message);
       // Para no esperar en cada respuesta: se vuelve a probar en unos minutos.
       servidorVoz = { comprobado: Date.now(), disponible: false };
     }
@@ -210,7 +218,7 @@ async function hablarEnVoz(texto) {
 }
 
 // Devuelve false si no llegó a sonar nada (para usar entonces la del dispositivo).
-async function hablarNatural(texto, turno) {
+async function hablarNatural(texto, turno, motor) {
   const ctx = contextoAudio();
   if (!ctx) return false;
   if (ctx.state !== 'running') await ctx.resume().catch(() => {});
@@ -221,7 +229,7 @@ async function hablarNatural(texto, turno) {
   analizador.connect(ctx.destination);
   const pedir = (i) =>
     i < trozos.length
-      ? api.servidor.voz(trozos[i], ajustes.vozNombre).then((bytes) => ctx.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)))
+      ? motor(trozos[i]).then((bytes) => ctx.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)))
       : null;
   let siguiente = pedir(0);
   let sonado = false;
@@ -336,10 +344,18 @@ async function iniciar() {
     api,
     probarVoz: async () => {
       servidorVoz.comprobado = 0;
+      let fallo = null;
+      avisoVoz = (mensaje) => (fallo = mensaje);
       kitsune.setEstado('hablar');
-      await hablarEnVoz('Hola, soy Kitsune. Así sonará mi voz cuando te lea las respuestas.');
-      kitsune.setEstado('reposo');
+      try {
+        await hablarEnVoz('Hola, soy Kitsune. Así sonará mi voz cuando te lea las respuestas.');
+      } finally {
+        avisoVoz = null;
+        kitsune.setEstado('reposo');
+      }
+      if (fallo) throw new Error(`${fallo} He usado la voz del dispositivo.`);
     },
+    vocesVoiceStudio: api.voicestudio ? () => api.voicestudio.voces() : null,
     alCerrar: () => mostrarVista('chat'),
     alCambiar: (nuevos, cambios) => {
       ajustes = nuevos;

@@ -115,7 +115,8 @@ function cabecera(l, cv) {
   }
 }
 
-const fechas = (inicio, fin) => [inicio, fin].filter(Boolean).join(' – ');
+// Guion normal: muchos ATS no reconocen un intervalo con «–» (regla de ai-job-search).
+const fechas = (inicio, fin) => [inicio, fin].filter(Boolean).join(' - ');
 
 export async function pdfCV(cv, { idioma = 'es' } = {}) {
   const t = titulosCV(idioma);

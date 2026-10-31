@@ -21,6 +21,7 @@ import { Conversaciones, ID_CONVERSACION } from '../src/compartido/conversacione
 import { servidor, sincronizarRecordatorios, automatizacionesChat } from './avisos.js';
 import { aviso } from '../src/compartido/notificaciones.js';
 import { normalizarDatosEmpleo } from '../src/compartido/empleo.js';
+import { hablarVoiceStudio, vocesVoiceStudio } from './voicestudio.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const URL_DESARROLLO = process.env.KITSUNE_DEV_URL;
@@ -412,6 +413,10 @@ function registrarCanales() {
   manejar('servidor:canjear', (codigo) => servidor.canjear(String(codigo ?? '')));
   manejar('servidor:probar', () => servidor.probar());
   manejar('servidor:voz', (texto, voz) => servidor.voz(texto, voz));
+  manejar('voicestudio:hablar', (texto) => hablarVoiceStudio(obtenerAjustes().voicestudioUrl, String(texto ?? ''), obtenerAjustes().voicestudioVoz));
+  manejar('voicestudio:voces', () => vocesVoiceStudio(obtenerAjustes().voicestudioUrl));
+  manejar('servidor:empleoBuscar', (datos) => servidor.empleo.buscar(datos));
+  manejar('servidor:empleoDetalle', (url) => servidor.empleo.detalle(url));
   manejar('servidor:resumen', () => servidor.resumen());
   manejar('servidor:codigo', () => servidor.crearCodigo());
   manejar('servidor:avisos', (avisos) => servidor.avisos(avisos));

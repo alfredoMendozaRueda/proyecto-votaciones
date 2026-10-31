@@ -555,7 +555,8 @@ export function crearDemo() {
     ia: {
       async tarea({ sistema, usuario }) {
         await new Promise((r) => setTimeout(r, 700));
-        return { texto: JSON.stringify(respuestaEmpleoDemo(sistema, usuario)), fuentes: [] };
+        const r = respuestaEmpleoDemo(sistema, usuario);
+        return { texto: typeof r === 'string' ? r : JSON.stringify(r), fuentes: [] };
       },
     },
     empleo: (() => {
@@ -594,6 +595,16 @@ export function crearDemo() {
         ],
       });
       return {
+        empleo: {
+          async buscar() {
+            await new Promise((r) => setTimeout(r, 600));
+            return { ofertas: OFERTAS_DEMO.map((o, i) => ({ ...o, id: `demo-${i}`, fuente: i === 1 ? 'freehire' : 'LinkedIn' })), errores: [] };
+          },
+          async detalle(url) {
+            const o = OFERTAS_DEMO.find((x) => x.url === url) ?? OFERTAS_DEMO[0];
+            return { ...o, descripcion: `${o.resumen}\nFunciones: desarrollar con React y TypeScript, cuidar el rendimiento y la accesibilidad, revisar código.\nRequisitos: ${o.requisitos.join(', ')}.\nSe valora: sistemas de diseño.` };
+          },
+        },
         estado,
         conectar: estado,
         canjear: estado,
@@ -701,22 +712,44 @@ const OFERTAS_DEMO = [
 
 function respuestaEmpleoDemo(sistema, usuario) {
   if (/Analizas currículums/.test(sistema)) return PERFIL_DEMO;
-  if (/buscador de empleo/.test(sistema)) return { ofertas: /LinkedIn Jobs/.test(sistema) ? OFERTAS_DEMO.slice(0, 2) : OFERTAS_DEMO.slice(1) };
+  if (/buscador de empleo/.test(sistema)) {
+    return { ofertas: [{ puesto: 'Desarrolladora web (React)', empresa: 'Estudio Faro', ubicacion: 'Madrid', modalidad: 'híbrido', publicada: 'hace 2 días', url: 'https://empleo.ejemplo.es/faro/react', fuente: 'web', resumen: 'Agencia de producto digital. React y Next.js.', requisitos: ['React', 'Next.js'] }] };
+  }
+  if (/Investiga en internet esta empresa/.test(sistema)) {
+    return 'Brújula Labs (ejemplo) hace software de rutas para empresas de reparto: unas 60 personas en Madrid, producto propio en React y TypeScript, y acaban de abrir oficina en Lisboa.';
+  }
+  if (/Preparas entrevistas/.test(sistema)) {
+    return {
+      star: [
+        { titulo: 'Migración a React 18', competencia: 'Liderazgo técnico', s: 'La web de clientes cargaba lenta y el código era difícil de mantener.', t: 'Liderar la migración sin parar las entregas.', a: 'Planifiqué la migración por partes, añadí división de código y caché, y acompañé al equipo.', r: 'La carga bajó un 38 % y el equipo entrega más rápido.', usarPara: ['Un reto técnico', 'Mejora de rendimiento'] },
+        { titulo: 'Sistema de diseño', competencia: 'Colaboración', s: 'Cuatro productos con estilos distintos.', t: 'Unificar la interfaz.', a: 'Construí un sistema de diseño en React junto al equipo de diseño.', r: 'Lo usan los 4 productos y cumple WCAG AA.', usarPara: ['Trabajo en equipo'] },
+      ],
+      dificiles: [{ pregunta: 'No tienes experiencia con tests de extremo a extremo, ¿verdad?', respuesta: 'Uso Testing Library a diario; los E2E los he visto en revisión y es lo siguiente que quiero dominar: ya he empezado con Playwright.' }],
+      paraPreguntar: ['¿Qué parte del producto de rutas os preocupa más ahora mismo?', '¿Cómo repartís el trabajo entre producto nuevo y mantenimiento?'],
+      porQueEmpresa: 'Producto propio de rutas: el rendimiento en móvil importa de verdad, y es justo donde más he trabajado.',
+    };
+  }
   if (/técnico de selección/.test(sistema)) {
     const ids = [...usuario.matchAll(/<oferta id="([^"]+)"/g)].map((m) => m[1]);
     const notas = [
-      [86, ['6 años con React y TypeScript', 'Experiencia en rendimiento web'], ['Testing de extremo a extremo']],
-      [58, ['Frontend con experiencia', 'Remoto en España'], ['Piden Vue y Nuxt', 'SEO técnico']],
-      [71, ['Mentora en su equipo actual', 'React avanzado'], ['Liderazgo formal de un equipo']],
+      ['pasa', '', [90, 85, 75, 85], ['6 años con React y TypeScript', 'Experiencia en rendimiento web'], ['Testing de extremo a extremo']],
+      ['aviso', 'Se valora inglés fluido para reuniones con clientes', [55, 60, 65, 50], ['Frontend con experiencia', 'Remoto en España'], ['Piden Vue y Nuxt', 'SEO técnico']],
+      ['pasa', '', [80, 65, 70, 80], ['Mentora en su equipo actual', 'React avanzado'], ['Liderazgo formal de un equipo']],
+      ['pasa', '', [70, 70, 60, 55], ['React'], ['Next.js']],
     ];
-    return { evaluaciones: ids.map((id, i) => ({ id, encaje: notas[i % 3][0], motivos: notas[i % 3][1], faltan: notas[i % 3][2] })) };
+    return {
+      evaluaciones: ids.map((id, i) => {
+        const [puerta, notaPuerta, [tecnica, experiencia, cultura, carrera], motivos, faltan] = notas[i % notas.length];
+        return { id, puerta, notaPuerta, tecnica, experiencia, cultura, carrera, motivos, faltan };
+      }),
+    };
   }
   if (/Extrae los datos de la oferta/.test(sistema)) {
     return { ...OFERTAS_DEMO[0], descripcion: 'Buscamos una persona frontend sénior para nuestro producto de rutas. Funciones: desarrollar con React y TypeScript, cuidar el rendimiento y la accesibilidad, revisar código. Requisitos: 5+ años con React, TypeScript, testing. Se valora: experiencia en sistemas de diseño.' };
   }
   if (/revisor exigente/.test(sistema)) {
     const propuesta = JSON.parse(usuario.match(/<propuesta>\n([\s\S]*)\n<\/propuesta>/)[1]);
-    return { ...propuesta, notas: ['Resumen más concreto para la oferta.', 'Quitada una cifra que no estaba en tu CV.', 'Prepara un ejemplo de mejora de rendimiento para la entrevista.'], encaje: 87 };
+    return { ...propuesta, notas: ['Resumen más concreto para la oferta.', 'Quitada una cifra que no estaba en tu CV.', 'La carta menciona su producto de rutas y la nueva oficina de Lisboa.'], encaje: 87, terminosOferta: ['React', 'TypeScript', 'Testing', 'rendimiento', 'accesibilidad', 'Playwright'] };
   }
   if (/experto en selección/.test(sistema)) {
     return {

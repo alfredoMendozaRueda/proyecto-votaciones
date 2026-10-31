@@ -63,7 +63,7 @@ function atajoDesdeEvento(e) {
   return [...partes, tecla].join('+');
 }
 
-export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz = async () => {} }) {
+export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz = async () => {}, vocesVoiceStudio = null }) {
   let ajustes = null;
 
   const segmentado = (clave, opciones) => `
@@ -205,14 +205,29 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
           ${interruptor('voz', 'Leer las respuestas en voz alta')}
           <div class="ajuste">
             <div class="ajuste__etiqueta">Tipo de voz</div>
-            ${segmentado('vozTipo', [['natural', 'Natural'], ['dispositivo', escritorio ? 'De Windows' : 'Del dispositivo']])}
-            <p class="ajuste__ayuda">La natural la genera tu servidor de avisos (hay que vincularlo en «Avisos en el móvil»): gratis hasta unas 3.500 letras al día y después una voz más sencilla. Sin servidor se usa la del dispositivo.</p>
+            ${segmentado('vozTipo', [['natural', 'Natural'], ...(vocesVoiceStudio ? [['voicestudio', 'VoiceStudio']] : []), ['dispositivo', escritorio ? 'De Windows' : 'Del dispositivo']])}
+            <p class="ajuste__ayuda">La natural la genera tu servidor de avisos (hay que vincularlo en «Avisos en el móvil»): gratis hasta unas 3.500 letras al día y después una voz más sencilla. Sin servidor se usa la del dispositivo.${
+              vocesVoiceStudio
+                ? ' <strong>VoiceStudio</strong>: la app de voz local de <a href="https://voicestudio.sh" data-enlace-externo>voicestudio.sh</a>; instálala y ábrela en este ordenador, clona o diseña tu voz allí y elígela aquí. El texto no sale del ordenador.'
+                : ''
+            }</p>
           </div>
+          ${
+            vocesVoiceStudio
+              ? `<div class="ajuste ajuste--fila">
+            <label class="ajuste__etiqueta" for="ajuste-vs-voz">Voz de VoiceStudio</label>
+            <div class="vs-voz"><select class="campo" id="ajuste-vs-voz" data-selector="voicestudioVoz"><option value="${escapar(ajustes.voicestudioVoz)}">${escapar(ajustes.voicestudioVoz === 'default' ? 'Voz por defecto del motor' : ajustes.voicestudioVoz)}</option></select>
+            <button type="button" class="boton" id="vs-cargar">Cargar voces</button></div>
+          </div>
+          <p class="mensaje-ajuste" id="mensaje-vs" role="status"></p>`
+              : ''
+          }
           <div class="ajuste ajuste--fila">
             <label class="ajuste__etiqueta" for="ajuste-voz-nombre">Voz natural</label>
             <div style="width:210px">${selector('vozNombre', 'ajuste-voz-nombre', VOCES.map((v) => [v.id, `${v.nombre} · ${v.detalle}`]))}</div>
           </div>
           <div class="botonera"><button type="button" class="boton" id="voz-probar">${icono('altavoz', 15)} Escuchar la voz</button></div>
+          <p class="mensaje-ajuste" id="mensaje-voz" role="status"></p>
           ${interruptor('pulsoDiario', 'Pulso del día', 'La primera vez que abres Kitsune cada día te ofrece un resumen de correo y recordatorios.')}
         </section>
 
@@ -627,9 +642,26 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
       boton.disabled = true;
       try {
         await probarVoz();
+        mostrarMensaje('mensaje-voz', '', true);
+      } catch (error) {
+        mostrarMensaje('mensaje-voz', error.message, false);
       } finally {
         boton.disabled = false;
       }
+    });
+    contenedor.querySelector('#vs-cargar')?.addEventListener('click', async () => {
+      const selector = contenedor.querySelector('#ajuste-vs-voz');
+      try {
+        const voces = await vocesVoiceStudio();
+        selector.innerHTML = voces.map((v) => `<option value="${escapar(v.id)}" ${v.id === ajustes.voicestudioVoz ? 'selected' : ''}>${escapar(v.nombre)}${v.idioma ? ` · ${escapar(v.idioma)}` : ''}</option>`).join('');
+        mostrarMensaje('mensaje-vs', `${voces.length - 1} voces tuyas en VoiceStudio.`, true);
+      } catch (error) {
+        mostrarMensaje('mensaje-vs', error.message, false);
+      }
+    });
+    contenedor.querySelector('[data-enlace-externo]')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      api.ventana.abrirEnlace(e.currentTarget.href);
     });
     const personalidad = contenedor.querySelector('#ajuste-personalidad');
     personalidad.addEventListener('change', () => guardar({ personalidad: personalidad.value.trim() }));

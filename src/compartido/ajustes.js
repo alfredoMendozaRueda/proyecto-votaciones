@@ -25,6 +25,9 @@ export const AJUSTES_POR_DEFECTO = {
   // Voz: natural (servidor propio, Workers AI) o la del dispositivo.
   vozTipo: 'natural',
   vozNombre: 'diana',
+  // VoiceStudio en el mismo ordenador (solo Windows/escritorio).
+  voicestudioUrl: 'http://127.0.0.1:3900',
+  voicestudioVoz: 'default',
   ofrecerPortapapeles: true,
   // La IA gratuita por defecto; Claude, para quien tenga clave de pago.
   proveedor: 'groq',
@@ -53,12 +56,12 @@ const OPCIONES = {
   modelo: MODELOS,
   proveedor: PROVEEDORES,
   modeloGroq: MODELOS_GROQ,
-  vozTipo: ['natural', 'dispositivo'],
+  vozTipo: ['natural', 'dispositivo', 'voicestudio'],
   vozNombre: IDS_VOCES,
   ...opcionesPermisos(),
 };
 const RANGOS = { dormirTrasMin: [0, 120], correoCadaMin: [1, 120] };
-const LARGOS = { atajo: 60, personalidad: 2000, googleClientId: 200, servidorUrl: 200 };
+const LARGOS = { atajo: 60, personalidad: 2000, googleClientId: 200, servidorUrl: 200, voicestudioUrl: 40, voicestudioVoz: 120 };
 
 export function valorValido(clave, valor) {
   const defecto = AJUSTES_POR_DEFECTO[clave];
@@ -66,6 +69,8 @@ export function valorValido(clave, valor) {
   if (OPCIONES[clave] && !OPCIONES[clave].includes(valor)) return false;
   if (RANGOS[clave] && (!Number.isInteger(valor) || valor < RANGOS[clave][0] || valor > RANGOS[clave][1])) return false;
   if (LARGOS[clave] && valor.length > LARGOS[clave]) return false;
+  // VoiceStudio solo en este ordenador: el texto no sale de él.
+  if (clave === 'voicestudioUrl' && !/^http:\/\/(127\.0\.0\.1|localhost):\d{2,5}$/.test(valor)) return false;
   return true;
 }
 

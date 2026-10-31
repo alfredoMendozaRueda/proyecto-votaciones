@@ -4983,3 +4983,133 @@ html {
   display: grid;
   gap: 8px;
 }
+
+.oferta__puerta {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--kin-velo);
+  color: var(--kin-vivo);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.oferta__puerta[data-puerta='no'] {
+  background: var(--acento-velo);
+  color: var(--acento-vivo);
+}
+
+.oferta__dimensiones {
+  font-size: 11px;
+}
+
+.empleo-texto {
+  margin: 0;
+  color: var(--texto-2);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.empleo-comprobaciones {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  font-size: 13.5px;
+}
+
+.empleo-comprobaciones li {
+  position: relative;
+  padding-left: 22px;
+  color: var(--texto-2);
+}
+
+.empleo-comprobaciones li::before {
+  content: '✓';
+  position: absolute;
+  left: 2px;
+  color: #8fc47f;
+}
+
+.empleo-comprobaciones li[data-ok='false']::before {
+  content: '!';
+  left: 6px;
+  color: var(--kin-vivo);
+  font-weight: 700;
+}
+
+.empleo-ats .chips {
+  margin-bottom: 8px;
+}
+
+.chip--si {
+  border-color: #3f6b3a;
+  color: #9fd38f;
+}
+
+.chip--no {
+  border-color: var(--acento-hondo);
+  color: var(--acento-vivo);
+}
+
+.empleo-star {
+  padding: 12px;
+  border: 1px solid var(--linea-suave);
+  border-radius: 12px;
+  background: var(--carbon-2);
+}
+
+.empleo-star h4 {
+  margin: 0 0 6px;
+  font-size: 14.5px;
+}
+
+.empleo-star dl {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 4px 8px;
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--texto-2);
+}
+
+.empleo-star dt {
+  font-family: var(--mono);
+  color: var(--acento-vivo);
+}
+
+.empleo-star dd {
+  margin: 0;
+}
+
+.empleo-pregunta {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--carbon-2);
+  font-size: 13.5px;
+}
+
+.empleo-pregunta summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.empleo-pregunta p {
+  margin: 8px 0 0;
+  color: var(--texto-2);
+  line-height: 1.5;
+}
+
+.vs-voz {
+  display: flex;
+  gap: 6px;
+  width: 260px;
+  max-width: 100%;
+}
+
+.vs-voz .campo {
+  min-width: 0;
+  flex: 1;
+}

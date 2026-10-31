@@ -38,6 +38,7 @@
       "electron/**",
       "src/compartido/**",
       "assets/**",
+      "LICENCIAS-TERCEROS.md",
       "package.json"
     ],
     "win": {

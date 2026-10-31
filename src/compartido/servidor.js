@@ -115,6 +115,15 @@ export class ClienteServidor {
     return this.pedir('/desvincular', { metodo: 'POST' });
   }
 
+  // Empleo: ofertas de los portales (LinkedIn, freehire) y oferta completa.
+  empleoBuscar(datos) {
+    return this.pedir('/empleo/buscar', { metodo: 'POST', cuerpo: datos });
+  }
+
+  empleoDetalle(url) {
+    return this.pedir('/empleo/detalle', { metodo: 'POST', cuerpo: { url } });
+  }
+
   // Audio MP3 de un trozo de texto con la voz natural del servidor.
   async voz(texto, voz) {
     let respuesta;

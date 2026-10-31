@@ -8,6 +8,8 @@ import {
   evaluarEncaje,
   leerOferta,
   adaptarCV,
+  prepararEntrevista,
+  comprobarATS,
   normalizarDatosEmpleo,
   normalizarPreferencias,
   MAX_POSTULACIONES,
@@ -66,6 +68,9 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
   let ocupado = false;
   let pintado = false;
   const ia = (peticion) => api.ia.tarea(peticion);
+  // Los portales de ai-job-search (LinkedIn y freehire) van por el servidor de avisos.
+  const portales = api.servidor?.empleo ? (d) => api.servidor.empleo.buscar(d) : null;
+  const detallePortal = api.servidor?.empleo ? (url) => api.servidor.empleo.detalle(url) : null;
 
   async function cargar() {
     if (datos) return;
@@ -260,7 +265,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       if (!entrada) return mensaje('Pega el enlace o el texto de la oferta.');
       tarea(async () => {
         progreso(/^https?:\/\//.test(entrada) ? 'Abriendo la oferta…' : 'Leyendo la oferta…');
-        const oferta = await leerOferta(ia, entrada);
+        const oferta = await leerOferta(ia, entrada, { detalle: detallePortal });
         await candidatura(oferta, { yaLeida: true });
       });
     });
@@ -282,14 +287,15 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
 
   async function buscar() {
     const { perfil } = datos.cv;
-    const pasos = ['Buscando en LinkedIn, InfoJobs e Indeed…', 'Buscando en portales especializados y webs de empresas…'];
-    const { ofertas } = await buscarOfertas(ia, perfil, datos.preferencias, { alPaso: (i) => progreso(pasos[i]) });
+    const pasos = { portales: 'Buscando en LinkedIn y freehire…', web: 'Buscando en InfoJobs, Indeed y webs de empresas…' };
+    const { ofertas, avisos } = await buscarOfertas(ia, perfil, datos.preferencias, { portales, alPaso: (p) => progreso(pasos[p]) });
     datos.ofertas = ofertas;
     datos.busqueda = Date.now();
+    datos.avisosBusqueda = avisos;
     pintarOfertas();
-    progreso('Evaluando el encaje con tu perfil…');
+    progreso('Evaluando cada oferta: idioma, ubicación y cinco dimensiones…');
     try {
-      datos.ofertas = await evaluarEncaje(ia, perfil, ofertas);
+      datos.ofertas = await evaluarEncaje(ia, perfil, ofertas, { preferencias: datos.preferencias });
     } catch {
       // Sin puntuación también sirven.
     }
@@ -308,10 +314,12 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
           <h4 class="oferta__puesto">${escapar(o.puesto)}</h4>
           <p class="oferta__empresa">${escapar([o.empresa, o.ubicacion].filter(Boolean).join(' · '))}</p>
           <ul class="chips">
-            ${o.encaje != null ? `<li class="chip chip--encaje" data-nivel="${nivel}">${o.encaje} % encaje</li>` : ''}
+            ${o.encaje != null ? `<li class="chip chip--encaje" data-nivel="${o.puerta === 'no' ? 'bajo' : nivel}">${o.encaje} · ${escapar(o.veredicto || 'encaje')}</li>` : ''}
             ${o.modalidad ? `<li class="chip">${escapar(o.modalidad)}</li>` : ''}
             ${o.salario ? `<li class="chip">${escapar(o.salario)}</li>` : ''}
           </ul>
+          ${o.puerta === 'no' || o.puerta === 'aviso' ? `<p class="oferta__puerta" data-puerta="${o.puerta}">${o.puerta === 'no' ? 'No pasa el filtro' : 'Ojo'}: ${escapar(o.notaPuerta || 'revisa los requisitos de idioma o ubicación')}</p>` : ''}
+          ${o.dimensiones ? `<p class="empleo-mono oferta__dimensiones">técnica ${o.dimensiones.tecnica ?? '–'} · experiencia ${o.dimensiones.experiencia ?? '–'} · cultura ${o.dimensiones.cultura ?? '–'} · carrera ${o.dimensiones.carrera ?? '–'}</p>` : ''}
           ${o.resumen ? `<p class="oferta__resumen">${escapar(o.resumen)}</p>` : ''}
           ${o.motivos.length ? `<ul class="oferta__lista oferta__lista--si">${o.motivos.map((m) => `<li>${escapar(m)}</li>`).join('')}</ul>` : ''}
           ${o.faltan.length ? `<ul class="oferta__lista oferta__lista--no">${o.faltan.map((m) => `<li>${escapar(m)}</li>`).join('')}</ul>` : ''}
@@ -333,7 +341,9 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     seccion.innerHTML = `
       <p class="empleo-etiqueta">(ofertas · ${fechaCorta(datos.busqueda || Date.now())})</p>
       ${datos.ofertas.map(tarjetaOferta).join('')}
-      <p class="ajuste__ayuda apartado__nota">Las encuentra la IA buscando en internet: abre la oferta para comprobar que sigue abierta antes de enviar nada.</p>`;
+      <p class="ajuste__ayuda apartado__nota">${
+        datos.avisosBusqueda?.length ? `${escapar(datos.avisosBusqueda.join(' '))} ` : ''
+      }Ofertas de LinkedIn y freehire (los buscadores de ai-job-search) y de la búsqueda web de la IA, puntuadas con su marco de evaluación. Abre la oferta antes de enviar nada.</p>`;
     seccion.querySelectorAll('[data-adaptar]').forEach((b) =>
       b.addEventListener('click', () => {
         const oferta = datos.ofertas.find((o) => o.id === b.dataset.adaptar);
@@ -379,13 +389,17 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     if (!yaLeida && oferta.url && !oferta.descripcion) {
       progreso('Leyendo la oferta completa…');
       try {
-        const leida = await leerOferta(ia, oferta.url);
+        const leida = await leerOferta(ia, oferta.url, { detalle: detallePortal });
         completa = { ...oferta, descripcion: leida.descripcion, requisitos: leida.requisitos.length ? leida.requisitos : oferta.requisitos };
       } catch {
         // Con el resumen de la búsqueda también vale.
       }
     }
-    const pasos = { redactar: 'Redactando tu CV y la carta a medida…', revisar: 'El agente revisor lo está puliendo…' };
+    const pasos = {
+      redactar: 'Redactando tu CV y la carta a medida…',
+      investigar: 'El agente revisor investiga la empresa…',
+      revisar: 'El agente revisor lo critica y lo pule…',
+    };
     const resultado = await adaptarCV(ia, datos.cv.perfil, completa, { alPaso: (p) => progreso(pasos[p]) });
     const nueva = {
       id: `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
@@ -403,7 +417,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
 
   function htmlCV(cv, idioma) {
     const [tPerfil, tExp, tForm, tHab, tIdi, tCert] = TITULOS_HTML[idioma] ?? TITULOS_HTML.es;
-    const fechas = (a, b) => [a, b].filter(Boolean).join(' – ');
+    const fechas = (a, b) => [a, b].filter(Boolean).join(' - ');
     return `
       <article class="papel" lang="${escapar(idioma)}">
         <h3 class="papel__nombre">${escapar(cv.nombre)}</h3>
@@ -458,6 +472,14 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
         carta: await pdfCarta(p.carta, p.cv, { idioma: p.idioma }),
       })));
     prepararPdfs().catch(() => {});
+    // Comprobación ATS sobre la capa de texto del PDF (copia: pdf.js se queda los bytes).
+    let ats = null;
+    const comprobar = () =>
+      (ats = pdfs.then(async (listos) => {
+        const { textoDePdf } = await import('./empleo-archivos.js');
+        return comprobarATS(await textoDePdf(listos.cv.slice()), { cv: p.cv, terminos: p.terminosOferta.length ? p.terminosOferta : p.palabrasClave });
+      }));
+    comprobar().catch(() => {});
     const o = p.oferta;
     contenedor.innerHTML = `
       <div class="apartado desplazable empleo">
@@ -469,7 +491,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
           <p class="empleo-mono">${escapar([o.empresa, o.ubicacion, o.modalidad].filter(Boolean).join(' · '))}</p>
           <h3 class="candidatura__puesto">${escapar(o.puesto)}</h3>
           <div class="candidatura__estado">
-            ${o.encaje != null ? `<span class="chip chip--encaje" data-nivel="${nivelEncaje(o.encaje)}">${o.encaje} % encaje</span>` : ''}
+            ${o.encaje != null ? `<span class="chip chip--encaje" data-nivel="${nivelEncaje(o.encaje)}">${o.encaje} · ${escapar(o.veredicto || 'encaje')}</span>` : ''}
             <select class="campo" id="cand-estado" aria-label="Estado de la candidatura">
               ${ESTADOS.map(([v, n]) => `<option value="${v}" ${p.estado === v ? 'selected' : ''}>${n}</option>`).join('')}
             </select>
@@ -479,7 +501,9 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
           <button type="button" role="tab" data-pestana="cv" aria-pressed="true">CV</button>
           <button type="button" role="tab" data-pestana="carta" aria-pressed="false">Carta</button>
           <button type="button" role="tab" data-pestana="notas" aria-pressed="false">Revisor</button>
+          <button type="button" role="tab" data-pestana="entrevista" aria-pressed="false">Entrevista</button>
         </div>
+        <div class="empleo-progreso" id="empleo-progreso" role="status" hidden></div>
         <div id="cand-contenido"></div>
         <div class="candidatura__acciones">
           <button type="button" class="boton boton--primario" id="cand-pdf-cv">${icono('descargar', 15)} PDF del CV</button>
@@ -509,19 +533,86 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
           p.carta = area.value.trim();
           await guardar();
           prepararPdfs().catch(() => {});
+          comprobar().catch(() => {});
         });
       }
       if (nombre === 'notas') {
         contenido.innerHTML = `
           <section class="empleo-notas">
+            <p class="empleo-etiqueta">(comprobación ATS del PDF)</p>
+            <div id="cand-ats" class="empleo-ats"><p class="apartado__cargando">Leyendo el PDF como lo haría un ATS…</p></div>
+            ${p.empresa ? `<p class="empleo-etiqueta">(lo que el revisor sabe de ${escapar(o.empresa)})</p><p class="empleo-texto">${escapar(p.empresa)}</p>` : ''}
             ${p.notas.length ? `<p class="empleo-etiqueta">(lo que ha cambiado el revisor)</p><ul class="oferta__lista">${p.notas.map((n) => `<li>${escapar(n)}</li>`).join('')}</ul>` : ''}
             ${p.palabrasClave.length ? `<p class="empleo-etiqueta">(palabras clave de la oferta en tu CV)</p><ul class="chips">${p.palabrasClave.map((k) => `<li class="chip">${escapar(k)}</li>`).join('')}</ul>` : ''}
             ${o.motivos.length ? `<p class="empleo-etiqueta">(por qué encajas)</p><ul class="oferta__lista oferta__lista--si">${o.motivos.map((m) => `<li>${escapar(m)}</li>`).join('')}</ul>` : ''}
             ${o.faltan.length ? `<p class="empleo-etiqueta">(qué te falta)</p><ul class="oferta__lista oferta__lista--no">${o.faltan.map((m) => `<li>${escapar(m)}</li>`).join('')}</ul>` : ''}
-            ${!p.notas.length && !p.palabrasClave.length ? '<p class="apartado__vacio">El revisor no ha dejado notas.</p>' : ''}
           </section>`;
+        pintarATS();
       }
+      if (nombre === 'entrevista') pintarEntrevista();
     };
+
+    async function pintarATS() {
+      const caja = contenido.querySelector('#cand-ats');
+      if (!caja) return;
+      try {
+        const r = await (ats ?? comprobar());
+        if (!caja.isConnected) return;
+        const fila = (ok, texto) => `<li data-ok="${ok}">${escapar(texto)}</li>`;
+        caja.innerHTML = `
+          <ul class="empleo-comprobaciones">
+            ${fila(r.email && r.telefono, r.email && r.telefono ? 'Email y teléfono en texto: el ATS los lee' : 'Falta el email o el teléfono en la capa de texto')}
+            ${fila(r.legible, r.legible ? 'Sin caracteres rotos' : 'Hay caracteres que el ATS no entenderá')}
+            ${fila(r.fechas, r.fechas ? 'Fechas con guion normal' : 'Alguna fecha usa «–»: algunos ATS no la entienden')}
+            ${r.porcentaje != null ? fila(r.porcentaje >= 70, `Términos de la oferta en tu CV: ${r.cubiertos.length} de ${r.cubiertos.length + r.faltan.length} (${r.porcentaje} %)`) : ''}
+          </ul>
+          ${r.cubiertos.length ? `<ul class="chips">${r.cubiertos.map((t) => `<li class="chip chip--si">${escapar(t)}</li>`).join('')}</ul>` : ''}
+          ${r.faltan.length ? `<ul class="chips">${r.faltan.map((t) => `<li class="chip chip--no">${escapar(t)}</li>`).join('')}</ul>
+            <p class="ajuste__ayuda">Los que faltan no se añaden solos: si de verdad los tienes, ponlos en tu CV y vuelve a adaptar.</p>` : ''}`;
+      } catch (error) {
+        caja.innerHTML = `<p class="ajuste__ayuda">No se ha podido comprobar: ${escapar(error.message)}</p>`;
+      }
+    }
+
+    function pintarEntrevista() {
+      const e = p.entrevista;
+      if (!e) {
+        contenido.innerHTML = `
+          <section class="empleo-notas">
+            <p class="empleo-texto">Kitsune prepara la entrevista con tu experiencia real: ejemplos STAR, las preguntas difíciles que te harán con esta oferta y qué preguntar tú.</p>
+            <button type="button" class="boton boton--primario" id="cand-preparar" data-bloquear>${icono('chispa', 15)} Preparar la entrevista</button>
+          </section>`;
+        contenido.querySelector('#cand-preparar').addEventListener('click', () =>
+          tarea(async () => {
+            progreso('Preparando tu entrevista…');
+            p.entrevista = await prepararEntrevista(ia, datos.cv.perfil, o, { empresa: p.empresa });
+            await guardar();
+            if (contenedor.querySelector('[data-pestana="entrevista"]')?.getAttribute('aria-pressed') === 'true') pintarEntrevista();
+          }),
+        );
+        return;
+      }
+      contenido.innerHTML = `
+        <section class="empleo-notas">
+          ${e.porQueEmpresa ? `<p class="empleo-etiqueta">(por qué esta empresa)</p><p class="empleo-texto">${escapar(e.porQueEmpresa)}</p>` : ''}
+          ${e.star.length ? `<p class="empleo-etiqueta">(tus ejemplos STAR)</p>${e.star
+            .map(
+              (x) => `<article class="empleo-star"><h4>${escapar(x.titulo)}${x.competencia ? ` <span class="empleo-mono">· ${escapar(x.competencia)}</span>` : ''}</h4>
+                <dl><dt>S</dt><dd>${escapar(x.s)}</dd><dt>T</dt><dd>${escapar(x.t)}</dd><dt>A</dt><dd>${escapar(x.a)}</dd><dt>R</dt><dd>${escapar(x.r)}</dd></dl>
+                ${x.usarPara.length ? `<p class="empleo-mono">para: ${escapar(x.usarPara.join(' · '))}</p>` : ''}</article>`,
+            )
+            .join('')}` : ''}
+          ${e.dificiles.length ? `<p class="empleo-etiqueta">(preguntas difíciles)</p>${e.dificiles
+            .map((x) => `<details class="empleo-pregunta"><summary>${escapar(x.pregunta)}</summary><p>${escapar(x.respuesta)}</p></details>`)
+            .join('')}` : ''}
+          ${e.paraPreguntar.length ? `<p class="empleo-etiqueta">(qué preguntar tú)</p><ul class="oferta__lista">${e.paraPreguntar.map((x) => `<li>${escapar(x)}</li>`).join('')}</ul>` : ''}
+          <button type="button" class="boton" id="cand-rehacer" data-bloquear>Volver a preparar</button>
+        </section>`;
+      contenido.querySelector('#cand-rehacer').addEventListener('click', () => {
+        p.entrevista = null;
+        pintarEntrevista();
+      });
+    }
     contenedor.querySelectorAll('[data-pestana]').forEach((b) => b.addEventListener('click', () => pestana(b.dataset.pestana)));
     pestana('cv');
 

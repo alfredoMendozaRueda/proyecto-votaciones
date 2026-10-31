@@ -11,6 +11,7 @@ import { normalizarAutomatizacion, MAX_AUTOMATIZACIONES } from '../../src/compar
 import { ClienteGmail } from '../../src/compartido/gmail.js';
 import { aviso } from '../../src/compartido/notificaciones.js';
 import { sintetizar, validarVoz } from './voz.js';
+import { buscarEnPortales, detalleOferta } from '../../src/compartido/portales.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -377,6 +378,35 @@ async function atender(peticion, env) {
     return json({ ok: true });
   }
   if (m === 'POST' && ruta === '/desvincular') return desvincular(n);
+  // Empleo: los portales de ai-job-search (LinkedIn y freehire), que el
+  // navegador no puede consultar directamente.
+  if (m === 'POST' && ruta === '/empleo/buscar') {
+    const d = await cuerpo(peticion);
+    return json(
+      await buscarEnPortales({
+        puestos: String(d.puestos ?? '').slice(0, 300),
+        ubicacion: String(d.ubicacion ?? '').slice(0, 150),
+        modalidad: ['remoto', 'híbrido', 'presencial'].includes(d.modalidad) ? d.modalidad : '',
+        dias: Math.min(60, Math.max(1, Number(d.dias) || 14)),
+      }),
+    );
+  }
+  if (m === 'POST' && ruta === '/empleo/detalle') {
+    const { url } = await cuerpo(peticion);
+    let direccion;
+    try {
+      direccion = new URL(String(url ?? ''));
+    } catch {
+      throw new ErrorHttp(400, 'Dirección no válida.');
+    }
+    // Solo páginas públicas por https (nada de IPs ni nombres internos).
+    if (direccion.protocol !== 'https:' || !/\.[a-z]{2,}$/i.test(direccion.hostname) || /^[\d.]+$|\[/.test(direccion.hostname)) {
+      throw new ErrorHttp(400, 'Solo enlaces https de páginas públicas.');
+    }
+    const oferta = await detalleOferta(direccion.href);
+    if (!oferta) throw new ErrorHttp(404, 'La oferta ya no existe.');
+    return json(oferta);
+  }
   if (m === 'POST' && ruta === '/voz') {
     if (!n.env.AI) throw new ErrorHttp(503, 'Este servidor no tiene activada la IA de Cloudflare.');
     const { texto, voz, error } = validarVoz(await cuerpo(peticion));

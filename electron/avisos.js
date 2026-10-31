@@ -50,6 +50,10 @@ export const servidor = {
   },
   probar: () => usar((c) => c.probar()),
   voz: (texto, voz) => usar((c) => c.voz(String(texto ?? ''), String(voz ?? ''))),
+  empleo: {
+    buscar: (datos) => usar((c) => c.empleoBuscar(datos)),
+    detalle: (url) => usar((c) => c.empleoDetalle(String(url ?? ''))),
+  },
   resumen: () => usar((c) => c.resumen()),
   crearCodigo: () => usar((c) => c.crearCodigo()),
   avisos: (avisos) => usar((c) => c.avisos(avisos)),

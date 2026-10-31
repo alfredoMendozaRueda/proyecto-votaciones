@@ -357,3 +357,13 @@ test('voz: trozos de frases enteras y sin markdown', async () => {
   assert.ok(trozos.every((t) => t.length <= 600));
   assert.ok(trozos.length > 3);
 });
+
+test('empleo: rutas de portales solo para dispositivos y sin direcciones internas', async () => {
+  const env = entorno();
+  const { token } = await vincular(env);
+  assert.equal((await pedir(env, '/empleo/buscar', { metodo: 'POST', cuerpo: { puestos: 'react' } })).status, 401);
+  for (const url of ['http://ejemplo.es/oferta', 'https://127.0.0.1/x', 'https://localhost/x', 'https://[::1]/x', 'no es url']) {
+    const r = await pedir(env, '/empleo/detalle', { metodo: 'POST', token, cuerpo: { url } });
+    assert.equal(r.status, 400, url);
+  }
+});

@@ -48,6 +48,10 @@ contextBridge.exposeInMainWorld('asistente', {
     enviar: (datos) => invocar('correo:enviar', datos),
     alNuevo: (callback) => escuchar('correo:nuevo', callback),
   },
+  voicestudio: {
+    hablar: (texto) => invocar('voicestudio:hablar', texto),
+    voces: () => invocar('voicestudio:voces'),
+  },
   ia: {
     tarea: (peticion) => invocar('ia:tarea', peticion),
   },
@@ -79,6 +83,10 @@ contextBridge.exposeInMainWorld('asistente', {
     canjear: (codigo) => invocar('servidor:canjear', codigo),
     probar: () => invocar('servidor:probar'),
     voz: (texto, voz) => invocar('servidor:voz', texto, voz),
+    empleo: {
+      buscar: (datos) => invocar('servidor:empleoBuscar', datos),
+      detalle: (url) => invocar('servidor:empleoDetalle', url),
+    },
     resumen: () => invocar('servidor:resumen'),
     crearCodigo: () => invocar('servidor:codigo'),
     avisos: (avisos) => invocar('servidor:avisos', avisos),

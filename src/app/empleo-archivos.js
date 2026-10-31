@@ -10,7 +10,7 @@ const decodificarXml = (t) =>
     e[0] === '#' ? String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : (entidades[e] ?? m),
   );
 
-async function textoDePdf(bytes) {
+export async function textoDePdf(bytes) {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const { default: urlWorker } = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url');
   pdfjs.GlobalWorkerOptions.workerSrc = urlWorker;
