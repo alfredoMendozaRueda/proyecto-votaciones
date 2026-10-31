@@ -48,6 +48,13 @@ contextBridge.exposeInMainWorld('asistente', {
     enviar: (datos) => invocar('correo:enviar', datos),
     alNuevo: (callback) => escuchar('correo:nuevo', callback),
   },
+  ia: {
+    tarea: (peticion) => invocar('ia:tarea', peticion),
+  },
+  empleo: {
+    leer: () => invocar('empleo:leer'),
+    guardar: (datos) => invocar('empleo:guardar', datos),
+  },
   memoria: {
     listar: () => invocar('memoria:listar'),
     recordar: (texto) => invocar('memoria:recordar', texto),
@@ -71,6 +78,7 @@ contextBridge.exposeInMainWorld('asistente', {
     estado: () => invocar('servidor:estado'),
     canjear: (codigo) => invocar('servidor:canjear', codigo),
     probar: () => invocar('servidor:probar'),
+    voz: (texto, voz) => invocar('servidor:voz', texto, voz),
     resumen: () => invocar('servidor:resumen'),
     crearCodigo: () => invocar('servidor:codigo'),
     avisos: (avisos) => invocar('servidor:avisos', avisos),

@@ -11,6 +11,9 @@ no puede hacer cuando está cerrada:
   - «el resumen del día a las 8»;
   - «archiva los boletines».
 - **Revisión cada minuto**: recordatorios, correo, citas y automatizaciones.
+- **Voz natural** para que Kitsune lea sus respuestas: voces en español de Aura-2
+  (Deepgram) con Workers AI. El plan gratuito da para unas 3.500 letras al día;
+  después usa MeloTTS, más sencilla y casi sin límite.
 
 Solo tiene acceso tu cuenta: la primera cuenta de Google que lo conecta es la
 dueña. El permiso de Google y tu clave de Groq se guardan cifrados con una clave
@@ -95,6 +98,9 @@ Entra de sobra en el plan gratuito de Cloudflare:
 
 Las automatizaciones que crean eventos desde el correo usan tu clave de Groq,
 también gratuita.
+
+La voz usa los 10.000 «neuronas» diarias gratuitas de Workers AI: unas 3.500
+letras con Aura-2. Si se gastan, sigue con MeloTTS hasta el día siguiente.
 
 ## Desarrollo
 

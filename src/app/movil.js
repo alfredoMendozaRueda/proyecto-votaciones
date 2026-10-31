@@ -15,6 +15,7 @@ const CURVA = 'cubic-bezier(0.32, 0.72, 0, 1)';
 const DURACION = 560;
 
 const ENTRADAS_MAS = [
+  { vista: 'empleo', icono: 'maletin', titulo: 'Empleo', detalle: 'Tu CV, ofertas y candidaturas a medida' },
   { vista: 'memoria', icono: 'memoria', titulo: 'Memoria', detalle: 'Lo que Kitsune recuerda de ti' },
   { vista: 'historial', icono: 'historial', titulo: 'Historial', detalle: 'Tus conversaciones guardadas' },
   { vista: 'ajustes', icono: 'ajustes', titulo: 'Ajustes', detalle: 'IA, Google, voz y aspecto' },

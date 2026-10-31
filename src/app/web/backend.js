@@ -482,6 +482,15 @@ export function crearBackendWeb() {
       alAviso: (f) => escuchar('recordatorio', f),
     },
     servidor: avisos.servidor,
+    // Tareas sueltas de IA (Empleo): la IA elegida en Ajustes.
+    ia: {
+      tarea: async (peticion) => (await obtenerConversacion()).tarea(peticion),
+    },
+    // CV, búsquedas y candidaturas: datos personales, cifrados como las claves.
+    empleo: {
+      leer: async () => JSON.parse((await leerSecreto('empleo')) ?? 'null'),
+      guardar: (datos) => guardarSecreto('empleo', JSON.stringify(datos)),
+    },
     ventana: {
       alAlternar: () => () => {},
       alAbrirAjustes: () => () => {},

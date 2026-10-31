@@ -49,6 +49,7 @@ export const servidor = {
     return servidor.estado();
   },
   probar: () => usar((c) => c.probar()),
+  voz: (texto, voz) => usar((c) => c.voz(String(texto ?? ''), String(voz ?? ''))),
   resumen: () => usar((c) => c.resumen()),
   crearCodigo: () => usar((c) => c.crearCodigo()),
   avisos: (avisos) => usar((c) => c.avisos(avisos)),

@@ -10,6 +10,7 @@ import { partesLocales } from './tiempo.js';
 import { normalizarAutomatizacion, MAX_AUTOMATIZACIONES } from '../../src/compartido/automatizaciones.js';
 import { ClienteGmail } from '../../src/compartido/gmail.js';
 import { aviso } from '../../src/compartido/notificaciones.js';
+import { sintetizar, validarVoz } from './voz.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -196,6 +197,8 @@ async function estado(n, d) {
     google: Boolean(a.google && !a.google.caducado),
     googleCaducado: Boolean(a.google?.caducado),
     groq: Boolean(a.groq),
+    // Voz natural: hace falta la IA de Cloudflare (binding AI).
+    voz: Boolean(n.env.AI),
     zona: await n.zona(),
     avisos: await n.avisos(),
     vapid: (await n.vapid()).publica,
@@ -374,6 +377,15 @@ async function atender(peticion, env) {
     return json({ ok: true });
   }
   if (m === 'POST' && ruta === '/desvincular') return desvincular(n);
+  if (m === 'POST' && ruta === '/voz') {
+    if (!n.env.AI) throw new ErrorHttp(503, 'Este servidor no tiene activada la IA de Cloudflare.');
+    const { texto, voz, error } = validarVoz(await cuerpo(peticion));
+    if (error) throw new ErrorHttp(400, error);
+    const { audio, motor } = await sintetizar(n.env.AI, texto, voz);
+    return new Response(audio, {
+      headers: { ...CORS, 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store', 'X-Voz-Motor': motor, 'Access-Control-Expose-Headers': 'X-Voz-Motor' },
+    });
+  }
   throw new ErrorHttp(404, 'No existe.');
 }
 

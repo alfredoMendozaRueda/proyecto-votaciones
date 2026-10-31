@@ -114,6 +114,25 @@ export class ClienteServidor {
   desvincular() {
     return this.pedir('/desvincular', { metodo: 'POST' });
   }
+
+  // Audio MP3 de un trozo de texto con la voz natural del servidor.
+  async voz(texto, voz) {
+    let respuesta;
+    try {
+      respuesta = await this.fetch(`${this.url}/voz`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto, voz }),
+      });
+    } catch {
+      throw new ErrorServidor('No hay conexión con el servidor de avisos.');
+    }
+    if (!respuesta.ok) {
+      const datos = await respuesta.json().catch(() => ({}));
+      throw new ErrorServidor(datos.error || `El servidor respondió ${respuesta.status}.`, { desvinculado: respuesta.status === 401 });
+    }
+    return new Uint8Array(await respuesta.arrayBuffer());
+  }
 }
 
 // Lo que la app manda al servidor: solo los recordatorios pendientes.

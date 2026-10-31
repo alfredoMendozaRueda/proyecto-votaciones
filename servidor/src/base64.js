@@ -23,3 +23,6 @@ export const unir = (...partes) => {
 };
 
 export const utf8 = (texto) => new TextEncoder().encode(texto);
+
+// Base64 normal (con + / y relleno).
+export const deBase64 = (texto) => Uint8Array.from(atob(texto), (c) => c.charCodeAt(0));

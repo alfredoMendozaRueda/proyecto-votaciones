@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { historialValido, mensajesVisibles } from './historial.js';
 import { nuevoIdConversacion } from './conversaciones.js';
-import { turnoGroq, textoGroq, probarClaveGroq, buscarEnInternetGroq } from './groq.js';
+import { turnoGroq, textoGroq, tareaGroq, probarClaveGroq, buscarEnInternetGroq } from './groq.js';
 import { verTiempo } from './tiempo.js';
 import { PERMISOS, nivel, nivelHerramienta } from './permisos.js';
 import { normalizarAutomatizacion, describirCuando, describirHacer } from './automatizaciones.js';
@@ -1082,6 +1082,38 @@ export class ConversacionClaude {
       .map((b) => b.text)
       .join('')
       .trim();
+  }
+
+  // Una tarea suelta fuera del chat (Empleo). Con web puede buscar en internet.
+  // Devuelve { texto, fuentes }.
+  async tarea({ sistema, usuario, web = false, max = 8000 }) {
+    const proveedor = this.#proveedor();
+    const cliente = await this.#cliente(proveedor);
+    if (proveedor === 'groq') {
+      return tareaGroq({ apiKey: cliente.apiKey, modelo: this.obtenerAjustes().modeloGroq, sistema, usuario, web, max, fetch: this.opcionesCliente.fetch });
+    }
+    const { modelo } = this.obtenerAjustes();
+    const mensajes = [{ role: 'user', content: usuario }];
+    const fuentes = new Map();
+    let texto = '';
+    // pause_turn: la búsqueda en el servidor de Anthropic se ha tomado un respiro; se sigue.
+    for (let vuelta = 0; vuelta < 4; vuelta++) {
+      const parametros = this.#parametros({ maxTokens: Math.max(max, 16000), sistema, mensajes, herramientas: web ? [herramientaBusqueda(modelo)] : [] });
+      parametros.output_config = { effort: 'medium' };
+      const mensaje = await cliente.beta.messages.stream(parametros).finalMessage();
+      if (mensaje.stop_reason === 'refusal') throw new Error('Claude no ha podido hacer esta tarea.');
+      for (const bloque of mensaje.content) {
+        if (bloque.type !== 'text') continue;
+        texto += bloque.text;
+        for (const cita of bloque.citations ?? []) {
+          if (/^https?:\/\//.test(cita.url ?? '')) fuentes.set(cita.url, cita.title || new URL(cita.url).hostname);
+        }
+      }
+      if (mensaje.stop_reason !== 'pause_turn') break;
+      mensajes.push({ role: 'assistant', content: mensaje.content });
+    }
+    if (!texto.trim()) throw new Error('Claude no ha devuelto nada. Vuelve a intentarlo.');
+    return { texto: texto.trim(), fuentes: [...fuentes].map(([url, titulo]) => ({ url, titulo })) };
   }
 
   // Comprueba la clave con una llamada que no consume tokens.

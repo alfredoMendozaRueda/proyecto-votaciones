@@ -1,6 +1,7 @@
 import { icono } from './iconos.js';
 import { PALETAS } from '../kitsune/paletas.js';
 import { PERMISOS, NOMBRES_NIVEL, nivelesDe, nivel } from '../compartido/permisos.js';
+import { VOCES } from '../compartido/voz.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -62,7 +63,7 @@ function atajoDesdeEvento(e) {
   return [...partes, tecla].join('+');
 }
 
-export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
+export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz = async () => {} }) {
   let ajustes = null;
 
   const segmentado = (clave, opciones) => `
@@ -201,7 +202,17 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
             <label class="ajuste__etiqueta" for="ajuste-dormir">Dormirse sin actividad</label>
             <div style="width:150px">${selector('dormirTrasMin', 'ajuste-dormir', [[0, 'Nunca'], [2, 'A los 2 min'], [5, 'A los 5 min'], [10, 'A los 10 min'], [30, 'A los 30 min']])}</div>
           </div>
-          ${interruptor('voz', 'Leer las respuestas en voz alta', escritorio ? 'Usa las voces en español de Windows.' : 'Usa las voces en español del dispositivo.')}
+          ${interruptor('voz', 'Leer las respuestas en voz alta')}
+          <div class="ajuste">
+            <div class="ajuste__etiqueta">Tipo de voz</div>
+            ${segmentado('vozTipo', [['natural', 'Natural'], ['dispositivo', escritorio ? 'De Windows' : 'Del dispositivo']])}
+            <p class="ajuste__ayuda">La natural la genera tu servidor de avisos (hay que vincularlo en «Avisos en el móvil»): gratis hasta unas 3.500 letras al día y después una voz más sencilla. Sin servidor se usa la del dispositivo.</p>
+          </div>
+          <div class="ajuste ajuste--fila">
+            <label class="ajuste__etiqueta" for="ajuste-voz-nombre">Voz natural</label>
+            <div style="width:210px">${selector('vozNombre', 'ajuste-voz-nombre', VOCES.map((v) => [v.id, `${v.nombre} · ${v.detalle}`]))}</div>
+          </div>
+          <div class="botonera"><button type="button" class="boton" id="voz-probar">${icono('altavoz', 15)} Escuchar la voz</button></div>
           ${interruptor('pulsoDiario', 'Pulso del día', 'La primera vez que abres Kitsune cada día te ofrece un resumen de correo y recordatorios.')}
         </section>
 
@@ -611,6 +622,15 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
         }
       }),
     );
+    contenedor.querySelector('#voz-probar')?.addEventListener('click', async (e) => {
+      const boton = e.currentTarget;
+      boton.disabled = true;
+      try {
+        await probarVoz();
+      } finally {
+        boton.disabled = false;
+      }
+    });
     const personalidad = contenedor.querySelector('#ajuste-personalidad');
     personalidad.addEventListener('change', () => guardar({ personalidad: personalidad.value.trim() }));
 

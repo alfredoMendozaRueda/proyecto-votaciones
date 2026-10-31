@@ -551,6 +551,22 @@ export function crearDemo() {
       alAviso: (f) => escuchar('aviso', f),
     },
     // Servidor de avisos simulado: vinculado, con push y dos automatizaciones.
+    // IA simulada para Empleo: respuestas fijas según la tarea.
+    ia: {
+      async tarea({ sistema, usuario }) {
+        await new Promise((r) => setTimeout(r, 700));
+        return { texto: JSON.stringify(respuestaEmpleoDemo(sistema, usuario)), fuentes: [] };
+      },
+    },
+    empleo: (() => {
+      let guardado = null;
+      return {
+        leer: async () => (guardado ? JSON.parse(guardado) : null),
+        guardar: async (datos) => {
+          guardado = JSON.stringify(datos);
+        },
+      };
+    })(),
     servidor: (() => {
       let autos = PLANTILLAS.slice(0, 2).map((p, i) => normalizarAutomatizacion(p.automatizacion, `ademo${i}`));
       let avisos = { correo: true, soloPrincipal: true, correoCadaMin: 2, citas: 15, silencio: { activo: true, desde: '23:00', hasta: '08:00' } };
@@ -652,4 +668,63 @@ export function crearDemo() {
     },
   };
   return api;
+}
+
+
+// ---------- Empleo (demostración) ----------
+
+const PERFIL_DEMO = {
+  nombre: 'Elena Martín Rubio',
+  titular: 'Desarrolladora frontend',
+  ubicacion: 'Madrid',
+  email: 'elena.martin@ejemplo.es',
+  telefono: '600 123 456',
+  enlaces: ['linkedin.com/in/elena-martin-ejemplo'],
+  resumen: 'Desarrolladora frontend con 6 años de experiencia en React y TypeScript, accesibilidad y rendimiento web.',
+  experiencia: [
+    { puesto: 'Desarrolladora frontend sénior', empresa: 'Tranvía Software', lugar: 'Madrid', inicio: '03/2022', fin: 'Actualidad', logros: ['Lideré la migración de la web de clientes a React 18 y Vite.', 'Reduje el tiempo de carga un 38 % con división de código y caché.', 'Mentora de 3 personas del equipo.'] },
+    { puesto: 'Desarrolladora frontend', empresa: 'Estudio Lumen', lugar: 'Madrid', inicio: '09/2019', fin: '02/2022', logros: ['Construí el sistema de diseño en React usado por 4 productos.', 'Llevé la accesibilidad a nivel AA de las WCAG.'] },
+  ],
+  formacion: [{ titulo: 'Grado en Ingeniería Informática', centro: 'Universidad Politécnica de Madrid', inicio: '2014', fin: '2019' }],
+  habilidades: ['React', 'TypeScript', 'Vite', 'Accesibilidad (WCAG)', 'Testing Library', 'CSS', 'Node.js', 'Figma'],
+  idiomas: ['Español (nativo)', 'Inglés (C1)'],
+  certificaciones: [],
+  puestosObjetivo: ['Desarrolladora frontend sénior', 'Ingeniera frontend React', 'Frontend lead'],
+  nivel: 'senior',
+};
+
+const OFERTAS_DEMO = [
+  { puesto: 'Frontend Engineer sénior (React)', empresa: 'Brújula Labs', ubicacion: 'Madrid', modalidad: 'híbrido', salario: '48.000–55.000 €', publicada: 'hace 3 días', url: 'https://empleo.ejemplo.es/brujula/frontend-senior', fuente: 'ejemplo.es', resumen: 'Producto de rutas para logística. Equipo de 6 personas, React y TypeScript.', requisitos: ['5+ años con React', 'TypeScript', 'Testing'] },
+  { puesto: 'Desarrollador/a frontend', empresa: 'Hoja Roja Digital', ubicacion: 'Remoto (España)', modalidad: 'remoto', salario: '40.000 €', publicada: 'hace 1 semana', url: 'https://empleo.ejemplo.es/hojaroja/frontend', fuente: 'ejemplo.es', resumen: 'Tienda online de libros. Vue y Nuxt, se valora React.', requisitos: ['Vue 3', 'Nuxt', 'SEO técnico'] },
+  { puesto: 'Frontend Lead', empresa: 'Nube Clara', ubicacion: 'Madrid', modalidad: 'presencial', salario: '', publicada: 'hace 5 días', url: 'https://empleo.ejemplo.es/nubeclara/frontend-lead', fuente: 'ejemplo.es', resumen: 'Liderar un equipo de 5 en una plataforma de facturación.', requisitos: ['Liderazgo', 'React', 'Arquitectura frontend'] },
+];
+
+function respuestaEmpleoDemo(sistema, usuario) {
+  if (/Analizas currículums/.test(sistema)) return PERFIL_DEMO;
+  if (/buscador de empleo/.test(sistema)) return { ofertas: /LinkedIn Jobs/.test(sistema) ? OFERTAS_DEMO.slice(0, 2) : OFERTAS_DEMO.slice(1) };
+  if (/técnico de selección/.test(sistema)) {
+    const ids = [...usuario.matchAll(/<oferta id="([^"]+)"/g)].map((m) => m[1]);
+    const notas = [
+      [86, ['6 años con React y TypeScript', 'Experiencia en rendimiento web'], ['Testing de extremo a extremo']],
+      [58, ['Frontend con experiencia', 'Remoto en España'], ['Piden Vue y Nuxt', 'SEO técnico']],
+      [71, ['Mentora en su equipo actual', 'React avanzado'], ['Liderazgo formal de un equipo']],
+    ];
+    return { evaluaciones: ids.map((id, i) => ({ id, encaje: notas[i % 3][0], motivos: notas[i % 3][1], faltan: notas[i % 3][2] })) };
+  }
+  if (/Extrae los datos de la oferta/.test(sistema)) {
+    return { ...OFERTAS_DEMO[0], descripcion: 'Buscamos una persona frontend sénior para nuestro producto de rutas. Funciones: desarrollar con React y TypeScript, cuidar el rendimiento y la accesibilidad, revisar código. Requisitos: 5+ años con React, TypeScript, testing. Se valora: experiencia en sistemas de diseño.' };
+  }
+  if (/revisor exigente/.test(sistema)) {
+    const propuesta = JSON.parse(usuario.match(/<propuesta>\n([\s\S]*)\n<\/propuesta>/)[1]);
+    return { ...propuesta, notas: ['Resumen más concreto para la oferta.', 'Quitada una cifra que no estaba en tu CV.', 'Prepara un ejemplo de mejora de rendimiento para la entrevista.'], encaje: 87 };
+  }
+  if (/experto en selección/.test(sistema)) {
+    return {
+      cv: { ...PERFIL_DEMO, titular: 'Frontend Engineer sénior · React y TypeScript', resumen: 'Ingeniera frontend con 6 años construyendo productos en React y TypeScript, con foco en rendimiento (−38 % en tiempo de carga), accesibilidad AA y sistemas de diseño.' },
+      carta: 'Hola, equipo de Brújula Labs:\n\nOs escribo por la oferta de Frontend Engineer sénior. Llevo seis años construyendo productos con React y TypeScript; en Tranvía Software lideré la migración a React 18 y reduje un 38 % el tiempo de carga.\n\nMe atrae vuestro producto de rutas porque el rendimiento en móvil es clave para quien lo usa en la calle, y es justo donde más he trabajado.\n\nMe encantaría contaros más en una entrevista.\n\nUn saludo,\nElena Martín Rubio',
+      palabrasClave: ['React', 'TypeScript', 'Testing', 'rendimiento'],
+      idioma: 'es',
+    };
+  }
+  return {};
 }

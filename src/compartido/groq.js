@@ -260,6 +260,32 @@ export async function textoGroq({ apiKey, modelo, sistema, usuario, fetch }) {
   return (datos.choices?.[0]?.message?.content ?? '').trim();
 }
 
+// Una tarea más larga fuera del chat (Empleo): analizar un CV, buscar ofertas,
+// adaptar un CV… Con web, el modelo puede buscar y abrir páginas
+// (browser_search, solo en los GPT-OSS). Devuelve { texto, fuentes }.
+export async function tareaGroq({ apiKey, modelo, sistema, usuario, web = false, max = 4000, fetch }) {
+  const alternativas = web ? ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'] : MODELOS_GROQ;
+  const respuesta = await conRespaldo(web ? 'openai/gpt-oss-120b' : modelo, (m) =>
+    pedir(apiKey, '/chat/completions', {
+      fetch,
+      cuerpo: {
+        model: m,
+        messages: [
+          { role: 'system', content: sistema },
+          { role: 'user', content: usuario },
+        ],
+        max_completion_tokens: max,
+        ...(web ? { tools: [{ type: 'browser_search' }], reasoning_effort: 'medium' } : parametrosModelo(m)),
+      },
+    }),
+  alternativas);
+  const datos = await respuesta.json();
+  const mensaje = datos.choices?.[0]?.message ?? {};
+  const texto = limpiarCitas(mensaje.content || '');
+  if (!texto) throw new ErrorGroq('La IA no ha devuelto nada. Vuelve a intentarlo en un momento.');
+  return { texto, fuentes: web ? fuentesDeBusqueda(mensaje, texto) : [] };
+}
+
 // Búsqueda web gratuita: la hacen los servidores de Groq con la herramienta
 // browser_search de los modelos GPT-OSS. Va en una petición aparte (con el
 // modelo pequeño, que tiene su propio límite) y devuelve un resumen corto,

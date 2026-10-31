@@ -20,6 +20,7 @@ import { Memoria } from '../src/compartido/memoria.js';
 import { Conversaciones, ID_CONVERSACION } from '../src/compartido/conversaciones.js';
 import { servidor, sincronizarRecordatorios, automatizacionesChat } from './avisos.js';
 import { aviso } from '../src/compartido/notificaciones.js';
+import { normalizarDatosEmpleo } from '../src/compartido/empleo.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const URL_DESARROLLO = process.env.KITSUNE_DEV_URL;
@@ -378,6 +379,16 @@ function registrarCanales() {
   manejar('memoria:olvidar', (id) => memoria.olvidar(String(id ?? '')));
   manejar('memoria:olvidarTodo', () => memoria.olvidarTodo());
   manejar('claude:redactar', async (id, indicaciones) => claude.redactarRespuesta(await gmail.leer(id), String(indicaciones ?? '')));
+  manejar('ia:tarea', (p) =>
+    claude.tarea({
+      sistema: String(p?.sistema ?? '').slice(0, 20000),
+      usuario: String(p?.usuario ?? '').slice(0, 60000),
+      web: p?.web === true,
+      max: Math.min(16000, Math.max(500, Number(p?.max) || 4000)),
+    }),
+  );
+  manejar('empleo:leer', () => JSON.parse(leerSecreto('empleo') ?? 'null'));
+  manejar('empleo:guardar', (datos) => guardarSecreto('empleo', JSON.stringify(normalizarDatosEmpleo(datos))));
 
   manejar('correo:estado', () => gmail.estado());
   manejar('correo:cliente', (secreto) => gmail.guardarCliente(String(secreto ?? '')));
@@ -400,6 +411,7 @@ function registrarCanales() {
   manejar('servidor:estado', () => servidor.estado());
   manejar('servidor:canjear', (codigo) => servidor.canjear(String(codigo ?? '')));
   manejar('servidor:probar', () => servidor.probar());
+  manejar('servidor:voz', (texto, voz) => servidor.voz(texto, voz));
   manejar('servidor:resumen', () => servidor.resumen());
   manejar('servidor:codigo', () => servidor.crearCodigo());
   manejar('servidor:avisos', (avisos) => servidor.avisos(avisos));

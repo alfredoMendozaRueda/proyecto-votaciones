@@ -316,3 +316,44 @@ test('desvincular borra todo menos las claves VAPID', async () => {
   const { results } = await env.DB.prepare('SELECT clave FROM ajustes').all();
   assert.deepEqual(results.map((r) => r.clave), ['vapid']);
 });
+
+test('voz: Aura-2 en español, MeloTTS si falla, y solo para dispositivos vinculados', async () => {
+  const env = entorno();
+  const { token } = await vincular(env);
+  const llamadas = [];
+  let auraFalla = false;
+  env.AI = {
+    async run(modelo, entrada) {
+      llamadas.push({ modelo, entrada });
+      if (modelo.includes('aura')) {
+        if (auraFalla) throw new Error('cuota agotada');
+        return new Response(new Uint8Array(400).fill(7)).body;
+      }
+      return { audio: btoa(String.fromCharCode(...new Uint8Array(300).fill(9))) };
+    },
+  };
+  assert.equal((await (await pedir(env, '/estado', { token })).json()).voz, true);
+  const r = await pedir(env, '/voz', { metodo: 'POST', token, cuerpo: { texto: 'Hola, soy Kitsune.', voz: 'nestor' } });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('Content-Type'), 'audio/mpeg');
+  assert.equal(r.headers.get('X-Voz-Motor'), 'aura');
+  assert.equal((await r.arrayBuffer()).byteLength, 400);
+  assert.deepEqual(llamadas[0], { modelo: '@cf/deepgram/aura-2-es', entrada: { text: 'Hola, soy Kitsune.', speaker: 'nestor', encoding: 'mp3' } });
+  auraFalla = true;
+  const r2 = await pedir(env, '/voz', { metodo: 'POST', token, cuerpo: { texto: 'Otra vez', voz: 'inventada' } });
+  assert.equal(r2.headers.get('X-Voz-Motor'), 'melo');
+  assert.equal((await r2.arrayBuffer()).byteLength, 300);
+  assert.equal(llamadas.at(-2).entrada.speaker, 'diana');
+  assert.equal((await pedir(env, '/voz', { metodo: 'POST', cuerpo: { texto: 'Hola' } })).status, 401);
+  assert.equal((await pedir(env, '/voz', { metodo: 'POST', token, cuerpo: { texto: 'x'.repeat(700) } })).status, 400);
+});
+
+test('voz: trozos de frases enteras y sin markdown', async () => {
+  const { trozosDeVoz, limpiarParaVoz } = await import('../src/compartido/voz.js');
+  assert.equal(limpiarParaVoz('**Hola** 🦊, mira [esto](https://x.es) y `código`.'), 'Hola , mira esto y código.');
+  const largo = 'Primera frase corta. ' + 'Esta es una frase de relleno bastante larga para probar. '.repeat(30);
+  const trozos = trozosDeVoz(largo);
+  assert.ok(trozos[0].length <= 160);
+  assert.ok(trozos.every((t) => t.length <= 600));
+  assert.ok(trozos.length > 3);
+});

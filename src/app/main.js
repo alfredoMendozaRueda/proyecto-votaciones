@@ -4,8 +4,10 @@ import { crearBackendWeb } from './web/backend.js';
 import { crearChat } from './chat.js';
 import { crearCorreo } from './correo.js';
 import { crearAjustes } from './ajustes.js';
+import { crearEmpleo } from './empleo.js';
 import { crearAgenda, crearRecordatorios, crearMemoria, crearHistorial } from './vistas.js';
 import { icono } from './iconos.js';
+import { trozosDeVoz, limpiarParaVoz } from '../compartido/voz.js';
 import { prepararMovil } from './movil.js';
 import { prepararOndas, prepararIndicador, entrarVista, saltar, prepararEnvio } from './animaciones.js';
 
@@ -25,7 +27,7 @@ const dialogo = document.getElementById('dialogo');
 const insignia = document.getElementById('insignia-correo');
 const insigniaRecordatorios = document.getElementById('insignia-recordatorios');
 const vistas = Object.fromEntries(
-  ['chat', 'correo', 'agenda', 'recordatorios', 'memoria', 'historial', 'ajustes'].map((v) => [v, document.getElementById(`vista-${v}`)]),
+  ['chat', 'correo', 'agenda', 'recordatorios', 'memoria', 'historial', 'empleo', 'ajustes'].map((v) => [v, document.getElementById(`vista-${v}`)]),
 );
 const pestanas = Object.fromEntries([...document.querySelectorAll('.apartados [data-vista]')].map((b) => [b.dataset.vista, b]));
 for (const span of document.querySelectorAll('.apartado__icono')) span.innerHTML = icono(span.dataset.icono, 18);
@@ -63,7 +65,7 @@ function aplicarAjustes(a) {
 }
 
 // Orden de los apartados: la vista nueva entra desde el lado hacia el que se va.
-const ORDEN_VISTAS = ['chat', 'correo', 'agenda', 'recordatorios', 'memoria', 'historial', 'ajustes'];
+const ORDEN_VISTAS = ['chat', 'correo', 'agenda', 'recordatorios', 'memoria', 'historial', 'empleo', 'ajustes'];
 let moverIndicador = null;
 
 function mostrarVista(nombre, seccionAjustes = null) {
@@ -148,12 +150,132 @@ function actividad() {
   if (kitsune?.estado === 'dormir') kitsune.setEstado('reposo');
 }
 
-// ---------- Voz (opcional): voces en español del sistema ----------
+// ---------- Voz ----------
+// Natural: la del servidor de avisos (Aura-2 en Workers AI), por trozos; el
+// siguiente se pide mientras suena el anterior. Si no hay servidor o falla,
+// las voces en español del dispositivo.
 
-function hablarEnVoz(texto) {
+let audioCtx = null;
+let fuenteVoz = null;
+let turnoVoz = 0;
+let servidorVoz = { comprobado: 0, disponible: false };
+
+function contextoAudio() {
+  const Contexto = window.AudioContext || window.webkitAudioContext;
+  if (!Contexto) return null;
+  // Como un vídeo: suena aunque el iPhone esté en silencio (Safari 16.4+).
+  if (navigator.audioSession) navigator.audioSession.type = 'playback';
+  audioCtx ??= new Contexto();
+  return audioCtx;
+}
+// En el iPhone el audio solo puede empezar tras un toque: se despierta con el primero.
+const despertarAudio = () => ajustes?.voz && ajustes.vozTipo !== 'dispositivo' && contextoAudio()?.resume().catch(() => {});
+document.addEventListener('pointerdown', despertarAudio, { passive: true });
+document.addEventListener('keydown', despertarAudio);
+
+async function hayVozNatural() {
+  if (ajustes.vozTipo === 'dispositivo' || !api.servidor?.voz) return false;
+  if (Date.now() - servidorVoz.comprobado < 10 * 60_000) return servidorVoz.disponible;
+  const e = await api.servidor.estado().catch(() => null);
+  servidorVoz = { comprobado: Date.now(), disponible: Boolean(e?.vinculado && e.voz) };
+  return servidorVoz.disponible;
+}
+
+function callarVoz() {
+  turnoVoz++;
+  try {
+    fuenteVoz?.stop();
+  } catch {
+    // Ya había terminado.
+  }
+  fuenteVoz = null;
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+}
+
+async function hablarEnVoz(texto) {
+  callarVoz();
+  const turno = turnoVoz;
+  if (await hayVozNatural()) {
+    try {
+      const empezo = await hablarNatural(texto, turno);
+      if (empezo) return;
+    } catch (error) {
+      console.warn('Voz natural:', error.message);
+      // Para no esperar en cada respuesta: se vuelve a probar en unos minutos.
+      servidorVoz = { comprobado: Date.now(), disponible: false };
+    }
+    if (turno !== turnoVoz) return;
+  }
+  return hablarDispositivo(texto);
+}
+
+// Devuelve false si no llegó a sonar nada (para usar entonces la del dispositivo).
+async function hablarNatural(texto, turno) {
+  const ctx = contextoAudio();
+  if (!ctx) return false;
+  if (ctx.state !== 'running') await ctx.resume().catch(() => {});
+  if (ctx.state !== 'running') return false;
+  const trozos = trozosDeVoz(texto);
+  const analizador = ctx.createAnalyser();
+  analizador.fftSize = 512;
+  analizador.connect(ctx.destination);
+  const pedir = (i) =>
+    i < trozos.length
+      ? api.servidor.voz(trozos[i], ajustes.vozNombre).then((bytes) => ctx.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)))
+      : null;
+  let siguiente = pedir(0);
+  let sonado = false;
+  for (let i = 0; i < trozos.length; i++) {
+    let buffer;
+    try {
+      buffer = await siguiente;
+    } catch (error) {
+      if (!sonado) throw error;
+      break;
+    }
+    if (turno !== turnoVoz) return true;
+    siguiente = pedir(i + 1);
+    siguiente?.catch(() => {});
+    sonado = true;
+    await reproducir(ctx, buffer, analizador, turno);
+    if (turno !== turnoVoz) return true;
+  }
+  return sonado;
+}
+
+// Suena un trozo y la boca del zorro sigue el volumen.
+function reproducir(ctx, buffer, analizador, turno) {
+  return new Promise((resolver) => {
+    const fuente = ctx.createBufferSource();
+    fuente.buffer = buffer;
+    fuente.connect(analizador);
+    fuenteVoz = fuente;
+    const muestras = new Uint8Array(analizador.fftSize);
+    let ultimo = 0;
+    const boca = (t) => {
+      if (fuenteVoz !== fuente || turno !== turnoVoz) return;
+      analizador.getByteTimeDomainData(muestras);
+      let suma = 0;
+      for (const m of muestras) suma += ((m - 128) / 128) ** 2;
+      const volumen = Math.sqrt(suma / muestras.length);
+      if (volumen > 0.03 && t - ultimo > 85) {
+        kitsune.pulsoHabla(Math.round(volumen * 60) + 2);
+        ultimo = t;
+      }
+      requestAnimationFrame(boca);
+    };
+    fuente.onended = () => {
+      if (fuenteVoz === fuente) fuenteVoz = null;
+      resolver();
+    };
+    fuente.start();
+    requestAnimationFrame(boca);
+  });
+}
+
+function hablarDispositivo(texto) {
   if (!('speechSynthesis' in window)) return Promise.resolve();
-  const limpio = texto.replace(/[*_`>#]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-  const frase = new SpeechSynthesisUtterance(limpio);
+  const frase = new SpeechSynthesisUtterance(limpiarParaVoz(texto));
   frase.lang = 'es-ES';
   frase.voice = speechSynthesis.getVoices().find((v) => v.lang?.startsWith('es')) ?? null;
   // Cada palabra pronunciada mueve la boca del zorro.
@@ -169,6 +291,8 @@ function hablarEnVoz(texto) {
 // El chat avisa de lo que está pasando y el zorro lo representa.
 async function alEstadoChat(estado, texto) {
   actividad();
+  // Una pregunta nueva corta lo que estuviera diciendo.
+  if (estado === 'pensar' || estado === 'escuchar') callarVoz();
   if (estado === 'hablar' && texto) kitsune.pulsoHabla(texto.length);
   if (estado === 'fin') {
     if (ajustes.voz && texto) {
@@ -210,6 +334,12 @@ async function iniciar() {
   panelAjustes = crearAjustes({
     contenedor: vistas.ajustes,
     api,
+    probarVoz: async () => {
+      servidorVoz.comprobado = 0;
+      kitsune.setEstado('hablar');
+      await hablarEnVoz('Hola, soy Kitsune. Así sonará mi voz cuando te lea las respuestas.');
+      kitsune.setEstado('reposo');
+    },
     alCerrar: () => mostrarVista('chat'),
     alCambiar: (nuevos, cambios) => {
       ajustes = nuevos;
@@ -243,6 +373,11 @@ async function iniciar() {
     guardarAjustes: async (cambios) => {
       ajustes = await api.ajustes.guardar(cambios);
     },
+  });
+  apartados.empleo = crearEmpleo({
+    contenedor: vistas.empleo,
+    api,
+    abrirAjustes: (seccion) => mostrarVista('ajustes', seccion),
   });
   apartados.historial = crearHistorial({
     contenedor: vistas.historial,
@@ -494,6 +629,7 @@ function atenderParametros() {
   else if (parametros.has('agenda')) mostrarVista('agenda');
   else if (parametros.has('recordatorios')) mostrarVista('recordatorios');
   else if (parametros.has('ajustes')) mostrarVista('ajustes');
+  else if (parametros.has('empleo')) mostrarVista('empleo');
   else if (parametros.has('pulso')) chat.preguntar('Prepárame el pulso de hoy');
   else if (compartido.length) {
     mostrarVista('chat');
