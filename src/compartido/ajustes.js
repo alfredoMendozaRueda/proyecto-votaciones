@@ -1,5 +1,6 @@
 // Ajustes por defecto y validación, compartidos por Electron y la web.
 import { MODELOS_GROQ } from './groq.js';
+import { permisosPorDefecto, opcionesPermisos } from './permisos.js';
 
 export const PROVEEDORES = ['groq', 'claude'];
 export const MODELOS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
@@ -29,6 +30,10 @@ export const AJUSTES_POR_DEFECTO = {
   correoCadaMin: 5,
   avisarCorreo: true,
   googleClientId: '',
+  // Qué puede hacer Kitsune por su cuenta (ver permisos.js).
+  ...permisosPorDefecto(),
+  // Sube cuando un cambio de la app tiene que corregir ajustes guardados antes.
+  revision: 2,
 };
 
 const OPCIONES = {
@@ -40,6 +45,7 @@ const OPCIONES = {
   modelo: MODELOS,
   proveedor: PROVEEDORES,
   modeloGroq: MODELOS_GROQ,
+  ...opcionesPermisos(),
 };
 const RANGOS = { dormirTrasMin: [0, 120], correoCadaMin: [1, 120] };
 const LARGOS = { atajo: 60, personalidad: 2000, googleClientId: 200 };
@@ -59,6 +65,10 @@ export function normalizarAjustes(guardados = {}) {
   for (const [clave, valor] of Object.entries(guardados)) {
     if (valorValido(clave, valor)) ajustes[clave] = valor;
   }
+  // Revisión 2: el estilo por defecto pasó a ser la ilustración, pero los
+  // ajustes guardados antes conservaban «realista» sin haberlo elegido nadie.
+  if (!(guardados.revision >= 2)) ajustes.estilo = AJUSTES_POR_DEFECTO.estilo;
+  ajustes.revision = AJUSTES_POR_DEFECTO.revision;
   return ajustes;
 }
 

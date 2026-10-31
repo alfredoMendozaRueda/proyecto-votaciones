@@ -2247,6 +2247,54 @@ kbd {
   display: none;
 }
 
+.confirmar__titulo {
+  overflow-wrap: anywhere;
+}
+
+.confirmar__linea {
+  font-size: 13px;
+  color: var(--texto);
+}
+
+/* El correo que se va a enviar, en papel, para leerlo antes de aceptar. */
+.confirmar__texto {
+  margin-top: 8px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--papel);
+  color: var(--papel-tinta);
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.confirmar--peligro .confirmar__icono {
+  background: rgba(236, 80, 64, 0.2);
+}
+
+.confirmar--fallo {
+  border-color: var(--linea);
+}
+
+.confirmar--fallo .confirmar__pregunta {
+  color: var(--acento-vivo);
+  font-weight: 700;
+}
+
+.boton--peligro {
+  background: transparent;
+  border-color: var(--acento-vivo);
+  color: var(--acento-vivo);
+  font-weight: 700;
+}
+
+.boton--peligro:hover {
+  background: var(--acento-velo);
+}
+
 .texto-ofrecido {
   align-self: stretch;
   padding: 10px 12px 12px;
@@ -3899,4 +3947,81 @@ html {
 .esqueleto {
   background: linear-gradient(100deg, var(--carbon-2) 30%, #2f201e 50%, var(--carbon-2) 70%);
   background-size: 220% 100%;
+}
+
+/* ---------- Ajustes: permisos ---------- */
+
+.preajustes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.preajustes .boton {
+  font-size: 12.5px;
+  padding: 6px 10px;
+}
+
+.permisos {
+  display: flex;
+  flex-direction: column;
+}
+
+.permisos__grupo {
+  margin: 10px 0 2px;
+  font-family: var(--display);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--kin);
+}
+
+.permiso {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--linea-suave);
+}
+
+.permiso__nombre {
+  font-size: 13.5px;
+  color: var(--texto);
+  text-wrap: pretty;
+}
+
+/* Columnas fijas: «Sí», «Preguntar» y «No» quedan alineados de fila a fila. */
+.segmentado--permiso {
+  display: grid;
+  grid-template-columns: 44px 84px 44px;
+}
+
+.segmentado--permiso button {
+  padding: 5px 4px;
+  font-size: 12.5px;
+}
+
+.segmentado--permiso [data-nivel='si'] {
+  grid-column: 1;
+}
+
+.segmentado--permiso [data-nivel='preguntar'] {
+  grid-column: 2;
+}
+
+.segmentado--permiso [data-nivel='no'] {
+  grid-column: 3;
+}
+
+.segmentado--permiso [data-nivel='si'][aria-pressed='true'] {
+  color: var(--kin-vivo);
+  box-shadow: inset 0 0 0 1px var(--kin-hondo);
+}
+
+.segmentado--permiso [data-nivel='no'][aria-pressed='true'] {
+  color: var(--acento-vivo);
+}
+
+.permisos .ajuste--fila {
+  padding-top: 6px;
 }

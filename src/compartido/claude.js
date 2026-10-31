@@ -3,6 +3,7 @@ import { historialValido, mensajesVisibles } from './historial.js';
 import { nuevoIdConversacion } from './conversaciones.js';
 import { turnoGroq, textoGroq, probarClaveGroq, buscarEnInternetGroq } from './groq.js';
 import { verTiempo } from './tiempo.js';
+import { PERMISOS, nivel, nivelHerramienta } from './permisos.js';
 
 export { mensajesVisibles, recortarHistorial } from './historial.js';
 
@@ -13,9 +14,10 @@ const HERRAMIENTAS_CORREO = [
   {
     name: 'buscar_correos',
     description:
-      'Busca correos en la cuenta de Gmail del usuario y devuelve id, remitente, asunto, fecha, si está sin leer y un extracto. ' +
-      'Úsala cuando el usuario pregunte por su correo. Acepta la sintaxis de búsqueda de Gmail, por ejemplo ' +
-      '"is:unread", "from:ana", "subject:factura", "newer_than:7d". Una consulta vacía devuelve la bandeja de entrada.',
+      'Busca correos en la cuenta de Gmail del usuario y devuelve id, remitente, asunto, fecha local, si está sin leer y un ' +
+      'extracto, ordenados del más reciente al más antiguo. Úsala cuando el usuario pregunte por su correo. Acepta la ' +
+      'sintaxis de búsqueda de Gmail, por ejemplo "is:unread", "from:ana", "subject:factura", "newer_than:7d". Una consulta ' +
+      'vacía devuelve la bandeja de entrada: para «el último correo» o «lo más reciente», usa la consulta vacía y el primero de la lista.',
     eager_input_streaming: true,
     input_schema: {
       type: 'object',
@@ -38,14 +40,58 @@ const HERRAMIENTAS_CORREO = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'organizar_correo',
+    description: 'Marca un correo como leído o no leído, lo destaca o le quita la estrella, o lo archiva (sale de la bandeja de entrada).',
+    eager_input_streaming: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Id del correo (de buscar_correos).' },
+        accion: { type: 'string', enum: ['leido', 'no_leido', 'destacar', 'quitar_destacado', 'archivar'] },
+      },
+      required: ['id', 'accion'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'borrar_correo',
+    description: 'Mueve un correo a la papelera de Gmail (se puede recuperar durante 30 días).',
+    eager_input_streaming: true,
+    input_schema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'Id del correo (de buscar_correos).' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'enviar_correo',
+    description:
+      'Envía un correo desde la cuenta del usuario, o responde a uno si se indica responder_a. El usuario ve el correo ' +
+      'completo en una tarjeta y decide si se envía. Escríbelo entero y listo para enviar, firmado si procede.',
+    eager_input_streaming: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        para: { type: 'string', description: 'Direcciones de correo separadas por comas. Al responder, la del remitente original.' },
+        asunto: { type: 'string', description: 'Asunto. Al responder se usa el del original.' },
+        cuerpo: { type: 'string', description: 'Texto del correo.' },
+        responder_a: { type: 'string', description: 'Id del correo al que se responde, si es una respuesta.' },
+      },
+      required: ['para', 'cuerpo'],
+      additionalProperties: false,
+    },
+  },
 ];
 
 const HERRAMIENTAS_CALENDARIO = [
   {
     name: 'ver_agenda',
     description:
-      'Devuelve los eventos del Google Calendar principal del usuario entre dos fechas (por defecto, de ahora a 7 días). ' +
-      'Úsala para preguntas sobre su agenda, citas o disponibilidad.',
+      'Devuelve los eventos del Google Calendar principal del usuario entre dos fechas (por defecto, de ahora a 7 días), ' +
+      'con su id y la fecha local con el día de la semana. Úsala para preguntas sobre su agenda, citas o disponibilidad, ' +
+      'y para encontrar el id de un evento antes de cambiarlo o eliminarlo.',
     eager_input_streaming: true,
     input_schema: {
       type: 'object',
@@ -59,8 +105,7 @@ const HERRAMIENTAS_CALENDARIO = [
   {
     name: 'crear_evento',
     description:
-      'Crea un evento en el Google Calendar principal del usuario. Antes de crearlo, Kitsune le muestra una tarjeta para ' +
-      'que lo confirme; si no lo confirma, devuelve que no se creó. Úsala solo cuando el usuario pida añadir algo a su calendario.',
+      'Crea un evento en el Google Calendar principal del usuario. Úsala solo cuando el usuario pida añadir algo a su calendario.',
     eager_input_streaming: true,
     input_schema: {
       type: 'object',
@@ -76,6 +121,38 @@ const HERRAMIENTAS_CALENDARIO = [
         descripcion: { type: 'string', description: 'Notas para el evento, breves.' },
       },
       required: ['titulo', 'inicio'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'modificar_evento',
+    description:
+      'Cambia un evento del calendario: título, hora, lugar o notas. Indica solo lo que cambia; si mueves el inicio y ' +
+      'no dices el fin, conserva su duración. Busca antes el id con ver_agenda.',
+    eager_input_streaming: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Id del evento (de ver_agenda).' },
+        titulo: { type: 'string' },
+        inicio: { type: 'string', description: 'Nuevo inicio, en el mismo formato que en crear_evento.' },
+        fin: { type: 'string', description: 'Nuevo fin.' },
+        todo_el_dia: { type: 'boolean' },
+        lugar: { type: 'string' },
+        descripcion: { type: 'string' },
+      },
+      required: ['id'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'borrar_evento',
+    description: 'Elimina un evento del calendario del usuario. Busca antes el id con ver_agenda.',
+    eager_input_streaming: true,
+    input_schema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'Id del evento (de ver_agenda).' } },
+      required: ['id'],
       additionalProperties: false,
     },
   },
@@ -201,11 +278,34 @@ function contextoAhora(ahora = new Date()) {
   const diferencia = `${signo}${dos(minutos / 60)}:${dos(minutos % 60)}`;
   const fecha = ahora.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const hora = ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-  return `<contexto>Fecha y hora local del usuario: ${fecha}, ${hora} (UTC${diferencia}).</contexto>`;
+  // Los modelos se equivocan al calcular el día de la semana: se les da hecho.
+  const dia = (n) => new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + n);
+  const corto = (d) => d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' });
+  const lunes = dia(-((ahora.getDay() + 6) % 7));
+  const domingo = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + 6);
+  const proximos = Array.from({ length: 7 }, (_, i) => corto(dia(i + 1))).join('; ');
+  return (
+    `<contexto>Fecha y hora local del usuario: ${fecha}, ${hora} (UTC${diferencia}). ` +
+    `Esta semana va del ${corto(lunes)} al ${corto(domingo)}. Próximos días: ${proximos}.</contexto>`
+  );
 }
 
+// Fecha local legible, con el día de la semana: «sábado, 31 oct, 17:00».
 function fechaLocal(ms) {
-  return new Date(ms).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return new Date(ms).toLocaleString('es-ES', { weekday: 'long', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+const diaLocal = (ms) => new Date(ms).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+
+// Cuándo es un evento, para el modelo y para las tarjetas.
+function cuandoEvento(e) {
+  if (e.todoElDia) {
+    const ultimo = e.fin - DIA;
+    return ultimo > e.inicio ? `del ${diaLocal(e.inicio)} al ${diaLocal(ultimo)} (todo el día)` : `${diaLocal(e.inicio)} (todo el día)`;
+  }
+  const mismoDia = new Date(e.inicio).toDateString() === new Date(e.fin).toDateString();
+  const hora = (ms) => new Date(ms).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  return mismoDia ? `${fechaLocal(e.inicio)}–${hora(e.fin)}` : `${fechaLocal(e.inicio)} – ${fechaLocal(e.fin)}`;
 }
 
 // "2026-11-14" es ese día en la zona del usuario; con hora, lo que diga su diferencia horaria.
@@ -217,6 +317,15 @@ function leerFecha(texto) {
   }
   return Date.parse(texto);
 }
+
+// Cómo se aplica cada acción de organizar_correo y cómo se pregunta.
+const ACCIONES_CORREO = {
+  leido: { cambios: { leido: true }, pregunta: '¿Lo marco como leído?', hecho: 'Marcado como leído', icono: 'sobreAbierto' },
+  no_leido: { cambios: { leido: false }, pregunta: '¿Lo marco como no leído?', hecho: 'Marcado como no leído', icono: 'sobre' },
+  destacar: { cambios: { destacado: true }, pregunta: '¿Le pongo una estrella?', hecho: 'Destacado', icono: 'estrella' },
+  quitar_destacado: { cambios: { destacado: false }, pregunta: '¿Le quito la estrella?', hecho: 'Sin estrella', icono: 'estrella' },
+  archivar: { cambios: { archivar: true }, pregunta: '¿Lo archivo?', hecho: 'Archivado', icono: 'archivar' },
+};
 
 const textoOpcional = (valor, max) => (valor === undefined ? '' : typeof valor === 'string' ? valor.slice(0, max) : null);
 
@@ -231,7 +340,42 @@ function validarEntrada(nombre, entrada) {
       return { consulta: entrada.consulta.slice(0, 300), maximo: Math.min(Math.max(maximo, 1), 20) };
     }
     case 'leer_correo':
+    case 'borrar_correo':
       return typeof entrada.id === 'string' && /^[0-9a-zA-Z]+$/.test(entrada.id) ? { id: entrada.id } : null;
+    case 'organizar_correo':
+      return typeof entrada.id === 'string' && /^[0-9a-zA-Z]+$/.test(entrada.id) && ACCIONES_CORREO[entrada.accion]
+        ? { id: entrada.id, accion: entrada.accion }
+        : null;
+    case 'enviar_correo': {
+      const asunto = textoOpcional(entrada.asunto, 300);
+      const responderA = textoOpcional(entrada.responder_a, 100);
+      if (typeof entrada.para !== 'string' || !entrada.para.trim() || typeof entrada.cuerpo !== 'string' || !entrada.cuerpo.trim()) return null;
+      if (asunto === null || responderA === null || (responderA && !/^[0-9a-zA-Z]+$/.test(responderA))) return null;
+      return { para: entrada.para.trim().slice(0, 1000), asunto, cuerpo: entrada.cuerpo.slice(0, 20000), responderA: responderA || null };
+    }
+    case 'borrar_evento':
+      return typeof entrada.id === 'string' && /^[0-9a-zA-Z_-]+$/.test(entrada.id) ? { id: entrada.id } : null;
+    case 'modificar_evento': {
+      if (typeof entrada.id !== 'string' || !/^[0-9a-zA-Z_-]+$/.test(entrada.id)) return null;
+      if (entrada.todo_el_dia !== undefined && typeof entrada.todo_el_dia !== 'boolean') return null;
+      const cambios = { id: entrada.id };
+      for (const [clave, max] of [['titulo', 200], ['lugar', 200], ['descripcion', 2000]]) {
+        const valor = textoOpcional(entrada[clave], max);
+        if (valor === null) return null;
+        if (entrada[clave] !== undefined) cambios[clave] = valor;
+      }
+      if (cambios.titulo !== undefined && !cambios.titulo.trim()) return null;
+      for (const clave of ['inicio', 'fin']) {
+        if (entrada[clave] === undefined) continue;
+        const ms = leerFecha(entrada[clave]);
+        if (!Number.isFinite(ms)) return null;
+        cambios[clave] = ms;
+      }
+      if (entrada.todo_el_dia !== undefined) cambios.todoElDia = entrada.todo_el_dia;
+      else if (typeof entrada.inicio === 'string' && SOLO_FECHA.test(entrada.inicio)) cambios.todoElDia = true;
+      if (cambios.inicio !== undefined && cambios.fin !== undefined && cambios.fin < cambios.inicio) return null;
+      return Object.keys(cambios).length > 1 ? cambios : null;
+    }
     case 'crear_recordatorio':
       if (typeof entrada.texto !== 'string' || typeof entrada.cuando !== 'string') return null;
       return { texto: entrada.texto, cuando: entrada.cuando };
@@ -272,6 +416,26 @@ function validarEntrada(nombre, entrada) {
   }
 }
 
+// Lo que el usuario deja hacer a Kitsune (Ajustes → Permisos), en palabras para el modelo.
+function resumenPermisos(ajustes, servicios) {
+  const grupos = { Correo: servicios.correo, Agenda: servicios.calendario, Avisos: servicios.conRecordatorios, Memoria: servicios.memoria };
+  const por = { si: [], preguntar: [], no: [] };
+  for (const p of PERMISOS) if (grupos[p.grupo]) por[nivel(ajustes, p.clave)].push(p.nombre.toLowerCase());
+  return [
+    por.si.length ? `Puedes hacer sin preguntar: ${por.si.join('; ')}.` : '',
+    por.preguntar.length
+      ? `Con confirmación del usuario: ${por.preguntar.join('; ')}. Al usar esas herramientas, Kitsune le enseña una tarjeta ` +
+        'con lo que vas a hacer y él decide: no le pidas permiso tú antes, llama a la herramienta. Si no lo acepta, no insistas.'
+      : '',
+    por.no.length
+      ? `No tienes permiso para: ${por.no.join('; ')}. Si te lo pide, dile que no puedes y que puede permitirlo en ` +
+        'Ajustes → Permisos. Si quiere responder un correo y no puedes enviarlo, redacta el texto para que lo envíe él.'
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
 function promptSistema({ ajustes, correo, calendario, conRecordatorios, memoria, busqueda }) {
   return [
     'Eres Kitsune, el asistente personal del usuario: un zorro de nueve colas que vive en su escritorio o en su móvil ' +
@@ -279,18 +443,12 @@ function promptSistema({ ajustes, correo, calendario, conRecordatorios, memoria,
     'Responde en español, de forma breve y directa: unas pocas frases salvo que te pidan más detalle. ' +
       'Usa listas cortas cuando ayuden y negrita solo para lo importante.',
     correo.conectado
-      ? `Puedes consultar el correo de Gmail del usuario (${correo.email}) con tus herramientas, que son solo de lectura. ` +
-        'No envías, borras ni modificas correos: si el usuario quiere responder, redacta el texto y dile que puede enviarlo ' +
-        'desde la pestaña Correo.'
+      ? `Tienes acceso al correo de Gmail del usuario (${correo.email}).`
       : 'El usuario todavía no ha conectado su cuenta de Gmail. Si te pregunta por su correo, dile que puede conectarla ' +
-        'en Ajustes, sección Correo.',
-    calendario
-      ? 'Puedes consultar su Google Calendar con ver_agenda y crear eventos con crear_evento. Crear un evento le muestra una ' +
-        'tarjeta para confirmarlo, así que no le pidas permiso antes: llama a la herramienta y él decide.'
-      : '',
-    conRecordatorios
-      ? 'Puedes apuntar, consultar y borrar recordatorios con tus herramientas. Al crear uno, confirma en una frase qué y cuándo.'
-      : '',
+        'en Ajustes, sección Google.',
+    calendario ? 'Tienes acceso a su Google Calendar.' : '',
+    conRecordatorios ? 'Puedes apuntar y consultar recordatorios. Al crear uno, confirma en una frase qué y cuándo.' : '',
+    resumenPermisos(ajustes, { correo: correo.conectado, calendario, conRecordatorios, memoria: Boolean(memoria) }),
     'Para el tiempo de un lugar usa ver_tiempo. Si no sabes de qué lugar se trata, mira tu memoria o pregúntaselo.',
     busqueda
       ? 'Puedes buscar en internet cuando haga falta información actual o que no sepas (noticias, precios, horarios, ' +
@@ -311,8 +469,8 @@ function promptSistema({ ajustes, correo, calendario, conRecordatorios, memoria,
       'sin mencionarlo.',
     'Si el usuario pide su «pulso del día», prepárale un resumen de su jornada: ' +
       [
-        correo.conectado && 'busca sus correos sin leer recientes (is:unread newer_than:2d)',
-        calendario && 'mira su agenda de hoy y mañana',
+        correo.conectado && nivel(ajustes, 'permisoCorreoLeer') !== 'no' && 'busca sus correos sin leer recientes (is:unread newer_than:2d)',
+        calendario && nivel(ajustes, 'permisoAgendaVer') !== 'no' && 'mira su agenda de hoy y mañana',
         conRecordatorios && 'consulta sus recordatorios pendientes',
         busqueda && memoria?.length && 'si en tu memoria hay temas que le interesan, busca dos o tres novedades de ellos',
       ]
@@ -436,7 +594,8 @@ export class ConversacionClaude {
       ...(memoria ? HERRAMIENTAS_MEMORIA : []),
       HERRAMIENTA_TIEMPO,
       ...(busqueda ? [proveedor === 'groq' ? HERRAMIENTA_BUSQUEDA_GROQ : herramientaBusqueda(ajustes.modelo)] : []),
-    ];
+      // Lo que el usuario no permite ni se ofrece.
+    ].filter((h) => nivelHerramienta(ajustes, h.name) !== 'no');
     const sistema = promptSistema({ ajustes, correo, calendario: conCalendario, conRecordatorios, memoria, busqueda });
     return { sistema, herramientas };
   }
@@ -465,7 +624,7 @@ export class ConversacionClaude {
     this.controlador?.abort();
   }
 
-  // El usuario contesta a una tarjeta de confirmación (crear un evento).
+  // El usuario contesta a una tarjeta de confirmación (crear un evento, enviar un correo…).
   responderConfirmacion(id, acepta) {
     this.confirmaciones.get(id)?.(Boolean(acepta));
   }
@@ -477,7 +636,7 @@ export class ConversacionClaude {
       const terminar = (acepta) => {
         this.confirmaciones.delete(id);
         senal?.removeEventListener('abort', alAbortar);
-        resolver(acepta);
+        resolver({ acepta, id });
       };
       const alAbortar = () => terminar(false);
       senal?.addEventListener('abort', alAbortar);
@@ -610,11 +769,104 @@ export class ConversacionClaude {
     if (!entrada) {
       return { type: 'tool_result', tool_use_id: uso.id, is_error: true, content: JSON.stringify({ INVALID_JSON: JSON.stringify(uso.input) }) };
     }
-    this.emitir({ tipo: 'herramienta', nombre: uso.name });
+    const permiso = nivelHerramienta(this.obtenerAjustes(), uso.name);
+    if (permiso === 'no') {
+      const motivo = 'El usuario no permite esta acción (Ajustes → Permisos).';
+      return { type: 'tool_result', tool_use_id: uso.id, is_error: true, content: motivo };
+    }
+    let tarjeta = null;
     try {
-      return { type: 'tool_result', tool_use_id: uso.id, content: JSON.stringify(await this.#herramienta(uso.name, entrada)) };
+      if (permiso === 'preguntar') {
+        const { acepta, id } = await this.#confirmar(await this.#tarjeta(uso.name, entrada));
+        if (!acepta) {
+          const resultado = { hecho: false, motivo: 'El usuario no lo ha aceptado. No insistas salvo que te lo pida.' };
+          return { type: 'tool_result', tool_use_id: uso.id, content: JSON.stringify(resultado) };
+        }
+        tarjeta = id;
+      }
+      this.emitir({ tipo: 'herramienta', nombre: uso.name });
+      const resultado = await this.#herramienta(uso.name, entrada);
+      if (tarjeta) this.emitir({ tipo: 'confirmado', id: tarjeta, ok: true });
+      return { type: 'tool_result', tool_use_id: uso.id, content: JSON.stringify(resultado) };
     } catch (error) {
+      if (tarjeta) this.emitir({ tipo: 'confirmado', id: tarjeta, ok: false, mensaje: error.message });
       return { type: 'tool_result', tool_use_id: uso.id, is_error: true, content: error.message };
+    }
+  }
+
+  // Lo que se enseña al usuario para que acepte una acción: qué se va a hacer y sobre qué.
+  async #tarjeta(nombre, e) {
+    switch (nombre) {
+      case 'crear_evento':
+        return {
+          tipo: 'evento', icono: 'calendario', pregunta: '¿Lo añado a tu calendario?', titulo: e.titulo,
+          detalle: [cuandoEvento(e), e.lugar].filter(Boolean).join(' · '), boton: 'Añadir', hecho: 'Añadido a tu calendario',
+        };
+      case 'modificar_evento': {
+        const actual = await this.calendario.obtener(e.id);
+        const nuevo = { ...actual, ...e };
+        if (e.inicio !== undefined && e.fin === undefined) nuevo.fin = e.inicio + (actual.todoElDia === nuevo.todoElDia ? actual.fin - actual.inicio : nuevo.todoElDia ? DIA : 60 * 60 * 1000);
+        const cambios = [
+          e.titulo !== undefined && `Título: ${e.titulo}`,
+          (e.inicio !== undefined || e.fin !== undefined || e.todoElDia !== undefined) && `Ahora: ${cuandoEvento(nuevo)}`,
+          e.lugar !== undefined && `Lugar: ${e.lugar || '(sin lugar)'}`,
+          e.descripcion !== undefined && 'Notas nuevas',
+        ].filter(Boolean);
+        return {
+          tipo: 'evento-modificar', icono: 'calendario', pregunta: '¿Cambio este evento?', titulo: actual.titulo,
+          detalle: `Antes: ${cuandoEvento(actual)}`, lineas: cambios, boton: 'Cambiar', hecho: 'Evento cambiado',
+        };
+      }
+      case 'borrar_evento': {
+        const evento = await this.calendario.obtener(e.id);
+        return {
+          tipo: 'evento-borrar', icono: 'papelera', pregunta: '¿Elimino este evento?', titulo: evento.titulo,
+          detalle: [cuandoEvento(evento), evento.lugar].filter(Boolean).join(' · '), boton: 'Eliminar', peligro: true, hecho: 'Evento eliminado',
+        };
+      }
+      case 'enviar_correo': {
+        const original = e.responderA ? await this.gmail.leer(e.responderA) : null;
+        return {
+          tipo: 'correo-enviar', icono: 'enviar', pregunta: original ? '¿Envío esta respuesta?' : '¿Envío este correo?',
+          titulo: original ? `Re: ${original.asunto}` : e.asunto || '(sin asunto)', detalle: `Para: ${e.para}`, cuerpo: e.cuerpo,
+          boton: 'Enviar', hecho: 'Correo enviado',
+        };
+      }
+      case 'borrar_correo':
+      case 'organizar_correo': {
+        const correo = await this.gmail.leer(e.id);
+        const accion = nombre === 'borrar_correo'
+          ? { pregunta: '¿Lo muevo a la papelera?', hecho: 'En la papelera', icono: 'papelera' }
+          : ACCIONES_CORREO[e.accion];
+        return {
+          tipo: nombre === 'borrar_correo' ? 'correo-borrar' : 'correo-organizar', icono: accion.icono, pregunta: accion.pregunta,
+          titulo: correo.asunto, detalle: `De ${correo.de.nombre || correo.de.email} · ${fechaLocal(correo.fecha)}`,
+          boton: nombre === 'borrar_correo' ? 'A la papelera' : 'Sí', peligro: nombre === 'borrar_correo', hecho: accion.hecho,
+        };
+      }
+      case 'crear_recordatorio':
+        return {
+          tipo: 'recordatorio', icono: 'campana', pregunta: '¿Apunto este recordatorio?', titulo: e.texto,
+          detalle: Number.isFinite(Date.parse(e.cuando)) ? fechaLocal(Date.parse(e.cuando)) : e.cuando, boton: 'Apuntar', hecho: 'Apuntado',
+        };
+      case 'borrar_recordatorio': {
+        const r = (await this.recordatorios.listar()).find((x) => x.id === e.id);
+        return {
+          tipo: 'recordatorio-borrar', icono: 'papelera', pregunta: '¿Borro este recordatorio?', titulo: r?.texto ?? e.id,
+          detalle: r ? fechaLocal(r.cuando) : '', boton: 'Borrar', peligro: true, hecho: 'Borrado',
+        };
+      }
+      case 'recordar':
+        return { tipo: 'memoria', icono: 'memoria', pregunta: '¿Lo apunto en mi memoria?', titulo: e.dato, boton: 'Apuntar', hecho: 'Lo recordaré' };
+      case 'olvidar': {
+        const dato = (await this.memoria.listar()).find((x) => x.id === e.id);
+        return {
+          tipo: 'memoria-olvidar', icono: 'memoria', pregunta: '¿Olvido esto?', titulo: dato?.texto ?? e.id,
+          boton: 'Olvidar', peligro: true, hecho: 'Olvidado',
+        };
+      }
+      default:
+        return { tipo: nombre, icono: 'chispa', pregunta: '¿Lo hago?', titulo: nombre, boton: 'Sí', hecho: 'Hecho' };
     }
   }
 
@@ -624,11 +876,13 @@ export class ConversacionClaude {
         // Con Groq (gratis) cada petición tiene un límite de tamaño: menos correos y más cortos.
         const maximo = this.proveedorTurno === 'groq' ? Math.min(entrada.maximo, 8) : entrada.maximo;
         const { mensajes } = await this.gmail.listar({ filtro: 'todos', consulta: entrada.consulta || 'in:inbox', maximo });
+        // Gmail no garantiza el orden: del más reciente al más antiguo.
+        mensajes.sort((a, b) => b.fecha - a.fecha);
         return mensajes.map((m) => ({
           id: m.id,
           de: `${m.de.nombre} <${m.de.email}>`,
           asunto: m.asunto,
-          fecha: new Date(m.fecha).toISOString(),
+          fecha: fechaLocal(m.fecha),
           sinLeer: m.noLeido,
           extracto: this.proveedorTurno === 'groq' ? m.extracto.slice(0, 160) : m.extracto,
         }));
@@ -639,28 +893,42 @@ export class ConversacionClaude {
           de: `${correo.de.nombre} <${correo.de.email}>`,
           para: correo.para,
           asunto: correo.asunto,
-          fecha: new Date(correo.fecha).toISOString(),
+          fecha: fechaLocal(correo.fecha),
           adjuntos: correo.adjuntos.map((a) => a.nombre),
           texto: correo.texto.slice(0, this.proveedorTurno === 'groq' ? 4000 : 12000),
         };
       }
+      case 'organizar_correo':
+        await this.gmail.modificar(entrada.id, ACCIONES_CORREO[entrada.accion].cambios);
+        this.emitir({ tipo: 'correo-cambiado' });
+        return { hecho: true };
+      case 'borrar_correo':
+        await this.gmail.modificar(entrada.id, { papelera: true });
+        this.emitir({ tipo: 'correo-cambiado' });
+        return { hecho: true, enPapelera: true };
+      case 'enviar_correo':
+        await this.gmail.enviar({ para: entrada.para, asunto: entrada.asunto, cuerpo: entrada.cuerpo, responderA: entrada.responderA });
+        this.emitir({ tipo: 'correo-enviado' });
+        return { enviado: true };
       case 'ver_agenda': {
         const eventos = await this.calendario.eventos(entrada);
-        return eventos.map((e) => ({
-          titulo: e.titulo,
-          inicio: e.todoElDia ? `${new Date(e.inicio).toLocaleDateString('es-ES')} (todo el día)` : fechaLocal(e.inicio),
-          fin: e.todoElDia ? undefined : fechaLocal(e.fin),
-          lugar: e.lugar || undefined,
-        }));
+        return eventos.map((e) => ({ id: e.id, titulo: e.titulo, cuando: cuandoEvento(e), lugar: e.lugar || undefined }));
       }
       case 'crear_evento': {
-        if (!(await this.#confirmar({ tipo: 'evento', ...entrada }))) {
-          return { creado: false, motivo: 'El usuario no ha confirmado el evento. No insistas salvo que te lo pida.' };
-        }
         const evento = await this.calendario.crear(entrada);
         this.emitir({ tipo: 'evento', evento });
-        return { creado: true, titulo: evento.titulo, inicio: fechaLocal(evento.inicio) };
+        return { creado: true, id: evento.id, titulo: evento.titulo, cuando: cuandoEvento(evento) };
       }
+      case 'modificar_evento': {
+        const { id, ...cambios } = entrada;
+        const evento = await this.calendario.modificar(id, cambios);
+        this.emitir({ tipo: 'agenda-cambiada' });
+        return { cambiado: true, titulo: evento.titulo, cuando: cuandoEvento(evento), lugar: evento.lugar || undefined };
+      }
+      case 'borrar_evento':
+        await this.calendario.borrar(entrada.id);
+        this.emitir({ tipo: 'agenda-cambiada' });
+        return { eliminado: true };
       case 'crear_recordatorio': {
         const r = await this.recordatorios.crear(entrada);
         this.emitir({ tipo: 'recordatorio', recordatorio: r });

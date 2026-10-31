@@ -29,11 +29,6 @@ const ACCIONES_TEXTO = [
   ['Explicar', 'Explícame este texto de forma sencilla'],
 ];
 
-const fechaEvento = (e) =>
-  e.todoElDia
-    ? new Date(e.inicio).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
-    : `${cuandoLegible(e.inicio)} – ${new Date(e.fin).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
-
 async function copiar(texto) {
   try {
     await navigator.clipboard.writeText(texto);
@@ -191,32 +186,62 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     });
   }
 
-  // Claude pide permiso antes de crear un evento: el usuario decide aquí.
+  // Kitsune pide permiso antes de hacer algo (Ajustes → Permisos): el usuario decide aquí.
+  // La tarjeta trae ya los textos: qué pregunta, sobre qué, el botón y lo que se dice al acabar.
   function tarjetaConfirmar({ id, accion }) {
-    const div = añadir('confirmar', `
-      <span class="confirmar__icono">${icono('calendario', 18)}</span>
+    const div = añadir(`confirmar${accion.peligro ? ' confirmar--peligro' : ''}`, `
+      <span class="confirmar__icono">${icono(accion.icono ?? 'chispa', 18)}</span>
       <div class="confirmar__cuerpo">
-        <span class="confirmar__pregunta">¿Lo añado a tu calendario?</span>
+        <span class="confirmar__pregunta"></span>
         <strong class="confirmar__titulo"></strong>
         <span class="confirmar__detalle"></span>
       </div>
       <div class="confirmar__botones">
-        <button type="button" class="boton boton--primario" data-si>Añadir</button>
+        <button type="button" class="boton ${accion.peligro ? 'boton--peligro' : 'boton--primario'}" data-si></button>
         <button type="button" class="boton" data-no>No</button>
       </div>`);
+    div.dataset.id = id;
+    const pregunta = div.querySelector('.confirmar__pregunta');
+    pregunta.textContent = accion.pregunta;
     div.querySelector('.confirmar__titulo').textContent = accion.titulo;
-    div.querySelector('.confirmar__detalle').textContent = [fechaEvento(accion), accion.lugar].filter(Boolean).join(' · ');
+    const detalle = div.querySelector('.confirmar__detalle');
+    detalle.textContent = accion.detalle ?? '';
+    detalle.hidden = !accion.detalle;
+    for (const linea of accion.lineas ?? []) {
+      const el = document.createElement('span');
+      el.className = 'confirmar__linea';
+      el.textContent = linea;
+      div.querySelector('.confirmar__cuerpo').append(el);
+    }
+    // El correo que se va a enviar se enseña entero, para leerlo antes de aceptar.
+    if (accion.cuerpo) {
+      const cuerpo = document.createElement('div');
+      cuerpo.className = 'confirmar__texto';
+      cuerpo.textContent = accion.cuerpo;
+      div.querySelector('.confirmar__cuerpo').append(cuerpo);
+    }
+    div.querySelector('[data-si]').textContent = accion.boton ?? 'Sí';
     const responder = (acepta) => {
       div.querySelectorAll('button').forEach((b) => (b.disabled = true));
-      div.querySelector('.confirmar__pregunta').textContent = acepta ? 'Añadiendo al calendario…' : 'No se ha añadido.';
+      pregunta.textContent = acepta ? 'Un momento…' : 'Cancelado. No he hecho nada.';
       div.classList.toggle('confirmar--no', !acepta);
       div.dataset.estado = acepta ? 'esperando' : 'no';
+      div._hecho = accion.hecho;
       api.claude.confirmar(id, acepta);
       alEstado('pensar');
     };
     div.querySelector('[data-si]').addEventListener('click', () => responder(true));
     div.querySelector('[data-no]').addEventListener('click', () => responder(false));
     alEstado('escuchar');
+  }
+
+  // La acción aceptada ya se ha hecho (o ha fallado): la tarjeta lo cuenta.
+  function cerrarTarjeta({ id, ok, mensaje }) {
+    const tarjeta = mensajes.querySelector(`.confirmar[data-id="${CSS.escape(id)}"]`);
+    if (!tarjeta) return;
+    tarjeta.dataset.estado = ok ? 'hecho' : 'fallo';
+    tarjeta.classList.add(ok ? 'confirmar--hecho' : 'confirmar--fallo');
+    tarjeta.querySelector('.confirmar__pregunta').textContent = ok ? (tarjeta._hecho ?? 'Hecho') : `No se ha podido: ${mensaje ?? 'error'}`;
   }
 
   // Enlaces a las páginas que citó la búsqueda web, debajo de la respuesta.
@@ -431,15 +456,9 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
         quitarEstado();
         tarjetaConfirmar(e);
         break;
-      case 'evento': {
-        const tarjeta = [...mensajes.querySelectorAll('.confirmar[data-estado="esperando"]')].at(-1);
-        if (tarjeta) {
-          tarjeta.dataset.estado = 'hecho';
-          tarjeta.classList.add('confirmar--hecho');
-          tarjeta.querySelector('.confirmar__pregunta').textContent = 'Añadido a tu calendario';
-        }
+      case 'confirmado':
+        cerrarTarjeta(e);
         break;
-      }
       case 'fuentes':
         ponerFuentes(e.fuentes);
         break;

@@ -80,12 +80,16 @@ test('calendario: crear un evento espera la confirmación del usuario', async ()
     while (!eventos.some((e) => e.tipo === 'confirmar')) await new Promise((r) => setTimeout(r, 5));
     const pregunta = eventos.find((e) => e.tipo === 'confirmar');
     assert.equal(pregunta.accion.titulo, 'Tren a Valencia');
-    assert.equal(pregunta.accion.inicio, Date.parse('2026-11-14T08:35:00+01:00'));
+    assert.match(pregunta.accion.detalle, /14 nov/);
+    assert.equal(pregunta.accion.boton, 'Añadir');
     c.responderConfirmacion(pregunta.id, acepta);
     await turno;
     assert.equal(creados.length, acepta ? 1 : 0);
+    assert.equal(creados[0]?.inicio, acepta ? Date.parse('2026-11-14T08:35:00+01:00') : undefined);
     const resultado = JSON.parse(peticiones[1].messages.at(-1).content[0].content);
-    assert.equal(resultado.creado, acepta);
+    if (acepta) assert.equal(resultado.creado, true);
+    else assert.equal(resultado.hecho, false);
+    assert.equal(eventos.some((e) => e.tipo === 'confirmado' && e.id === pregunta.id && e.ok), acepta);
   }
 });
 
@@ -151,4 +155,129 @@ test('calendario: convierte eventos, crea los de todo el día como fechas y avis
   assert.deepEqual(llamadas.at(-1).cuerpo.end, { date: '2026-11-16' });
   assert.equal(creado.inicio, new Date(2026, 10, 15).getTime());
   assert.match(llamadas[0].url, /singleEvents=true/);
+});
+
+// Calendario simulado con un evento de 17:00 a 18:00 el 2 de noviembre.
+function calendarioSimulado(registro) {
+  const evento = { id: 'cumple1', titulo: 'Cumpleaños', inicio: new Date(2026, 10, 2, 17).getTime(), fin: new Date(2026, 10, 2, 18).getTime(), todoElDia: false, lugar: '' };
+  return {
+    estado: async () => ({ conectado: true }),
+    eventos: async () => [evento],
+    crear: async (e) => (registro.push(['crear', e]), { id: 'n1', ...e }),
+    obtener: async () => evento,
+    modificar: async (id, cambios) => (registro.push(['modificar', id, cambios]), { ...evento, ...cambios }),
+    borrar: async (id) => (registro.push(['borrar', id]), { borrado: id }),
+  };
+}
+
+function conPermisos(fetch, permisos, extra) {
+  const eventos = [];
+  const ajustes = { modelo: 'claude-opus-5-5', busquedaWeb: false, usarMemoria: false, personalidad: '', ...permisos };
+  const c = new ConversacionClaude({
+    obtenerClave: async () => 'sk-ant-prueba',
+    obtenerAjustes: () => ajustes,
+    gmail: { estado: async () => ({ conectado: false }) },
+    emitir: (e) => eventos.push(e),
+    opcionesCliente: { fetch, maxRetries: 0 },
+    ...extra,
+  });
+  return { c, eventos };
+}
+
+test('permisos: lo prohibido no se ofrece y el sistema lo explica; lo permitido se hace sin preguntar', async () => {
+  const registro = [];
+  const { fetch, peticiones } = apiSimulada([
+    [inicio('m1'), ...herramienta(0, 'tu1', 'crear_evento', { titulo: 'Pádel', inicio: '2026-11-03T19:00:00+01:00' }), ...fin('tool_use')],
+    [inicio('m2'), ...texto(0, 'Apuntado.'), ...fin('end_turn')],
+  ]);
+  const { c, eventos } = conPermisos(fetch, { permisoEventoCrear: 'si', permisoEventoBorrar: 'no' }, { calendario: calendarioSimulado(registro) });
+  await c.enviar('Pádel el martes a las 7');
+  const nombres = peticiones[0].tools.map((t) => t.name);
+  assert.ok(nombres.includes('modificar_evento'));
+  assert.ok(!nombres.includes('borrar_evento'));
+  assert.match(peticiones[0].system, /No tienes permiso para: eliminar eventos/);
+  assert.match(peticiones[0].system, /sin preguntar: consultar tu agenda; crear eventos/);
+  assert.equal(eventos.some((e) => e.tipo === 'confirmar'), false);
+  assert.equal(registro[0][0], 'crear');
+});
+
+test('calendario: eliminar y cambiar eventos piden confirmación y muestran el evento', async () => {
+  const registro = [];
+  const { fetch, peticiones } = apiSimulada([
+    [inicio('m1'), ...herramienta(0, 'tu1', 'borrar_evento', { id: 'cumple1' }), ...herramienta(1, 'tu2', 'modificar_evento', { id: 'cumple1', inicio: '2026-11-02T19:00:00' }), ...fin('tool_use')],
+    [inicio('m2'), ...texto(0, 'Hecho.'), ...fin('end_turn')],
+  ]);
+  const { c, eventos } = conPermisos(fetch, {}, { calendario: calendarioSimulado(registro) });
+  const turno = c.enviar('Quita el cumpleaños');
+  while (eventos.filter((e) => e.tipo === 'confirmar').length < 2) await new Promise((r) => setTimeout(r, 5));
+  const [borrar, cambiar] = eventos.filter((e) => e.tipo === 'confirmar');
+  assert.equal(borrar.accion.titulo, 'Cumpleaños');
+  assert.equal(borrar.accion.peligro, true);
+  assert.match(borrar.accion.detalle, /lunes, 2 nov/);
+  assert.match(cambiar.accion.detalle, /Antes: lunes, 2 nov, 17:00–18:00/);
+  assert.match(cambiar.accion.lineas[0], /Ahora: lunes, 2 nov, 19:00–20:00/);
+  c.responderConfirmacion(borrar.id, true);
+  c.responderConfirmacion(cambiar.id, false);
+  await turno;
+  assert.deepEqual(registro, [['borrar', 'cumple1']]);
+  const resultados = peticiones[1].messages.at(-1).content.map((r) => JSON.parse(r.content));
+  assert.equal(resultados[0].eliminado, true);
+  assert.equal(resultados[1].hecho, false);
+});
+
+test('correo: el más reciente primero, fechas locales con el día, y enviar siempre se confirma', async () => {
+  const enviados = [];
+  const correo = (id, ms, asunto) => ({ id, fecha: ms, asunto, de: { nombre: 'X', email: 'x@y.es' }, extracto: '', noLeido: false });
+  const gmail = {
+    estado: async () => ({ conectado: true, email: 'yo@gmail.com' }),
+    listar: async () => ({ mensajes: [correo('a', new Date(2026, 9, 30, 19, 44).getTime(), 'Google'), correo('b', new Date(2026, 9, 30, 23, 18).getTime(), 'Railway')] }),
+    leer: async (id) => ({ ...correo(id, 0, 'Railway'), para: '', adjuntos: [], texto: '' }),
+    enviar: async (d) => enviados.push(d),
+  };
+  const { fetch, peticiones } = apiSimulada([
+    [inicio('m1'), ...herramienta(0, 'tu1', 'buscar_correos', { consulta: '' }), ...fin('tool_use')],
+    [inicio('m2'), ...herramienta(0, 'tu2', 'enviar_correo', { para: 'x@y.es', cuerpo: 'Gracias', responder_a: 'b' }), ...fin('tool_use')],
+    [inicio('m3'), ...texto(0, 'Enviado.'), ...fin('end_turn')],
+  ]);
+  const { c, eventos } = conPermisos(fetch, { permisoCorreoEnviar: 'si' }, { gmail });
+  const turno = c.enviar('¿Cuál es mi último correo? Respóndele gracias');
+  while (!eventos.some((e) => e.tipo === 'confirmar')) await new Promise((r) => setTimeout(r, 5));
+  const lista = JSON.parse(peticiones[1].messages.at(-1).content[0].content);
+  assert.deepEqual(lista.map((m) => m.asunto), ['Railway', 'Google']);
+  assert.match(lista[0].fecha, /viernes, 30 oct, 23:18/);
+  // «si» no vale para enviar: se trata como «preguntar».
+  const pregunta = eventos.find((e) => e.tipo === 'confirmar');
+  assert.equal(pregunta.accion.titulo, 'Re: Railway');
+  assert.equal(pregunta.accion.cuerpo, 'Gracias');
+  c.responderConfirmacion(pregunta.id, true);
+  await turno;
+  assert.deepEqual(enviados, [{ para: 'x@y.es', asunto: '', cuerpo: 'Gracias', responderA: 'b' }]);
+});
+
+test('el contexto de cada mensaje trae el día de la semana y los próximos días', async () => {
+  const { fetch, peticiones } = apiSimulada([[inicio('m1'), ...texto(0, 'Hola.'), ...fin('end_turn')]]);
+  const { c } = conPermisos(fetch, {}, {});
+  await c.enviar('Hola');
+  const contexto = peticiones[0].messages[0].content[0].text;
+  const hoy = new Date().toLocaleDateString('es-ES', { weekday: 'long' });
+  assert.match(contexto, new RegExp(`Fecha y hora local del usuario: ${hoy}`));
+  assert.match(contexto, /Esta semana va del lunes, \d+ \S+ al domingo/);
+  assert.equal(contexto.split('Próximos días: ')[1].split('; ').length, 7);
+});
+
+test('calendario: modificar conserva la duración y cambia entre hora y todo el día', async () => {
+  const llamadas = [];
+  globalThis.fetch = async (url, init = {}) => {
+    llamadas.push({ metodo: init.method ?? 'GET', cuerpo: init.body && JSON.parse(init.body) });
+    return Response.json({ id: 'e1', summary: 'Cita', start: { dateTime: '2026-11-02T17:00:00+01:00' }, end: { dateTime: '2026-11-02T18:30:00+01:00' } });
+  };
+  const cal = new ClienteCalendario({ token: async () => 't', invalidar: () => {} });
+  await cal.modificar('e1', { inicio: Date.parse('2026-11-03T10:00:00+01:00') });
+  assert.equal(llamadas.at(-1).metodo, 'PATCH');
+  assert.equal(Date.parse(llamadas.at(-1).cuerpo.end.dateTime) - Date.parse(llamadas.at(-1).cuerpo.start.dateTime), 90 * 60000);
+  await cal.modificar('e1', { titulo: 'Otra' });
+  assert.deepEqual(llamadas.at(-1).cuerpo, { summary: 'Otra' });
+  await cal.modificar('e1', { inicio: new Date(2026, 10, 5).getTime(), todoElDia: true });
+  assert.deepEqual(llamadas.at(-1).cuerpo.start, { date: '2026-11-05', dateTime: null });
+  assert.deepEqual(llamadas.at(-1).cuerpo.end, { date: '2026-11-06', dateTime: null });
 });

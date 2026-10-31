@@ -26,6 +26,7 @@ function convertir(evento) {
     fin: todoElDia ? inicioDelDia(evento.end.date) : Date.parse(evento.end?.dateTime),
     todoElDia,
     lugar: evento.location || '',
+    descripcion: evento.description || '',
     enlace: evento.htmlLink || '',
   };
 }
@@ -79,6 +80,33 @@ export class ClienteCalendario {
       end: todoElDia ? { date: fechaLocal(Math.max(fin, inicio + DIA)) } : { dateTime: new Date(fin).toISOString() },
     };
     return convertir(await this.api('', { method: 'POST', body: JSON.stringify(cuerpo) }));
+  }
+
+  async obtener(id) {
+    if (!ID_VALIDO.test(id)) throw new Error('Identificador de evento no válido.');
+    return convertir(await this.api(`/${id}`));
+  }
+
+  // Cambia solo lo que se indique. Si se mueve el inicio sin decir el fin, el
+  // evento conserva su duración; si cambia a (o desde) todo el día, también.
+  async modificar(id, cambios) {
+    const actual = await this.obtener(id);
+    const todoElDia = cambios.todoElDia ?? actual.todoElDia;
+    const inicio = cambios.inicio ?? actual.inicio;
+    const duracion = todoElDia === actual.todoElDia ? actual.fin - actual.inicio : todoElDia ? DIA : 60 * 60 * 1000;
+    const fin = cambios.fin ?? inicio + duracion;
+    const cuerpo = {
+      ...(cambios.titulo !== undefined ? { summary: cambios.titulo } : {}),
+      ...(cambios.lugar !== undefined ? { location: cambios.lugar } : {}),
+      ...(cambios.descripcion !== undefined ? { description: cambios.descripcion } : {}),
+    };
+    if (cambios.inicio !== undefined || cambios.fin !== undefined || cambios.todoElDia !== undefined) {
+      cuerpo.start = todoElDia ? { date: fechaLocal(inicio), dateTime: null } : { dateTime: new Date(inicio).toISOString(), date: null };
+      cuerpo.end = todoElDia
+        ? { date: fechaLocal(Math.max(fin, inicio + DIA)), dateTime: null }
+        : { dateTime: new Date(Math.max(fin, inicio)).toISOString(), date: null };
+    }
+    return convertir(await this.api(`/${id}`, { method: 'PATCH', body: JSON.stringify(cuerpo) }));
   }
 
   async borrar(id) {

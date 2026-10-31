@@ -399,12 +399,15 @@ export function crearDemo() {
             const id = `cdemo${Date.now()}`;
             const acepta = await new Promise((resolver) => {
               confirmaciones.set(id, resolver);
-              emitir({ tipo: 'confirmar', id, accion: { tipo: 'evento', ...evento } });
+              const cuando = new Date(evento.inicio).toLocaleString('es-ES', { weekday: 'long', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+              const accion = { tipo: 'evento', icono: 'calendario', pregunta: '¿Lo añado a tu calendario?', titulo: evento.titulo, detalle: [cuando, evento.lugar].filter(Boolean).join(' · '), boton: 'Añadir', hecho: 'Añadido a tu calendario' };
+              emitir({ tipo: 'confirmar', id, accion });
             });
             confirmaciones.delete(id);
             if (acepta) {
               eventos.push({ id: `ev${Date.now()}`, ...evento });
               emitir({ tipo: 'evento', evento: { id: 'edemo', ...evento } });
+              emitir({ tipo: 'confirmado', id, ok: true });
             }
             else respuesta = textoNo;
           }

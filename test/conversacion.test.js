@@ -29,3 +29,15 @@ test('rechaza historiales que la API no aceptaría', () => {
   assert.equal(c.restaurar('nada'), false);
   assert.deepEqual(c.historial, []);
 });
+
+test('ajustes: los guardados antes de la revisión 2 pasan al estilo Ilustración y los permisos se validan', async () => {
+  const { normalizarAjustes, aplicarCambios } = await import('../src/compartido/ajustes.js');
+  assert.equal(normalizarAjustes({ estilo: 'realista', paleta: 'sombra' }).estilo, 'ilustracion');
+  assert.equal(normalizarAjustes({ estilo: 'realista', paleta: 'sombra' }).paleta, 'sombra');
+  assert.equal(normalizarAjustes({ estilo: 'anime', revision: 2 }).estilo, 'anime');
+  const a = normalizarAjustes({});
+  assert.equal(a.permisoEventoBorrar, 'preguntar');
+  assert.equal(aplicarCambios(a, { permisoEventoBorrar: 'no' }).permisoEventoBorrar, 'no');
+  assert.throws(() => aplicarCambios(a, { permisoCorreoEnviar: 'si' }));
+  assert.throws(() => aplicarCambios(a, { permisoCorreoLeer: 'preguntar' }));
+});

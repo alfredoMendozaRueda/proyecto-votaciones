@@ -283,7 +283,16 @@ async function iniciar() {
   setInterval(contarRecordatoriosDeHoy, 60_000);
   api.claude.alEvento((e) => e.tipo === 'recordatorio' && contarRecordatoriosDeHoy());
   // El zorro reacciona a lo que pasa en la conversación.
-  const GESTOS = { recordatorio: 'asentir', memoria: 'asentir', evento: 'celebrar', error: 'triste', rechazo: 'triste' };
+  const GESTOS = {
+    recordatorio: 'asentir',
+    memoria: 'asentir',
+    evento: 'celebrar',
+    'agenda-cambiada': 'asentir',
+    'correo-cambiado': 'asentir',
+    'correo-enviado': 'celebrar',
+    error: 'triste',
+    rechazo: 'triste',
+  };
   api.claude.alEvento((e) => GESTOS[e.tipo] && gesto(GESTOS[e.tipo]));
   document.getElementById('boton-ajustes').addEventListener('click', () =>
     mostrarVista(vistaActual === 'ajustes' ? 'chat' : 'ajustes'),

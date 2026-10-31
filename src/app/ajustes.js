@@ -1,5 +1,6 @@
 import { icono } from './iconos.js';
 import { PALETAS } from '../kitsune/paletas.js';
+import { PERMISOS, NOMBRES_NIVEL, nivelesDe, nivel } from '../compartido/permisos.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -28,6 +29,24 @@ const IA = {
     ayuda: 'De pago por uso: créala en <strong>console.anthropic.com</strong> → API Keys.',
   },
 };
+
+// Atajos para poner todos los permisos de golpe. Leer y consultar no cambian.
+const PREAJUSTES = [
+  ['preguntar', 'Preguntar antes de cambiar nada'],
+  ['no', 'Solo consultar'],
+  ['si', 'Confiar en Kitsune'],
+];
+const DE_LECTURA = new Set(['permisoCorreoLeer', 'permisoAgendaVer']);
+
+function nivelesPreajuste(nivelBuscado) {
+  return Object.fromEntries(
+    PERMISOS.filter((p) => !DE_LECTURA.has(p.clave)).map((p) => {
+      const niveles = nivelesDe(p);
+      // Enviar correo no admite «sí»: se queda en preguntar.
+      return [p.clave, niveles.includes(nivelBuscado) ? nivelBuscado : niveles.includes('preguntar') ? 'preguntar' : niveles[0]];
+    }),
+  );
+}
 
 const NOMBRES_TECLA = { Control: 'Ctrl', Super: 'Win', Space: 'Espacio' };
 
@@ -182,6 +201,47 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
           ${interruptor('pulsoDiario', 'Pulso del día', 'La primera vez que abres Kitsune cada día te ofrece un resumen de correo y recordatorios.')}
         </section>
 
+        <section class="grupo" id="seccion-permisos" aria-label="Permisos">
+          <h3>Permisos</h3>
+          <p class="ajuste__ayuda">Qué puede hacer Kitsune por su cuenta. <strong>Sí</strong>: lo hace y te lo cuenta. <strong>Preguntar</strong>: te enseña en el chat lo que va a hacer y espera a que lo aceptes. <strong>No</strong>: no lo hace aunque se lo pidas.</p>
+          <div class="preajustes" role="group" aria-label="Poner todos a la vez">
+            ${PREAJUSTES.map(([n, nombre]) => `<button type="button" class="boton" data-preajuste="${n}">${nombre}</button>`).join('')}
+          </div>
+          ${[...new Set(PERMISOS.map((p) => p.grupo))]
+            .map(
+              (grupo) => `
+          <div class="permisos" role="group" aria-label="${grupo}">
+            <span class="permisos__grupo">${grupo}</span>
+            ${PERMISOS.filter((p) => p.grupo === grupo)
+              .map(
+                (p) => `
+            <div class="permiso">
+              <span class="permiso__nombre">${p.nombre}</span>
+              <div class="segmentado segmentado--permiso" role="group" aria-label="${p.nombre}">
+                ${nivelesDe(p)
+                  .map((n) => `<button type="button" data-clave="${p.clave}" data-valor="${n}" data-nivel="${n}" aria-pressed="${nivel(ajustes, p.clave) === n}">${NOMBRES_NIVEL[n]}</button>`)
+                  .join('')}
+              </div>
+            </div>`,
+              )
+              .join('')}
+          </div>`,
+            )
+            .join('')}
+          <div class="permisos" role="group" aria-label="Internet">
+            <span class="permisos__grupo">Internet</span>
+            ${interruptor(
+              'busquedaWeb',
+              'Buscar en internet',
+              ajustes.proveedor === 'claude'
+                ? 'Para noticias, precios u horarios. Cada búsqueda suma un pequeño coste en tu cuenta de Claude.'
+                : 'Para noticias, precios u horarios. Gratis: cuenta para el límite diario de Groq.',
+            )}
+          </div>
+          <p class="ajuste__ayuda">Enviar un correo siempre te lo enseña antes, entero. Lo que Kitsune lee en correos o páginas nunca le da órdenes.</p>
+          <p class="mensaje-ajuste" id="mensaje-permisos" role="status"></p>
+        </section>
+
         <section class="grupo" id="seccion-claude" aria-label="Inteligencia artificial">
           <h3>Inteligencia artificial</h3>
           <div class="ajuste">
@@ -189,7 +249,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
             ${segmentado('proveedor', [['groq', 'Groq · gratis'], ['claude', 'Claude · de pago']])}
             <p class="ajuste__ayuda">${
               ajustes.proveedor === 'groq'
-                ? 'Gratis, con un límite de mensajes por minuto y por día que da de sobra para el uso personal. No busca en internet.'
+                ? 'Gratis, con un límite de mensajes por minuto y por día que da de sobra para el uso personal.'
                 : 'Más lista y con búsqueda en internet; pagas lo que usas con tu cuenta de Anthropic.'
             }</p>
           </div>
@@ -205,13 +265,6 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
             <p class="ajuste__ayuda">${ia.ayuda}${estadoClaude.configurado ? ' <button type="button" class="boton" id="quitar-clave" style="margin-left:6px;padding:2px 10px">Quitar clave</button>' : ''}</p>
             <p class="mensaje-ajuste" id="mensaje-claude" role="status"></p>
           </div>
-          ${interruptor(
-            'busquedaWeb',
-            'Buscar en internet',
-            ajustes.proveedor === 'claude'
-              ? 'Para noticias, precios u horarios. Cada búsqueda suma un pequeño coste en tu cuenta de Claude.'
-              : 'Para noticias, precios u horarios. Gratis: cuenta para el límite diario de Groq.',
-          )}
           ${
             ajustes.proveedor === 'claude'
               ? `<div class="ajuste">
@@ -300,6 +353,15 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar }) {
       s.addEventListener('change', () => {
         const clave = s.dataset.selector;
         guardar({ [clave]: typeof ajustes[clave] === 'number' ? Number(s.value) : s.value });
+      }),
+    );
+    contenedor.querySelectorAll('[data-preajuste]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const cambios = nivelesPreajuste(b.dataset.preajuste);
+        if (!(await guardar(cambios, { donde: 'mensaje-permisos', texto: `Hecho: ${b.textContent.toLowerCase()}.` }))) return;
+        for (const [clave, valor] of Object.entries(cambios)) {
+          contenedor.querySelectorAll(`[data-clave="${clave}"]`).forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.valor === valor)));
+        }
       }),
     );
     const personalidad = contenedor.querySelector('#ajuste-personalidad');
