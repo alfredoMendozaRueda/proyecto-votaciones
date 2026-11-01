@@ -527,6 +527,7 @@ function registrarCanales() {
   manejar('voicestudio:hablar', (texto) => hablarVoiceStudio(obtenerAjustes().voicestudioUrl, String(texto ?? ''), obtenerAjustes().voicestudioVoz));
   manejar('voicestudio:voces', () => vocesVoiceStudio(obtenerAjustes().voicestudioUrl));
   manejar('servidor:empleoBuscar', (datos) => servidor.empleo.buscar(datos));
+  manejar('servidor:empleoModalidad', (ids) => servidor.empleo.modalidad(ids));
   manejar('servidor:empleoDetalle', (url) => servidor.empleo.detalle(url));
   manejar('servidor:empleoAlerta', () => servidor.empleo.alerta());
   manejar('servidor:guardarEmpleoAlerta', (datos) => servidor.empleo.guardarAlerta(datos));

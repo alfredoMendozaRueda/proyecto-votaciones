@@ -244,6 +244,7 @@ export function crearAvisos({ leerSecreto, guardarSecreto, borrarSecreto, obtene
     registro: () => usar((c) => c.registro()),
     empleo: {
       buscar: (datos) => usar((c) => c.empleoBuscar(datos)),
+      modalidad: (ids) => usar((c) => c.empleoModalidad(ids)),
       detalle: (url) => usar((c) => c.empleoDetalle(url)),
       alerta: () => usar((c) => c.empleoAlerta()),
       guardarAlerta: (datos) => usar((c) => c.guardarEmpleoAlerta(datos)),

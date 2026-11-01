@@ -64,6 +64,7 @@ export const servidor = {
   transcribir: (audio, tipo) => usar((c) => c.transcribir(audio, String(tipo ?? ''))),
   empleo: {
     buscar: (datos) => usar((c) => c.empleoBuscar(datos)),
+    modalidad: (ids) => usar((c) => c.empleoModalidad(Array.isArray(ids) ? ids.map(String).slice(0, 4) : [])),
     detalle: (url) => usar((c) => c.empleoDetalle(String(url ?? ''))),
     alerta: () => usar((c) => c.empleoAlerta()),
     guardarAlerta: (datos) => usar((c) => c.guardarEmpleoAlerta(datos)),

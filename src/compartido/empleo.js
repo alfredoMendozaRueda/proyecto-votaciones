@@ -7,7 +7,7 @@
 //
 // Todo pasa por ia({ sistema, usuario, web, max }) → { texto, fuentes }, que
 // en la app es la IA elegida en Ajustes (Groq gratis o Claude).
-import { aceptaModalidad, modalidadDeTexto } from './portales.js';
+import { aceptaModalidad, modalidadDeTexto, completarModalidades } from './portales.js';
 
 const hoy = () => new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -333,7 +333,7 @@ export function ofertaDeLaWeb(o, fuentes = []) {
   });
 }
 
-export async function buscarOfertas(ia, perfil, preferencias, { portales = null, alPaso = () => {} } = {}) {
+export async function buscarOfertas(ia, perfil, preferencias, { portales = null, fichas = null, alPaso = () => {} } = {}) {
   const pref = normalizarPreferencias(preferencias);
   const vistas = new Set();
   const ofertas = [];
@@ -360,7 +360,11 @@ export async function buscarOfertas(ia, perfil, preferencias, { portales = null,
         modalidad: pref.modalidad,
         dias: 14,
       });
-      anadir((r.ofertas ?? []).map(normalizarOferta));
+      // Las de LinkedIn que no dicen su modalidad: se lee su ficha, aparte.
+      if (r.pendientes?.length && fichas) alPaso('fichas');
+      const c = await completarModalidades(r.ofertas ?? [], r.pendientes, fichas);
+      r.descartadas = (r.descartadas ?? 0) + c.descartadas;
+      anadir(c.ofertas.map(normalizarOferta));
       if (r.descartadas) avisos.push(`He quitado ${r.descartadas === 1 ? '1 oferta que no era' : `${r.descartadas} ofertas que no eran`} ${pref.modalidad === 'híbrido' ? 'en híbrido o remoto' : 'en remoto'}.`);
       if (r.errores?.length) avisos.push(`Algún portal no ha respondido (${r.errores.join('; ')}).`);
     } catch (error) {

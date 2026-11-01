@@ -107,6 +107,7 @@ contextBridge.exposeInMainWorld('asistente', {
     voz: (texto, voz) => invocar('servidor:voz', texto, voz),
     empleo: {
       buscar: (datos) => invocar('servidor:empleoBuscar', datos),
+      modalidad: (ids) => invocar('servidor:empleoModalidad', ids),
       detalle: (url) => invocar('servidor:empleoDetalle', url),
       alerta: () => invocar('servidor:empleoAlerta'),
       guardarAlerta: (datos) => invocar('servidor:guardarEmpleoAlerta', datos),

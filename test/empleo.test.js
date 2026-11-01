@@ -299,7 +299,7 @@ test('ofertas de la web: el enlace solo se conserva si la IA visitó esa página
   assert.equal(ofertaDeLaWeb({ puesto: 'Sin enlace' }, fuentes).url, '');
 });
 
-import { modalidadDeTexto, aceptaModalidad } from '../src/compartido/portales.js';
+import { modalidadDeTexto, aceptaModalidad, completarModalidades, leerModalidades, fichaLigeraLinkedIn } from '../src/compartido/portales.js';
 
 test('modalidad: se deduce del título, el lugar o la descripción (frases reales de LinkedIn)', () => {
   const m = (puesto, descripcion = '', ubicacion = 'Madrid') => modalidadDeTexto({ puesto, ubicacion, descripcion });
@@ -312,6 +312,9 @@ test('modalidad: se deduce del título, el lugar o la descripción (frases reale
   assert.equal(m('Frontend Dev', 'Ofrecemos 2 días de teletrabajo a la semana.'), 'híbrido');
   assert.equal(m('Frontend Dev', 'Posición 100% presencial en nuestras oficinas.'), 'presencial');
   assert.equal(m('Frontend Dev', 'This is not a remote position.'), 'presencial');
+  assert.equal(m('Sr. Frontend', 'Available to work on-site part of the week (this is a hybrid role, not fully remote).'), 'híbrido');
+  assert.equal(m('Frontend Dev', 'El puesto no es 100% remoto: hay que ir a la oficina de Madrid.'), 'presencial');
+  assert.equal(m('Frontend Dev', 'Sin teletrabajo.'), 'presencial');
   assert.equal(m('Frontend Dev', 'Trabajarás en remoto desde cualquier punto de España.'), 'remoto');
   // El título manda sobre la descripción.
   assert.equal(m('Frontend (100% remoto)', 'Somos un equipo híbrido repartido por Europa.'), 'remoto');
@@ -323,13 +326,15 @@ test('modalidad: se deduce del título, el lugar o la descripción (frases reale
   assert.equal(aceptaModalidad('', 'presencial'), true);
 });
 
-test('remoto: LinkedIn se busca con palabras, se lee la ficha si no lo dice y se quitan las que no son remotas', async () => {
+test('remoto: LinkedIn se busca con palabras; las fichas se leen aparte, de 4 en 4, y se quitan las que no son remotas', async () => {
   const tarjeta = (id, titulo) =>
     `<li><div class="base-card" data-entity-urn="urn:li:jobPosting:${id}"><h3 class="base-search-card__title">${titulo}</h3><h4 class="base-search-card__subtitle"><a href="#">Acme ${id}</a></h4><span class="job-search-card__location">Madrid</span></div></li>`;
   const fichas = {
     4000000002: 'Hybrid model: 2 days per week in the office.',
     4000000003: 'Trabajo 100% remoto desde España.',
     4000000004: 'Buscamos a alguien con React y ganas de aprender.',
+    4000000006: 'This is a hybrid role, not fully remote.',
+    4000000007: 'Remote across Spain.',
   };
   const pedidas = [];
   const hacerFetch = async (url) => {
@@ -342,24 +347,58 @@ test('remoto: LinkedIn se busca con palabras, se lee la ficha si no lo dice y se
       ] });
     }
     const ficha = u.pathname.match(/jobPosting\/(\d+)/)?.[1];
-    if (ficha) return new Response(`<h1 class="top-card-layout__title">x</h1><div class="show-more-less-html__markup">${fichas[ficha]}</div>`);
-    return new Response(`<ul>${tarjeta(4000000001, 'Frontend (100% remoto)')}${tarjeta(4000000002, 'React Developer')}${tarjeta(4000000003, 'Frontend Engineer')}${tarjeta(4000000004, 'Frontend Dev')}${tarjeta(4000000005, 'Frontend híbrido Madrid')}</ul>`);
+    if (ficha) {
+      const cerrada = ficha === '4000000007' ? '<span class="closed-job__flavor">No longer accepting applications</span>' : '';
+      return new Response(`<h1 class="top-card-layout__title">x</h1>${cerrada}<div class="show-more-less-html__markup">${fichas[ficha]}</div><button class="show-more-less-html__button">ver más</button>`);
+    }
+    return new Response(`<ul>${[[1, 'Frontend (100% remoto)'], [2, 'React Developer'], [3, 'Frontend Engineer'], [4, 'Frontend Dev'], [5, 'Frontend híbrido Madrid'], [6, 'Sr. Frontend'], [7, 'Frontend Lead']].map(([i, t]) => tarjeta(4000000000 + i, t)).join('')}</ul>`);
   };
   const r = await buscarEnPortales({ puestos: 'Frontend', ubicacion: 'Madrid', modalidad: 'remoto' }, hacerFetch);
-  const busqueda = pedidas.find((u) => u.pathname.includes('seeMoreJobPostings'));
-  assert.equal(busqueda.searchParams.get('keywords'), 'Frontend (remoto OR remote OR teletrabajo)');
-  // Fichas leídas: solo las tarjetas que no dicen su modalidad en el título.
-  assert.deepEqual(pedidas.filter((u) => u.pathname.includes('jobPosting')).map((u) => u.pathname.split('/').pop()).sort(), ['4000000002', '4000000003', '4000000004']);
-  assert.deepEqual(r.ofertas.map((o) => `${o.empresa}:${o.modalidad}`).sort(), ['Acme 4000000001:remoto', 'Acme 4000000003:remoto', 'Acme 4000000004:', 'Remota SL:remoto']);
-  assert.equal(r.descartadas, 3);
-  assert.match(r.ofertas.find((o) => o.empresa === 'Acme 4000000003').descripcion, /100% remoto/);
-  assert.ok(r.ofertas.every((o) => !('quiere' in o)));
-  // Sin modalidad pedida no se leen fichas ni se quita nada.
-  pedidas.length = 0;
-  const todas = await buscarEnPortales({ puestos: 'Frontend', ubicacion: 'Madrid' }, hacerFetch);
-  assert.equal(todas.ofertas.length, 7);
-  assert.equal(todas.descartadas, undefined);
+  assert.equal(pedidas.find((u) => u.pathname.includes('seeMoreJobPostings')).searchParams.get('keywords'), 'Frontend (remoto OR remote OR teletrabajo)');
+  // La búsqueda no lee fichas (poca CPU en el servidor): quita las que ya se sabe y deja pendientes las demás.
   assert.ok(!pedidas.some((u) => u.pathname.includes('jobPosting')));
+  assert.equal(r.descartadas, 2);
+  assert.deepEqual(r.pendientes.map((p) => p.id).sort(), ['li-4000000002', 'li-4000000003', 'li-4000000004', 'li-4000000006', 'li-4000000007']);
+  assert.ok(r.pendientes.every((p) => p.quiere === 'remoto'));
+  assert.ok(r.ofertas.every((o) => !('quiere' in o)));
+  // Las fichas, en lotes de 4 como mucho.
+  const lotes = [];
+  const c = await completarModalidades(r.ofertas, r.pendientes, (ids) => (lotes.push(ids.length), leerModalidades(ids, hacerFetch)));
+  assert.deepEqual(lotes, [4, 1]);
+  assert.deepEqual(c.ofertas.map((o) => `${o.empresa}:${o.modalidad}`).sort(), ['Acme 4000000001:remoto', 'Acme 4000000003:remoto', 'Acme 4000000004:', 'Remota SL:remoto']);
+  assert.equal(c.descartadas, 3, 'híbrida, «not fully remote» y cerrada');
+  assert.match(c.ofertas.find((o) => o.empresa === 'Acme 4000000003').descripcion, /100% remoto/);
+  assert.doesNotMatch(c.ofertas.find((o) => o.empresa === 'Acme 4000000003').descripcion, /ver más/);
+  // Si leer falla, se quedan todas (la IA las revisa).
+  const sinServidor = await completarModalidades(r.ofertas, r.pendientes, async () => { throw new Error('caído'); });
+  assert.equal(sinServidor.ofertas.length, r.ofertas.length);
+  // Ids que no son de LinkedIn no se piden.
+  assert.deepEqual(await leerModalidades(['fh-x', 'https://evil', 'li-12'], hacerFetch), []);
+  // Sin modalidad pedida no queda nada pendiente ni se quita nada.
+  const todas = await buscarEnPortales({ puestos: 'Frontend', ubicacion: 'Madrid' }, hacerFetch);
+  assert.equal(todas.ofertas.length, 9);
+  assert.equal(todas.pendientes, undefined);
+  assert.equal(todas.descartadas, undefined);
+});
+
+test('remoto: buscarOfertas lee las fichas pendientes y avisa de todas las quitadas', async () => {
+  const pasos = [];
+  const portales = async () => ({
+    ofertas: [
+      { id: 'li-4000000001', puesto: 'Frontend', empresa: 'A', url: 'https://www.linkedin.com/jobs/view/4000000001', fuente: 'LinkedIn' },
+      { id: 'li-4000000002', puesto: 'Frontend', empresa: 'B', url: 'https://www.linkedin.com/jobs/view/4000000002', fuente: 'LinkedIn' },
+      ...Array.from({ length: 10 }, (_, i) => ({ id: `fh-${i}`, puesto: `Dev ${i}`, empresa: `Z${i}`, url: `https://freehire.me/jobs/${i}`, fuente: 'freehire', modalidad: 'remoto' })),
+    ],
+    errores: [],
+    descartadas: 1,
+    pendientes: [{ id: 'li-4000000001', quiere: 'remoto' }, { id: 'li-4000000002', quiere: 'remoto' }],
+  });
+  const fichas = async (ids) => ids.map((id) => ({ id, abierta: true, descripcion: id.endsWith('1') ? 'Full remote.' : 'Hybrid, 3 days in the office.', modalidad: id.endsWith('1') ? 'remoto' : 'híbrido' }));
+  const r = await buscarOfertas(iaFalsa([]).ia, PERFIL, { puestos: 'Frontend', modalidad: 'remoto' }, { portales, fichas, alPaso: (p) => pasos.push(p) });
+  assert.ok(r.ofertas.some((o) => o.empresa === 'A' && o.modalidad === 'remoto' && o.descripcion === 'Full remote.'));
+  assert.ok(!r.ofertas.some((o) => o.empresa === 'B'));
+  assert.ok(r.avisos.some((a) => /quitado 2 ofertas que no eran en remoto/.test(a)), r.avisos.join(' | '));
+  assert.deepEqual(pasos, ['portales', 'fichas']);
 });
 
 test('remoto: la búsqueda web descarta las ofertas presenciales y avisa de las quitadas', async () => {
@@ -373,4 +412,13 @@ test('remoto: la búsqueda web descarta las ofertas presenciales y avisa de las 
   const r = await buscarOfertas(ia, PERFIL, { puestos: 'Frontend', modalidad: 'remoto' }, { portales });
   assert.deepEqual(r.ofertas.map((o) => o.empresa), ['Z', 'Casa']);
   assert.ok(r.avisos.some((a) => /quitado 2 ofertas que no eran en remoto/.test(a)), r.avisos.join(' | '));
+});
+
+test('LinkedIn: la ficha ligera saca la descripción sin analizar toda la página', () => {
+  const html = `<html>${'<div>'.repeat(50)}<h1 class="top-card-layout__title">Dev</h1><div class="description__text"><div class="show-more-less-html__markup">Hola &amp; adiós<br>Trabajo <strong>100% remoto</strong>.<p>Otra línea</p></div><button class="show-more-less-html__button">Mostrar más</button></div></html>`;
+  const f = fichaLigeraLinkedIn(html);
+  assert.equal(f.abierta, true);
+  assert.equal(f.descripcion, 'Hola & adiós\nTrabajo 100% remoto .\nOtra línea');
+  assert.equal(fichaLigeraLinkedIn('<span class="closed-job__flavor">x</span>').abierta, false);
+  assert.equal(fichaLigeraLinkedIn('<p>nada</p>').descripcion, '');
 });

@@ -12,7 +12,7 @@ import { ClienteGmail } from '../../src/compartido/gmail.js';
 import { aviso } from '../../src/compartido/notificaciones.js';
 import { sintetizar, validarVoz } from './voz.js';
 import { limpiarTranscripcion, MAX_AUDIO } from '../../src/compartido/dictado.js';
-import { buscarEnPortales, detalleOferta } from '../../src/compartido/portales.js';
+import { buscarEnPortales, detalleOferta, leerModalidades } from '../../src/compartido/portales.js';
 import { guardarAlerta, alertaPublica, alertaEmpleo, preparadas, recogerPreparadas } from './empleo.js';
 import { rutaSincro } from './sincro.js';
 import { mesDe } from '../../src/compartido/consumo.js';
@@ -443,6 +443,11 @@ async function atender(peticion, env) {
         dias: Math.min(60, Math.max(1, Number(d.dias) || 14)),
       }),
     );
+  }
+  // La modalidad de unas pocas ofertas de LinkedIn (de 4 en 4: cada petición tiene poca CPU).
+  if (m === 'POST' && ruta === '/empleo/modalidad') {
+    const d = await cuerpo(peticion);
+    return json({ fichas: await leerModalidades(Array.isArray(d.ids) ? d.ids.slice(0, 4) : []) });
   }
   if (m === 'GET' && ruta === '/empleo/alerta') {
     const a = await n.ajustes();

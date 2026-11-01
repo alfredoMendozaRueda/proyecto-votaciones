@@ -2,7 +2,8 @@
 // nuevas en los portales de ai-job-search (LinkedIn y freehire), las puntúa con
 // su marco de evaluación (si hay clave de Groq en el servidor) y avisa al
 // móvil solo de las que encajan. Las ya vistas no se repiten.
-import { buscarEnPortales, detalleOferta } from '../../src/compartido/portales.js';
+import { buscarEnPortales, detalleOferta, aceptaModalidad, modalidadDeTexto } from '../../src/compartido/portales.js';
+import { resolverZona } from '../../src/compartido/zonas.js';
 import { evaluarEncaje, normalizarOferta, normalizarPerfil, normalizarPreferencias, adaptarCV, ofertaDeCandidatura } from '../../src/compartido/empleo.js';
 import { mesDe } from '../../src/compartido/consumo.js';
 import { rutaIA, conRespaldo, normalizarModo, MAX_PREPARAR } from '../../src/compartido/modos.js';
@@ -196,6 +197,13 @@ async function guardarPreparadas(n, lista) {
 
 export const hayCola = async (n) => Boolean((await n.ajustes()).empleoCola?.length);
 
+// La modalidad que se busca: la elegida o, si todas las zonas son «en remoto», remoto.
+function modalidadQuerida(alerta) {
+  if (alerta.modalidad) return alerta.modalidad;
+  const zonas = alerta.zonas ?? [];
+  return zonas.length && zonas.every((z) => resolverZona(z).modalidad === 'remoto') ? 'remoto' : '';
+}
+
 export async function prepararSiguiente(n, { hacerFetch = fetch } = {}) {
   const a = await n.ajustes();
   const [oferta, ...resto] = a.empleoCola ?? [];
@@ -224,6 +232,13 @@ export async function prepararSiguiente(n, { hacerFetch = fetch } = {}) {
     } catch {
       // Con el resumen de la búsqueda también vale.
     }
+  }
+  // Si buscas en remoto (o híbrido) y la oferta completa dice otra cosa, no se prepara.
+  const quiere = modalidadQuerida(alerta);
+  const modalidad = modalidadDeTexto(completa) || completa.modalidad;
+  if (!aceptaModalidad(quiere, modalidad)) {
+    await n.registrar('automatizacion', `No preparo «${completa.puesto}»: es ${modalidad} y buscas ${quiere}.`);
+    return null;
   }
   const perfil = normalizarPerfil(JSON.parse(await descifrarTexto(alerta.perfil, n.env.CLAVE_CIFRADO)));
   try {

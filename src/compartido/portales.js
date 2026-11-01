@@ -213,6 +213,35 @@ export function leerOfertaLinkedIn(html, id) {
   });
 }
 
+// Versión ligera de la ficha, para saber la modalidad durante la búsqueda: en
+// el servidor cada petición tiene muy poca CPU (10 ms en el plan gratuito de
+// Cloudflare) y leer diez fichas completas la agota. Solo se busca dónde
+// empieza la descripción y se toma un trozo, sin analizar el resto.
+export function fichaLigeraLinkedIn(html) {
+  const inicio = html.indexOf('show-more-less-html__markup');
+  const desde = inicio === -1 ? html.indexOf('description__text') : inicio;
+  const cabecera = desde === -1 ? html.slice(0, 40000) : html.slice(Math.max(0, desde - 40000), desde);
+  const abierta = !/closed-job__flavor|no longer accepting applications|ya no acepta solicitudes/i.test(cabecera);
+  if (desde === -1) return { descripcion: '', abierta };
+  const trozo = html.slice(html.indexOf('>', desde) + 1, desde + 12000);
+  const boton = trozo.indexOf('show-more-less-html__button');
+  const fin = boton === -1 ? -1 : trozo.lastIndexOf('<', boton);
+  const descripcion = decodificarEntidades(
+    (fin === -1 ? trozo : trozo.slice(0, fin))
+      .replace(/<\s*br\s*\/?>|<(?:p|li|h\d)(?:\s[^>]*)?>|<\/(?:p|li|div|h\d)>/gi, '\n')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/[ \t\r\f\v]+/g, ' ')
+      .replace(/\s*\n\s*/g, '\n'),
+  ).trim();
+  return { descripcion: descripcion.slice(0, 6000), abierta };
+}
+
+async function fichaLinkedInParaBuscar(id, hacerFetch) {
+  const r = await pedirConEspera(`${URL_LINKEDIN_OFERTA}/${id}`, { headers: { 'User-Agent': UA, Accept: 'text/html', 'Accept-Language': 'es-ES,es;q=0.9' } }, hacerFetch, 1);
+  if (!r.ok) return null;
+  return fichaLigeraLinkedIn(await r.text());
+}
+
 export async function buscarLinkedIn(opciones, hacerFetch = fetch) {
   const r = await pedirConEspera(
     urlBusquedaLinkedIn(opciones),
@@ -311,16 +340,20 @@ export const slugFreehire = (url) => String(url ?? '').match(/^https:\/\/(?:[a-z
 // Primero el título y el lugar; si no dicen nada, la descripción.
 const REMOTO_SEGURO = /100\s*%\s*(en\s+)?(remot|teletrabajo)|(remoto|teletrabajo)\s*(al\s*)?100\s*%|full[\s-]*remote|fully[\s-]*remote|remote[\s-]*only|remote[\s-]*first|totalmente\s+(en\s+)?remot|en\s+remoto\s+total/;
 const HIBRIDO = /h[ií]brid|hybrid|semi[\s-]*presencial|presencialidad\s*\/\s*teletrabajo|teletrabajo\s*\/\s*presencial|\d\s*d[ií]as?\s+(a\s+la\s+semana\s+|por\s+semana\s+|semanales\s+)?(en\s+|de\s+)(la\s+)?oficina|\d\s*d[ií]as?\s+(de\s+)?(teletrabajo|presencial)|teletrabajo\s+\d\s*d[ií]as?|remoto\s*\+\s*\d|\d\s*days?\s+(a|per)\s+week\s+(in|on|at)\s+(the\s+)?(office|site)|days?\s+(in|at)\s+the\s+office/;
-const NO_REMOTO = /\b(no|sin)\s+(es\s+)?(un\s+)?(puesto\s+|trabajo\s+)?(en\s+)?(remoto|teletrabajo)|not\s+(a\s+)?(fully\s+)?remote|no\s+remote|non[\s-]remote|100\s*%\s*presencial/;
+// «not fully remote», «no es 100% remoto», «sin teletrabajo»…: se quitan antes de mirar lo demás.
+const NEGADO = /\b(?:not|no|non|ni|sin)[\s-]+(?:(?:es|is|a|an|un|una|puesto|trabajo|role|position|en)\s+)*(?:fully\s+|100\s*%\s*|totalmente\s+|completely\s+|full[\s-]+)?(?:en\s+)?(?:remote|remoto|teletrabajo)\b/g;
+const SOLO_PRESENCIAL = /100\s*%\s*presencial|fully\s+on[\s-]?site|solo\s+presencial/;
 const REMOTO = /\bremot[oa]s?\b|\bremote\b|teletrabaj|work\s+from\s+home|\bwfh\b|desde\s+casa|anywhere/;
 const PRESENCIAL = /presencial|on[\s-]?site|in[\s-]office|en\s+(la|nuestra|nuestras)\s+oficinas?/;
 
 function modalidadDe(texto) {
-  const t = String(texto ?? '').toLowerCase();
-  if (!t.trim()) return '';
+  const original = String(texto ?? '').toLowerCase();
+  if (!original.trim()) return '';
+  const t = original.replace(NEGADO, ' · ');
+  const negado = t !== original;
   if (REMOTO_SEGURO.test(t)) return 'remoto';
   if (HIBRIDO.test(t)) return 'híbrido';
-  if (NO_REMOTO.test(t)) return 'presencial';
+  if (negado || SOLO_PRESENCIAL.test(t)) return 'presencial';
   if (REMOTO.test(t)) return 'remoto';
   if (PRESENCIAL.test(t)) return 'presencial';
   return '';
@@ -382,34 +415,67 @@ export async function buscarEnPortales({ puestos, ubicacion, zonas = [], distanc
       }
     }
   }
-  // Modalidad: la de freehire o la que diga el texto. Si se busca en remoto (o
-  // híbrido) y una tarjeta de LinkedIn no lo dice, se lee su ficha (hasta 10).
+  // Modalidad: la de freehire o la que diga el título. Las tarjetas de LinkedIn
+  // que no lo dicen quedan «pendientes»: su ficha se lee aparte, con
+  // leerModalidades, de 4 en 4 (en el servidor cada petición tiene muy poca CPU).
   for (const o of ofertas) o.modalidad ||= modalidadDeTexto(o);
-  const porLeer = ofertas.filter((o) => o.quiere && o.quiere !== 'presencial' && !o.modalidad && o.fuente === 'LinkedIn').slice(0, MAX_FICHAS);
-  for (let i = 0; i < porLeer.length; i += 3) {
-    await Promise.all(
-      porLeer.slice(i, i + 3).map(async (o) => {
-        try {
-          const ficha = await detalleLinkedIn(o.id.replace(/^li-/, ''), hacerFetch);
-          if (!ficha) return;
-          if (ficha.descripcion) o.descripcion = ficha.descripcion.slice(0, 12000);
-          if (ficha.abierta === false) o.cerrada = true;
-          o.modalidad = modalidadDeTexto({ puesto: o.puesto, ubicacion: o.ubicacion, descripcion: ficha.descripcion });
-        } catch {
-          // Si la ficha no se deja leer, la oferta se queda y la IA la revisa.
-        }
-      }),
-    );
-  }
-  const validas = ofertas.filter((o) => !o.cerrada && aceptaModalidad(o.quiere, o.modalidad));
+  const validas = ofertas.filter((o) => aceptaModalidad(o.quiere, o.modalidad)).slice(0, 30);
   const descartadas = ofertas.length - validas.length;
+  const pendientes = validas
+    .filter((o) => o.quiere && o.quiere !== 'presencial' && !o.modalidad && o.fuente === 'LinkedIn')
+    .slice(0, MAX_PENDIENTES)
+    .map((o) => ({ id: o.id, quiere: o.quiere }));
   return {
-    ofertas: validas.slice(0, 30).map(({ quiere, cerrada, ...o }) => o),
+    ofertas: validas.map(({ quiere, ...o }) => o),
     errores: [...new Set(errores)],
     ...(descartadas ? { descartadas } : {}),
+    ...(pendientes.length ? { pendientes } : {}),
   };
 }
-const MAX_FICHAS = 10;
+const MAX_PENDIENTES = 12;
+export const FICHAS_POR_PETICION = 4;
+
+// Lee la ficha de hasta 4 ofertas de LinkedIn → [{ id, descripcion, modalidad, abierta }].
+// La modalidad sale de la descripción; quien llama la combina con el título.
+export async function leerModalidades(ids, hacerFetch = fetch) {
+  const validos = [...new Set((Array.isArray(ids) ? ids : []).map(String).filter((id) => /^li-\d{6,}$/.test(id)))].slice(0, FICHAS_POR_PETICION);
+  return Promise.all(
+    validos.map(async (id) => {
+      try {
+        const ficha = await fichaLinkedInParaBuscar(id.slice(3), hacerFetch);
+        if (!ficha) return { id, descripcion: '', modalidad: '', abierta: true };
+        return { id, descripcion: ficha.descripcion, modalidad: modalidadDeTexto({ descripcion: ficha.descripcion }), abierta: ficha.abierta };
+      } catch {
+        return { id, descripcion: '', modalidad: '', abierta: true };
+      }
+    }),
+  );
+}
+
+// Completa las pendientes de una búsqueda con sus fichas y quita las que no
+// sirven (cerradas o de otra modalidad). leer(ids) → leerModalidades(ids).
+export async function completarModalidades(ofertas, pendientes, leer) {
+  if (!pendientes?.length || !leer) return { ofertas, descartadas: 0 };
+  const quiere = new Map(pendientes.map((p) => [p.id, p.quiere]));
+  const ids = [...quiere.keys()];
+  const lotes = [];
+  for (let i = 0; i < ids.length; i += FICHAS_POR_PETICION) lotes.push(ids.slice(i, i + FICHAS_POR_PETICION));
+  const fichas = new Map();
+  // Dos peticiones a la vez como mucho.
+  for (let i = 0; i < lotes.length; i += 2) {
+    const r = await Promise.allSettled(lotes.slice(i, i + 2).map((l) => leer(l)));
+    for (const x of r) if (x.status === 'fulfilled' && Array.isArray(x.value)) for (const f of x.value) fichas.set(f.id, f);
+  }
+  const fuera = new Set();
+  const completas = ofertas.map((o) => {
+    const f = fichas.get(o.id);
+    if (!f) return o;
+    const modalidad = modalidadDe(`${o.puesto} · ${o.ubicacion}`) || f.modalidad || '';
+    if (f.abierta === false || !aceptaModalidad(quiere.get(o.id), modalidad)) fuera.add(o.id);
+    return { ...o, modalidad, descripcion: o.descripcion || f.descripcion || '' };
+  });
+  return { ofertas: completas.filter((o) => !fuera.has(o.id)), descartadas: fuera.size };
+}
 
 // Oferta completa a partir de su enlace (LinkedIn, freehire o cualquier web).
 export async function detalleOferta(url, hacerFetch = fetch) {

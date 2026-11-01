@@ -129,6 +129,10 @@ export class ClienteServidor {
     return this.pedir('/empleo/buscar', { metodo: 'POST', cuerpo: datos });
   }
 
+  async empleoModalidad(ids) {
+    return (await this.pedir('/empleo/modalidad', { metodo: 'POST', cuerpo: { ids } })).fichas ?? [];
+  }
+
   empleoAlerta() {
     return this.pedir('/empleo/alerta');
   }

@@ -140,6 +140,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
   const ia = (peticion) => api.ia.tarea(peticion);
   // Los portales de ai-job-search (LinkedIn y freehire) van por el servidor de avisos.
   const portales = api.servidor?.empleo ? (d) => api.servidor.empleo.buscar(d) : null;
+  const fichas = api.servidor?.empleo?.modalidad ? (ids) => api.servidor.empleo.modalidad(ids) : null;
   const detallePortal = api.servidor?.empleo ? (url) => api.servidor.empleo.detalle(url) : null;
   // Alerta diaria: la hace el servidor de avisos cada mañana.
   const alertas = api.servidor?.empleo?.alerta ? api.servidor.empleo : null;
@@ -875,8 +876,8 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
 
   async function buscar() {
     const { perfil } = datos.cv;
-    const pasos = { portales: 'Buscando en LinkedIn y freehire…', web: 'Buscando en InfoJobs, Indeed y webs de empresas…' };
-    const { ofertas, avisos } = await buscarOfertas(ia, perfil, datos.preferencias, { portales, alPaso: (p) => progreso(pasos[p]) });
+    const pasos = { portales: 'Buscando en LinkedIn y freehire…', fichas: 'Comprobando en LinkedIn cuáles son en remoto…', web: 'Buscando en InfoJobs, Indeed y webs de empresas…' };
+    const { ofertas, avisos } = await buscarOfertas(ia, perfil, datos.preferencias, { portales, fichas, alPaso: (p) => progreso(pasos[p]) });
     datos.ofertas = ofertas;
     nuevas.clear();
     datos.busqueda = Date.now();
