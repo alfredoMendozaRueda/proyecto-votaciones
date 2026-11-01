@@ -1,6 +1,7 @@
 // Lo que comparten las peticiones y la revisión de cada minuto: los datos
 // (D1), el acceso a Google con el permiso guardado y el envío de avisos a
 // todos los dispositivos vinculados.
+import { rutaIA, normalizarModo } from '../../src/compartido/modos.js';
 import { ClienteGmail } from '../../src/compartido/gmail.js';
 import { sumarUso } from '../../src/compartido/consumo.js';
 import { ClienteCalendario } from '../../src/compartido/calendario.js';
@@ -181,11 +182,17 @@ export class Nucleo {
   }
 
   // La IA que usa el servidor: OpenAI si está su clave; si no, Groq; si no, ninguna.
-  async iaServidor() {
-    const openai = await this.claveOpenAI().catch(() => null);
-    if (openai) return { proveedor: 'openai', clave: openai };
-    const groq = await this.claveGroq().catch(() => null);
-    return groq ? { proveedor: 'groq', clave: groq } : null;
+  // Las IA del servidor y el modo elegido en la app (Ahorro, Eficiente, Calidad; ver modos.js).
+  async motoresIA() {
+    const [groq, openai, ajustes] = await Promise.all([this.claveGroq().catch(() => null), this.claveOpenAI().catch(() => null), this.ajustes()]);
+    return { modo: normalizarModo(ajustes.modoIA), groq, openai };
+  }
+
+  // La IA que toca para un tipo de tarea → { proveedor, clave } o null.
+  async iaServidor(tipo = 'fondo') {
+    const m = await this.motoresIA();
+    const [proveedor] = rutaIA(m.modo, tipo, { groq: Boolean(m.groq), openai: Boolean(m.openai) });
+    return proveedor ? { proveedor, clave: m[proveedor] } : null;
   }
 
   async automatizaciones() {

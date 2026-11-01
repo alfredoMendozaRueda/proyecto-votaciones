@@ -4,6 +4,7 @@ import { PERMISOS, NOMBRES_NIVEL, nivelesDe, nivel } from '../compartido/permiso
 import { VOCES } from '../compartido/voz.js';
 import { leerBloqueo, bloqueoDisponible, activarBloqueo, desactivarBloqueo, cambiarTras, comprobarIdentidad, OPCIONES_TRAS, nombreBiometria } from './web/bloqueo.js';
 import { COLECCIONES_SINCRO, codigoDe } from '../compartido/sincro.js';
+import { MODOS_IA, INFO_MODOS, normalizarModo } from '../compartido/modos.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -83,6 +84,25 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
     <div class="segmentado" role="group">
       ${opciones.map(([valor, nombre]) => `<button type="button" data-clave="${clave}" data-valor="${valor}" aria-pressed="${ajustes[clave] === valor}">${nombre}</button>`).join('')}
     </div>`;
+
+  // Con las claves de Groq y de OpenAI: Ahorro, Eficiente o Calidad (ver modos.js).
+  const GASTO_MODO = { ahorro: 'casi 0 $', eficiente: '≈ 0,5 $', calidad: '≈ 1,5 $' };
+  function bloqueModos(estado) {
+    if (ajustes.proveedor === 'claude') return '';
+    const { groq, openai } = estado.claves ?? {};
+    if (!groq && !openai) return '';
+    if (!groq || !openai) {
+      return `<p class="ajuste__ayuda modos__pista">Añade también tu clave de ${groq ? 'OpenAI' : 'Groq'} (elígela arriba) y Kitsune podrá mezclar las dos: modos Ahorro, Eficiente y Calidad.</p>`;
+    }
+    const modo = normalizarModo(ajustes.modoIA);
+    return `
+          <div class="ajuste modos">
+            <span class="ajuste__etiqueta">Modo · Groq + GPT-6 Luna</span>
+            ${segmentado('modoIA', MODOS_IA.map((m) => [m, INFO_MODOS[m].nombre]))}
+            <p class="ajuste__ayuda">${INFO_MODOS[modo].detalle} Con las dos claves, el modo decide qué IA hace cada cosa; si una falla o llega a su límite, sigue la otra.</p>
+            <p class="modos__gasto">Con un uso normal (30 mensajes y 2 candidaturas al día): <strong>${GASTO_MODO[modo]} al mes</strong></p>
+          </div>`;
+  }
 
   const interruptor = (clave, etiqueta, ayuda = '') => `
     <div class="ajuste ajuste--fila">
@@ -320,6 +340,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
                 : 'La más lista y con búsqueda en internet; pagas lo que usas con tu cuenta de Anthropic.'
             }</p>
           </div>
+          ${bloqueModos(estadoClaude)}
           <div class="estado-cuenta ${estadoClaude.configurado ? 'ok' : ''}"><span class="punto"></span>${
             estadoClaude.configurado ? `Clave de ${ia.nombre} guardada y cifrada ${dondeSeGuarda}` : `Sin clave de ${ia.nombre}: añádela para poder chatear`
           }</div>
@@ -931,6 +952,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
             await pintar('claude');
             alCambiar(ajustes, { claveClaude: true });
           }
+          if (clave === 'modoIA') await pintar('claude');
         }
       }),
     );

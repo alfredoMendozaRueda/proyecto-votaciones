@@ -426,8 +426,16 @@ async function atender(peticion, env) {
   }
   if (m === 'GET' && ruta === '/empleo/alerta') {
     const a = await n.ajustes();
-    const motor = await n.iaServidor();
-    return json({ alerta: alertaPublica(a.empleoAlerta), ultimas: a.empleoUltimas ?? null, groq: Boolean(motor), ia: motor?.proveedor ?? null, gastado: a.consumoOpenAI?.[mesDe(n.ahora)]?.usd ?? 0 });
+    const { modo, groq, openai } = await n.motoresIA();
+    return json({
+      alerta: alertaPublica(a.empleoAlerta),
+      ultimas: a.empleoUltimas ?? null,
+      // groq: hay alguna IA en el servidor (nombre antiguo, lo usa la app para avisar).
+      groq: Boolean(groq || openai),
+      claves: { groq: Boolean(groq), openai: Boolean(openai) },
+      modo,
+      gastado: a.consumoOpenAI?.[mesDe(n.ahora)]?.usd ?? 0,
+    });
   }
   if (m === 'PUT' && ruta === '/empleo/alerta') {
     try {

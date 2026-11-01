@@ -492,6 +492,8 @@ export async function adaptarCV(ia, perfil, oferta, { alPaso = () => {}, idioma 
       (empresa ? `<empresa>\n${empresa}\n</empresa>\n` : '') +
       `<propuesta>\n${JSON.stringify({ cv: primero.cv, carta: primero.carta, palabrasClave: primero.palabrasClave })}\n</propuesta>`,
     max: 8000,
+    // La revisión es lo que llega a la empresa: en el modo Eficiente, con GPT-6 Luna.
+    nivel: 'final',
   });
   let final;
   try {
@@ -570,6 +572,7 @@ export async function prepararEntrevista(ia, perfil, oferta, { empresa = '' } = 
     usuario:
       `<cv>\n${textoCompleto(perfil)}\n</cv>\n<oferta>\n${textoOferta(oferta).slice(0, 7000)}\n</oferta>` + (empresa ? `\n<empresa>\n${empresa}\n</empresa>` : ''),
     max: 7000,
+    nivel: 'final',
   });
   return normalizarEntrevista(extraerJson(texto));
 }

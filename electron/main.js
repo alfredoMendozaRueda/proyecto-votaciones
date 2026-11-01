@@ -457,6 +457,7 @@ function registrarCanales() {
       usuario: String(p?.usuario ?? '').slice(0, 60000),
       web: p?.web === true,
       max: Math.min(16000, Math.max(500, Number(p?.max) || 4000)),
+      nivel: p?.nivel === 'final' ? 'final' : 'fondo',
     }),
   );
   manejar('ia:transcribir', async (audio, tipo) => {

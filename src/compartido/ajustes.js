@@ -3,6 +3,7 @@ import { MODELOS_GROQ } from './groq.js';
 import { MODELOS_OPENAI } from './openai.js';
 import { permisosPorDefecto, opcionesPermisos } from './permisos.js';
 import { IDS_VOCES } from './voz.js';
+import { MODOS_IA, MODO_POR_DEFECTO } from './modos.js';
 
 export const PROVEEDORES = ['groq', 'openai', 'claude'];
 export const MODELOS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
@@ -34,6 +35,8 @@ export const AJUSTES_POR_DEFECTO = {
   proveedor: 'groq',
   modeloGroq: MODELOS_GROQ[0],
   modeloOpenAI: MODELOS_OPENAI[0],
+  // Con claves de Groq y OpenAI a la vez: qué IA hace cada cosa (ver modos.js).
+  modoIA: MODO_POR_DEFECTO,
   modelo: 'claude-opus-5-5',
   personalidad: '',
   correoCadaMin: 5,
@@ -59,6 +62,7 @@ const OPCIONES = {
   proveedor: PROVEEDORES,
   modeloGroq: MODELOS_GROQ,
   modeloOpenAI: MODELOS_OPENAI,
+  modoIA: MODOS_IA,
   vozTipo: ['natural', 'dispositivo', 'voicestudio'],
   vozNombre: IDS_VOCES,
   ...opcionesPermisos(),

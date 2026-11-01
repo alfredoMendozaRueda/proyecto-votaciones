@@ -21,6 +21,7 @@ import {
   correoCandidatura,
 } from '../compartido/empleo.js';
 import { datosParaFormulario } from '../compartido/rellenar.js';
+import { costeMensualAlerta, normalizarModo, INFO_MODOS, MAX_PREPARAR } from '../compartido/modos.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const dosCifras = (n) => String(n).padStart(2, '0');
@@ -50,13 +51,11 @@ const PREPARAR = [
   [2, 'Las 2 mejores'],
   [3, 'Las 3 mejores'],
   [5, 'Las 5 mejores'],
+  [8, 'Las 8 mejores'],
+  [10, 'Las 10 mejores'],
 ];
 const PRESUPUESTOS = [0.5, 1, 1.5, 2, 3, 5];
 const dolares = (n) => `${n.toLocaleString('es-ES', { minimumFractionDigits: n < 1 && n > 0 ? 2 : 0, maximumFractionDigits: 2 })} $`;
-// Medido con los prompts reales y GPT-6 Luna: puntuar ~12 ofertas al día cuesta
-// unos 0,0015 $; cada candidatura (redactar + revisar) 0,0034 $ y, si se
-// investiga la empresa, 0,0105 $ más (la búsqueda web cuesta 0,01 $).
-const costeMensual = ({ preparar = 0, investigar = true }) => 30 * (0.0015 + preparar * (0.0034 + (investigar ? 0.0105 : 0)));
 // Diseños y colores del CV (los mismos que el PDF, ver empleo-pdf.js).
 const PLANTILLAS = [
   ['clasica', 'Clásico'],
@@ -514,6 +513,15 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
 
   // ---------- Alerta diaria de ofertas ----------
 
+  const modoApp = async () => normalizarModo((await api.ajustes?.obtener?.().catch(() => null))?.modoIA);
+
+  // Al cambiar el modo en Ajustes, el servidor lo usa desde ya (si hay alerta guardada).
+  async function cambiarModo(modo) {
+    if (!alertas || !datos?.cv || !estadoAlerta?.alerta) return;
+    if (normalizarModo(modo) === estadoAlerta.modo) return;
+    if (await guardarAlerta({}, { callada: true })) pintarAlerta();
+  }
+
   async function cargarAlerta() {
     if (!alertas) return;
     alertaCargada = Date.now();
@@ -521,6 +529,10 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       estadoAlerta = await alertas.alerta();
     } catch (error) {
       estadoAlerta = { error: error.message };
+    }
+    // Si el modo se cambió en otro dispositivo o sin pasar por aquí, se pone al día.
+    if (estadoAlerta.alerta && estadoAlerta.claves?.groq && estadoAlerta.claves?.openai && (await modoApp()) !== estadoAlerta.modo) {
+      await guardarAlerta({}, { callada: true });
     }
     const llegadas = incorporarUltimas(estadoAlerta.ultimas);
     const listas = await importarPreparadas();
@@ -578,19 +590,30 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
   });
 
   // Candidaturas de cada mañana: cuántas, si investiga la empresa y cuánto gastar como mucho.
+  // El modo que de verdad usa el servidor: con una sola clave no hay mezcla.
+  function modoServidor() {
+    const claves = estadoAlerta.claves ?? { groq: Boolean(estadoAlerta.groq), openai: false };
+    if (!claves.groq && !claves.openai) return null;
+    if (!claves.openai) return { modo: 'ahorro', claves, nombre: 'con Groq' };
+    if (!claves.groq) return { modo: 'calidad', claves, nombre: 'con GPT-6 Luna' };
+    const modo = normalizarModo(estadoAlerta.modo);
+    return { modo, claves, nombre: `en modo ${INFO_MODOS[modo].nombre}` };
+  }
+
   function opcionesPreparar(a) {
-    const conIA = estadoAlerta.ia ?? (estadoAlerta.groq ? 'groq' : null);
-    if (!conIA) return '';
-    const openai = conIA === 'openai';
-    const estimado = costeMensual(a);
+    const servidor = modoServidor();
+    if (!servidor) return '';
+    const openai = servidor.claves.openai;
+    const maximo = MAX_PREPARAR[servidor.modo];
+    const estimado = costeMensualAlerta({ modo: servidor.modo, preparar: Math.min(a.preparar, maximo), investigar: a.investigar });
     const gastado = Number(estadoAlerta.gastado) || 0;
     return `
       <div class="empleo-alerta__preparar">
         <p class="empleo-etiqueta">(candidaturas listas cada mañana)</p>
         <div class="empleo-alerta__opciones">
-          <label class="empleo-campo"><span>Preparar</span><select class="campo" id="alerta-preparar" data-bloquear>${PREPARAR.map(
-            ([v, n]) => `<option value="${v}"${v === a.preparar ? ' selected' : ''}>${n}</option>`,
-          ).join('')}</select></label>
+          <label class="empleo-campo"><span>Preparar</span><select class="campo" id="alerta-preparar" data-bloquear>${PREPARAR.filter(([v]) => v <= maximo)
+            .map(([v, n]) => `<option value="${v}"${v === a.preparar ? ' selected' : ''}>${n}</option>`)
+            .join('')}</select></label>
           ${
             openai
               ? `<label class="empleo-campo"><span>Gasto máximo al mes</span><select class="campo" id="alerta-presupuesto" data-bloquear>${PRESUPUESTOS.map(
@@ -601,15 +624,22 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
         </div>
         ${
           a.preparar
-            ? `<label class="empleo-casilla"><input type="checkbox" id="alerta-investigar" ${a.investigar ? 'checked' : ''} data-bloquear> Investigar cada empresa en internet${openai ? ' (+0,01 $ por candidatura)' : ''}</label>
+            ? `<label class="empleo-casilla"><input type="checkbox" id="alerta-investigar" ${a.investigar ? 'checked' : ''} data-bloquear> Investigar cada empresa en internet${
+                servidor.modo === 'calidad' ? ' (+0,01 $ por candidatura)' : ' (con Groq, gratis)'
+              }</label>
         <p class="ajuste__ayuda">Tras la búsqueda de la mañana dejo hechos el CV y la carta de las mejores ofertas y te aviso al móvil. No se envía nada: tú las revisas y decides.</p>`
             : ''
         }
         <p class="empleo-mono empleo-alerta__coste">${
           openai
-            ? `≈ ${dolares(Math.round(estimado * 100) / 100)} al mes con GPT-6 Luna · este mes, ${dolares(Math.round(gastado * 100) / 100)} de ${dolares(a.presupuesto)}`
+            ? `≈ ${estimado < 0.005 ? '0' : dolares(Math.round(estimado * 100) / 100)} al mes ${servidor.nombre} · este mes, ${dolares(Math.round(gastado * 100) / 100)} de ${dolares(a.presupuesto)}`
             : 'con Groq en el servidor: gratis'
         }</p>
+        ${
+          servidor.claves.groq && servidor.claves.openai
+            ? '<p class="ajuste__ayuda">Si llegas al gasto máximo, sigo con Groq (gratis) hasta el mes que viene. El modo se cambia en Ajustes → Inteligencia artificial.</p>'
+            : ''
+        }
       </div>`;
   }
 
@@ -681,13 +711,14 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       preparar: a.preparar,
       investigar: a.investigar,
       presupuesto: a.presupuesto,
+      modo: await modoApp(),
       ...datos.preferencias,
       ...cambios,
       perfil: datos.cv.perfil,
     };
     try {
       const { alerta } = await alertas.guardarAlerta(nueva);
-      estadoAlerta = { ...estadoAlerta, alerta };
+      estadoAlerta = { ...estadoAlerta, alerta, modo: alerta.modo ?? estadoAlerta.modo };
       await guardar();
     } catch (error) {
       if (callada) return false;
@@ -1397,5 +1428,5 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     if (!contenedor.hidden && !contenedor.closest('[hidden]')) mostrar();
   }
 
-  return { mostrar, recargar };
+  return { mostrar, recargar, cambiarModo };
 }

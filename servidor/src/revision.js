@@ -32,16 +32,6 @@ export async function revisar(env, ahora = Date.now()) {
     }
     return;
   }
-  // Candidaturas en cola tras la alerta: una por minuto, sola (son varias llamadas a la IA).
-  if (await hayCola(n)) {
-    try {
-      await prepararSiguiente(n);
-    } catch (error) {
-      await fallo(n, error);
-    }
-    return;
-  }
-
   const pasos = [() => recordatorios(n), () => horarios(n, activas, local, zona, conGoogle)];
   if (conGoogle) {
     if (!a.ultimoCorreo || ahora - a.ultimoCorreo >= avisos.correoCadaMin * 60_000 - 5_000) {
@@ -52,6 +42,15 @@ export async function revisar(env, ahora = Date.now()) {
   for (const paso of pasos) {
     try {
       await paso();
+    } catch (error) {
+      await fallo(n, error);
+    }
+  }
+  // Candidaturas en cola tras la alerta: una por minuto, después de lo demás
+  // (así los recordatorios y el correo no esperan aunque haya diez en cola).
+  if (await hayCola(n)) {
+    try {
+      await prepararSiguiente(n);
     } catch (error) {
       await fallo(n, error);
     }
@@ -214,7 +213,8 @@ async function ejecutarEnCorreo(n, r, m, gmail, zona) {
 
 // Lee el correo entero, saca el evento con la IA y lo crea en el calendario.
 async function eventoDesdeCorreo(n, m, gmail, zona) {
-  const ia = await n.iaServidor();
+  // Sacar la cita de un correo es tarea de fondo: en Ahorro y Eficiente, con Groq.
+  const ia = await n.iaServidor('fondo');
   if (!ia) throw new Error('Para crear eventos desde el correo, activa «Usar mi clave de Groq» o «de OpenAI» en el servidor (Ajustes → Avisos).');
   const completo = await gmail.leer(m.id);
   const usos = [];

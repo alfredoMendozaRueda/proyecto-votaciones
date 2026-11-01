@@ -346,6 +346,7 @@ export function crearDemo() {
     googleClientId: '123456789-kitsune.apps.googleusercontent.com',
     pulsoDiario: true,
     proveedor: 'openai',
+    modoIA: 'eficiente',
     modeloGroq: 'openai/gpt-oss-120b',
     modeloOpenAI: 'gpt-6-luna',
     usarMemoria: true,
@@ -386,8 +387,8 @@ export function crearDemo() {
       },
     },
     claude: {
-      estado: async () => ({ configurado: true }),
-      guardarClave: async () => ({ configurado: true }),
+      estado: async () => ({ proveedor: ajustes.proveedor, configurado: true, claves: { claude: true, groq: true, openai: true } }),
+      guardarClave: async () => ({ proveedor: ajustes.proveedor, configurado: true, claves: { claude: true, groq: true, openai: true } }),
       cancelar: async () => {
         cancelado = true;
       },
@@ -686,7 +687,7 @@ export function crearDemo() {
             return { ofertas: OFERTAS_DEMO.map((o, i) => ({ ...o, id: `demo-${i}`, fuente: i === 1 ? 'freehire' : 'LinkedIn' })), errores: [] };
           },
           async alerta() {
-            return { alerta: alertaDemo, ultimas: ultimasDemo, groq: true, ia: 'openai', gastado: 0.31 };
+            return { alerta: alertaDemo, ultimas: ultimasDemo, groq: true, claves: { groq: true, openai: true }, modo: alertaDemo?.modo ?? ajustes.modoIA, gastado: 0.31 };
           },
           preparadas: async () => ({ preparadas: preparadasDemo }),
           async recogerPreparadas(ids) {
@@ -705,6 +706,7 @@ export function crearDemo() {
               preparar: Number(datos.preparar ?? 2),
               investigar: datos.investigar !== false,
               presupuesto: Number(datos.presupuesto ?? 1.5),
+              modo: datos.modo ?? 'eficiente',
               conPerfil: true,
             };
             return { alerta: alertaDemo };

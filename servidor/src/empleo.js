@@ -5,6 +5,7 @@
 import { buscarEnPortales, detalleOferta } from '../../src/compartido/portales.js';
 import { evaluarEncaje, normalizarOferta, normalizarPerfil, normalizarPreferencias, adaptarCV } from '../../src/compartido/empleo.js';
 import { mesDe } from '../../src/compartido/consumo.js';
+import { rutaIA, conRespaldo, normalizarModo, MAX_PREPARAR } from '../../src/compartido/modos.js';
 import { tareaGroq } from '../../src/compartido/groq.js';
 import { tareaOpenAI } from '../../src/compartido/openai.js';
 import { aviso } from '../../src/compartido/notificaciones.js';
@@ -13,7 +14,7 @@ import { aMinutos } from './tiempo.js';
 
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MAX_NUEVAS = 12;
-const MAX_PREPARADAS = 10;
+const MAX_PREPARADAS = 15;
 const PRESUPUESTOS = [0.5, 1, 1.5, 2, 3, 5];
 
 export function validarAlerta(d = {}) {
@@ -27,8 +28,10 @@ export function validarAlerta(d = {}) {
     modalidad: pref.modalidad,
     hora: HORA.test(d.hora ?? '') ? d.hora : '08:30',
     minEncaje: Math.min(100, Math.max(0, Math.round(Number(d.minEncaje ?? 60)) || 0)),
+    // Modo de IA de la app: decide qué hace Groq y qué GPT-6 Luna (ver modos.js).
+    modo: normalizarModo(d.modo),
     // Candidaturas que se dejan preparadas cada mañana (CV y carta), y con qué límite.
-    preparar: Math.min(5, Math.max(0, Math.round(Number(d.preparar ?? 2)) || 0)),
+    preparar: Math.min(MAX_PREPARAR[normalizarModo(d.modo)], Math.max(0, Math.round(Number(d.preparar ?? 2)) || 0)),
     investigar: d.investigar !== false,
     presupuesto: PRESUPUESTOS.includes(Number(d.presupuesto)) ? Number(d.presupuesto) : 1.5,
   };
@@ -43,6 +46,8 @@ export async function guardarAlerta(n, datos) {
   const anterior = (await n.ajustes()).empleoAlerta;
   const alerta = validarAlerta(datos);
   // El resumen del CV, para puntuar las ofertas: cifrado, como las demás claves.
+  // El modo vale también para el resto del servidor (citas desde el correo).
+  if (datos.modo) await n.poner('modoIA', alerta.modo);
   if (datos.perfil) alerta.perfil = await cifrarTexto(JSON.stringify(normalizarPerfil(datos.perfil)), n.env.CLAVE_CIFRADO);
   else if (anterior?.perfil) alerta.perfil = anterior.perfil;
   await n.poner('empleoAlerta', alerta);
@@ -61,11 +66,21 @@ export async function tocaAlerta(n, local) {
   return true;
 }
 
-// La IA del servidor como función de tareas (la que esperan los pasos de empleo.js).
-const iaDe = (motor, hacerFetch, usos) =>
-  motor.proveedor === 'openai'
-    ? (p) => tareaOpenAI({ apiKey: motor.clave, modelo: 'gpt-6-luna', fetch: hacerFetch, alUso: (m, u) => usos.push([m, u]), ...p })
-    : (p) => tareaGroq({ apiKey: motor.clave, modelo: 'openai/gpt-oss-20b', fetch: hacerFetch, ...p });
+// La IA del servidor como función de tareas (la que esperan los pasos de empleo.js):
+// cada paso va por Groq o por GPT-6 Luna según el modo, y si una falla, lo hace la otra.
+// sinLuna: el gasto del mes ya llegó al máximo; solo Groq (gratis).
+async function iaModo(n, { hacerFetch, usos, sinLuna = false }) {
+  const m = await n.motoresIA();
+  const hay = { groq: Boolean(m.groq), openai: Boolean(m.openai) && !sinLuna };
+  if (!hay.groq && !hay.openai) return null;
+  const llamar = (ia, p) =>
+    ia === 'openai'
+      ? tareaOpenAI({ apiKey: m.openai, modelo: 'gpt-6-luna', fetch: hacerFetch, alUso: (modelo, u) => usos.push([modelo, u]), ...p })
+      : tareaGroq({ apiKey: m.groq, modelo: 'openai/gpt-oss-20b', fetch: hacerFetch, ...p });
+  return ({ nivel, ...p }) => conRespaldo(rutaIA(m.modo, p.web ? 'web' : nivel === 'final' ? 'final' : 'fondo', hay), (ia) => llamar(ia, p));
+}
+
+const gastadoEsteMes = (a, ahora) => a.consumoOpenAI?.[mesDe(ahora)]?.usd ?? 0;
 
 export async function alertaEmpleo(n, { avisar = true, hacerFetch = fetch } = {}) {
   const alerta = (await n.ajustes()).empleoAlerta;
@@ -81,12 +96,11 @@ export async function alertaEmpleo(n, { avisar = true, hacerFetch = fetch } = {}
 
   let evaluadas = false;
   const usos = [];
-  // Con OpenAI (GPT-6 Luna) si su clave está en el servidor; si no, con Groq.
-  const motor = await n.iaServidor();
-  if (motor && alerta.perfil && ofertas.length) {
+  // Puntuar es tarea de fondo: Groq en Ahorro y Eficiente, GPT-6 Luna en Calidad.
+  const ia = await iaModo(n, { hacerFetch, usos, sinLuna: gastadoEsteMes(await n.ajustes(), n.ahora) >= (alerta.presupuesto ?? 1.5) });
+  if (ia && alerta.perfil && ofertas.length) {
     try {
       const perfil = normalizarPerfil(JSON.parse(await descifrarTexto(alerta.perfil, n.env.CLAVE_CIFRADO)));
-      const ia = iaDe(motor, hacerFetch, usos);
       ofertas = await evaluarEncaje(ia, perfil, ofertas, { preferencias: alerta });
       evaluadas = true;
     } catch (error) {
@@ -145,29 +159,31 @@ export async function prepararSiguiente(n, { hacerFetch = fetch } = {}) {
   // Se saca de la cola antes de empezar: si algo falla, no se repite en bucle.
   await n.poner('empleoCola', resto);
   const alerta = a.empleoAlerta;
-  const motor = await n.iaServidor();
-  if (!alerta?.perfil || !motor) return null;
-  if (motor.proveedor === 'openai') {
-    const gastado = a.consumoOpenAI?.[mesDe(n.ahora)]?.usd ?? 0;
-    if (gastado >= (alerta.presupuesto ?? 1.5)) {
+  if (!alerta?.perfil) return null;
+  // Con el gasto del mes ya en el máximo, sigue solo con Groq (gratis); sin Groq, se para.
+  const gastado = gastadoEsteMes(a, n.ahora);
+  const agotado = gastado >= (alerta.presupuesto ?? 1.5);
+  const usos = [];
+  const ia = await iaModo(n, { hacerFetch, usos, sinLuna: agotado });
+  if (!ia) {
+    if (agotado) {
       await n.poner('empleoCola', []);
       await n.registrar('automatizacion', `Candidaturas: ya se ha gastado ${gastado.toFixed(2)} $ este mes (límite ${alerta.presupuesto} $); no preparo más hasta el mes que viene.`);
-      return null;
     }
+    return null;
   }
-  let completa = oferta;
-  if (!oferta.descripcion && oferta.url) {
+  let completa = normalizarOferta(oferta);
+  if (!completa.descripcion && completa.url) {
     try {
-      const d = await detalleOferta(oferta.url, hacerFetch);
-      if (d?.descripcion) completa = { ...oferta, descripcion: d.descripcion.slice(0, 9000) };
+      const d = await detalleOferta(completa.url, hacerFetch);
+      if (d?.descripcion) completa = { ...completa, descripcion: d.descripcion.slice(0, 9000) };
     } catch {
       // Con el resumen de la búsqueda también vale.
     }
   }
   const perfil = normalizarPerfil(JSON.parse(await descifrarTexto(alerta.perfil, n.env.CLAVE_CIFRADO)));
-  const usos = [];
   try {
-    const resultado = await adaptarCV(iaDe(motor, hacerFetch, usos), perfil, completa, { investigar: alerta.investigar !== false });
+    const resultado = await adaptarCV(ia, perfil, completa, { investigar: alerta.investigar !== false });
     const preparada = {
       id: `p${n.ahora.toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       fecha: n.ahora,

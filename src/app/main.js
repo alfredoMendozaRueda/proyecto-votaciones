@@ -387,6 +387,8 @@ async function iniciar() {
       aplicarAjustes(nuevos);
       if ('claveClaude' in cambios) chat.comprobarClave();
       if ('correo' in cambios) correo.recargar();
+      // El servidor prepara las candidaturas con el mismo modo de IA.
+      if ('modoIA' in cambios) apartados.empleo?.cambiarModo(cambios.modoIA);
     },
   });
 

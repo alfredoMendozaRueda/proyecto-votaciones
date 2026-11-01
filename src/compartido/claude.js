@@ -3,6 +3,7 @@ import { historialValido, mensajesVisibles } from './historial.js';
 import { nuevoIdConversacion } from './conversaciones.js';
 import { turnoGroq, textoGroq, tareaGroq, probarClaveGroq, buscarEnInternetGroq } from './groq.js';
 import { turnoOpenAI, textoOpenAI, tareaOpenAI, probarClaveOpenAI, buscarEnInternetOpenAI } from './openai.js';
+import { rutaIA, conRespaldo } from './modos.js';
 import { verTiempo } from './tiempo.js';
 import { PERMISOS, nivel, nivelHerramienta } from './permisos.js';
 import { normalizarAutomatizacion, describirCuando, describirHacer } from './automatizaciones.js';
@@ -682,6 +683,17 @@ export class ConversacionClaude {
     return p === 'groq' || p === 'openai' ? p : 'claude';
   }
 
+  // Qué IA hace cada cosa (chat, web, fondo, final) → [principal, respaldo].
+  // Con las claves de Groq y de OpenAI a la vez, manda el modo elegido en Ajustes
+  // (ver modos.js); con una sola, todo va por la IA elegida, como siempre.
+  async #ruta(tipo) {
+    const elegido = this.#proveedor();
+    if (elegido === 'claude') return [elegido, null];
+    const [groq, openai] = await Promise.all([this.obtenerClave('groq'), this.obtenerClave('openai')].map((p) => Promise.resolve(p).catch(() => null)));
+    if (!groq || !openai) return [elegido, null];
+    return rutaIA(this.obtenerAjustes().modoIA, tipo, { groq: true, openai: true });
+  }
+
   async #cliente(proveedor) {
     const apiKey = await this.obtenerClave(proveedor);
     if (!apiKey) throw new Error(`Añade tu clave de ${NOMBRE_IA[proveedor]} en Ajustes para poder hablar conmigo.`);
@@ -809,18 +821,20 @@ export class ConversacionClaude {
     if (this.controlador) throw new Error('Espera a que termine la respuesta anterior.');
     // Se reserva el turno antes de cualquier espera para que no empiecen dos a la vez.
     this.controlador = new AbortController();
-    const proveedor = this.#proveedor();
-    this.proveedorTurno = proveedor;
+    let proveedor;
+    let respaldo;
     let cliente;
     let preparado;
     try {
+      [proveedor, respaldo] = await this.#ruta('chat');
       cliente = await this.#cliente(proveedor);
       preparado = await this.#preparar(proveedor, texto);
     } catch (error) {
       this.controlador = null;
       throw error;
     }
-    const { sistema, herramientas } = preparado;
+    this.proveedorTurno = proveedor;
+    let { sistema, herramientas } = preparado;
     this.clienteTurno = cliente;
     // Fuentes de las búsquedas con Groq: se muestran bajo la respuesta final.
     this.fuentesTurno = [];
@@ -840,33 +854,54 @@ export class ConversacionClaude {
       for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta++) {
         if (!pausado) this.emitir({ tipo: 'pensando' });
         let mensaje;
-        if (proveedor === 'openai') {
-          mensaje = await turnoOpenAI({
-            apiKey: cliente.apiKey,
-            modelo: this.obtenerAjustes().modeloOpenAI,
-            sistema,
-            historial: this.historial,
-            inicioTurno: inicio,
-            herramientas,
-            signal: this.controlador.signal,
-            alTexto: (delta) => this.emitir({ tipo: 'texto', delta }),
-            alUso: this.anotarUso,
-            fetch: this.opcionesCliente.fetch,
-          });
-        } else if (proveedor === 'groq') {
-          mensaje = await turnoGroq({
-            apiKey: cliente.apiKey,
-            modelo: this.obtenerAjustes().modeloGroq,
-            sistema,
-            historial: this.historial,
-            inicioTurno: inicio,
-            herramientas,
-            signal: this.controlador.signal,
-            alTexto: (delta) => this.emitir({ tipo: 'texto', delta }),
-            alEsperar: (segundos) => this.emitir({ tipo: 'esperando', segundos }),
-            fetch: this.opcionesCliente.fetch,
-          });
-        } else {
+        // Si la IA de este turno falla (límite de Groq, sin saldo en OpenAI…) antes de
+        // escribir nada, el turno sigue con la otra: el historial es el mismo para las dos.
+        let escrito = false;
+        const alTexto = (delta) => {
+          escrito = true;
+          this.emitir({ tipo: 'texto', delta });
+        };
+        try {
+          if (proveedor === 'openai') {
+            mensaje = await turnoOpenAI({
+              apiKey: cliente.apiKey,
+              modelo: this.obtenerAjustes().modeloOpenAI,
+              sistema,
+              historial: this.historial,
+              inicioTurno: inicio,
+              herramientas,
+              signal: this.controlador.signal,
+              alTexto,
+              alUso: this.anotarUso,
+              fetch: this.opcionesCliente.fetch,
+            });
+          } else if (proveedor === 'groq') {
+            mensaje = await turnoGroq({
+              apiKey: cliente.apiKey,
+              modelo: this.obtenerAjustes().modeloGroq,
+              sistema,
+              historial: this.historial,
+              inicioTurno: inicio,
+              herramientas,
+              signal: this.controlador.signal,
+              alTexto,
+              // Con GPT-6 Luna de respaldo no se espera a que Groq tenga hueco: contesta Luna.
+              alEsperar: respaldo ? undefined : (segundos) => this.emitir({ tipo: 'esperando', segundos }),
+              fetch: this.opcionesCliente.fetch,
+            });
+          }
+        } catch (error) {
+          if (!respaldo || escrito || this.controlador.signal.aborted) throw error;
+          proveedor = respaldo;
+          respaldo = null;
+          cliente = await this.#cliente(proveedor);
+          ({ sistema, herramientas } = await this.#preparar(proveedor, texto));
+          this.proveedorTurno = proveedor;
+          this.clienteTurno = cliente;
+          vuelta--;
+          continue;
+        }
+        if (proveedor === 'claude') {
           const flujo = cliente.beta.messages.stream(this.#parametros({ sistema, mensajes: this.historial, herramientas }), {
             signal: this.controlador.signal,
           });
@@ -1140,16 +1175,22 @@ export class ConversacionClaude {
       case 'ver_tiempo':
         return verTiempo(entrada, this.opcionesCliente.fetch ?? fetch);
       case 'buscar_en_internet': {
-        const buscar = this.proveedorTurno === 'openai' ? buscarEnInternetOpenAI : buscarEnInternetGroq;
-        const { resultado, fuentes } = await buscar({
-          alUso: this.anotarUso,
-          modelo: this.obtenerAjustes().modeloOpenAI,
-          apiKey: this.clienteTurno.apiKey,
-          consulta: entrada.consulta,
-          signal: this.controlador?.signal,
-          alEsperar: (segundos) => this.emitir({ tipo: 'esperando', segundos }),
-          fetch: this.opcionesCliente.fetch,
-        });
+        // La búsqueda puede ir por otra IA que el chat (en Eficiente, Groq: gratis).
+        const ruta = await this.#ruta('web');
+        const { resultado, fuentes } = await conRespaldo(
+          ruta,
+          async (ia) =>
+            (ia === 'openai' ? buscarEnInternetOpenAI : buscarEnInternetGroq)({
+              alUso: this.anotarUso,
+              modelo: this.obtenerAjustes().modeloOpenAI,
+              apiKey: ia === this.proveedorTurno ? this.clienteTurno.apiKey : (await this.#cliente(ia)).apiKey,
+              consulta: entrada.consulta,
+              signal: this.controlador?.signal,
+              alEsperar: (segundos) => this.emitir({ tipo: 'esperando', segundos }),
+              fetch: this.opcionesCliente.fetch,
+            }),
+          { signal: this.controlador?.signal },
+        );
         this.fuentesTurno.push(...fuentes);
         return { resultado, fuentes: fuentes.map((f) => f.url) };
       }
@@ -1160,7 +1201,12 @@ export class ConversacionClaude {
 
   // Borrador de respuesta a un correo, fuera de la conversación.
   async redactarRespuesta(correo, indicaciones = '') {
-    const proveedor = this.#proveedor();
+    const ruta = await this.#ruta('fondo');
+    if (ruta[0] !== 'claude') return conRespaldo(ruta, (ia) => this.#redactar(ia, correo, indicaciones));
+    return this.#redactar('claude', correo, indicaciones);
+  }
+
+  async #redactar(proveedor, correo, indicaciones) {
     const cliente = await this.#cliente(proveedor);
     const sistema =
       'Redactas respuestas de correo en nombre del usuario. Devuelve solo el cuerpo del mensaje, sin asunto, ' +
@@ -1190,8 +1236,14 @@ export class ConversacionClaude {
 
   // Una tarea suelta fuera del chat (Empleo). Con web puede buscar en internet.
   // Devuelve { texto, fuentes }.
-  async tarea({ sistema, usuario, web = false, max = 8000 }) {
-    const proveedor = this.#proveedor();
+  // nivel: 'final' para lo que sale con tu nombre (la revisión del CV, la entrevista).
+  async tarea({ sistema, usuario, web = false, max = 8000, nivel = 'fondo' }) {
+    const ruta = await this.#ruta(web ? 'web' : nivel === 'final' ? 'final' : 'fondo');
+    if (ruta[0] !== 'claude') return conRespaldo(ruta, (ia) => this.#tarea(ia, { sistema, usuario, web, max }));
+    return this.#tarea('claude', { sistema, usuario, web, max });
+  }
+
+  async #tarea(proveedor, { sistema, usuario, web, max }) {
     const cliente = await this.#cliente(proveedor);
     if (proveedor === 'groq') {
       return tareaGroq({ apiKey: cliente.apiKey, modelo: this.obtenerAjustes().modeloGroq, sistema, usuario, web, max, fetch: this.opcionesCliente.fetch });

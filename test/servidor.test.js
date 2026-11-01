@@ -428,7 +428,7 @@ test('alerta de empleo: a su hora busca, puntúa con Groq y avisa solo de lo nue
   const guardada = await (
     await pedir(env, '/empleo/alerta', { metodo: 'PUT', token, cuerpo: { activa: true, puestos: 'frontend react', ubicacion: 'Madrid', hora: '09:00', minEncaje: 60, perfil } })
   ).json();
-  assert.deepEqual({ ...guardada.alerta }, { activa: true, puestos: 'frontend react', ubicacion: 'Madrid', zonas: ['Madrid'], distancia: 0, modalidad: '', hora: '09:00', minEncaje: 60, preparar: 2, investigar: true, presupuesto: 1.5, conPerfil: true });
+  assert.deepEqual({ ...guardada.alerta }, { activa: true, puestos: 'frontend react', ubicacion: 'Madrid', zonas: ['Madrid'], distancia: 0, modalidad: '', hora: '09:00', minEncaje: 60, modo: 'eficiente', preparar: 2, investigar: true, presupuesto: 1.5, conPerfil: true });
   const fila = await env.DB.prepare("SELECT valor FROM ajustes WHERE clave = 'empleoAlerta'").first();
   assert.doesNotMatch(fila.valor, /Lucía/, 'el perfil se guarda cifrado');
 
@@ -779,4 +779,86 @@ test('candidaturas de la mañana: tras la alerta prepara las mejores (una por mi
   assert.equal(pasos.length, 4, 'no ha gastado más');
   const registro = await (await pedir(env, '/registro', { token })).json();
   assert.ok(registro.some((r) => /límite 1 \$/.test(r.texto)));
+});
+
+test('modos de IA en el servidor: Eficiente reparte entre Groq y GPT-6 Luna, Ahorro usa Groq y, sin presupuesto, todo pasa a Groq', async () => {
+  const env = entorno();
+  const { token } = await vincular(env);
+  internet();
+  await pedir(env, '/openai', { metodo: 'PUT', token, cuerpo: { clave: 'sk-proj-abcdefghijklmnopqrstuvwxyz0123' } });
+  await pedir(env, '/groq', { metodo: 'PUT', token, cuerpo: { clave: 'gsk_abcdefghijklmnopqrstuvwxyz0123' } });
+  const perfil = { nombre: 'Lucía Prieto', email: 'lucia@ejemplo.es', titular: 'Frontend', habilidades: ['React'], experiencia: [{ puesto: 'Frontend', empresa: 'Faro', logros: ['Migré a React'] }] };
+  const alerta = { activa: true, puestos: 'frontend', zonas: ['Valencia'], hora: '09:00', preparar: 1, investigar: true, presupuesto: 1, perfil };
+  const estado = await (await pedir(env, '/empleo/alerta', { metodo: 'PUT', token, cuerpo: { ...alerta, modo: 'eficiente' } })).json();
+  assert.equal(estado.alerta.modo, 'eficiente');
+  const publico = await (await pedir(env, '/empleo/alerta', { token })).json();
+  assert.deepEqual([publico.modo, publico.claves], ['eficiente', { groq: true, openai: true }]);
+
+  internet();
+  const base = globalThis.fetch;
+  let pasos = [];
+  let groqCaido = false;
+  const tipoDe = (sistema) => (/evaluaciones/.test(sistema) ? 'puntuar' : /revisor/.test(sistema) ? 'revisar' : /Investiga/.test(sistema) ? 'investigar' : 'redactar');
+  const respuestaJson = (sistema, usuario) => {
+    if (tipoDe(sistema) === 'puntuar') {
+      const ids = [...usuario.matchAll(/<oferta id="([^"]+)">/g)].map((m) => m[1]);
+      return JSON.stringify({ evaluaciones: ids.map((id, i) => ({ id, puerta: 'pasa', tecnica: 90 - i * 10, experiencia: 80, cultura: 70, carrera: 80 })) });
+    }
+    if (tipoDe(sistema) === 'investigar') return 'Empresa de rutas en Valencia.';
+    return JSON.stringify({ idioma: 'es', cv: { nombre: 'Lucía Prieto', titular: 'Frontend React', experiencia: [{ puesto: 'Frontend', empresa: 'Faro', logros: ['Migré a React'] }] }, carta: 'Hola.', palabrasClave: ['React'], encaje: 85 });
+  };
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.startsWith('https://www.linkedin.com/')) return new Response('');
+    if (u.startsWith('https://freehire.me/')) {
+      return Response.json({ data: ['a', 'b'].map((x) => ({ public_slug: `m-${x}-${pasos.length}`, title: `Frontend ${x}`, company: `Empresa ${x}`, location: 'Valencia', url: `https://freehire.me/jobs/m-${x}-${Date.now()}`, description: 'React' })) });
+    }
+    if (u.startsWith('https://api.groq.com/')) {
+      const cuerpo = JSON.parse(init.body);
+      const [sistema, usuario] = cuerpo.messages.map((m) => m.content);
+      if (groqCaido) return Response.json({ error: { message: 'Groq está caído' } }, { status: 503 });
+      pasos.push(`${tipoDe(sistema)}:groq`);
+      return Response.json({ choices: [{ message: { content: respuestaJson(sistema, usuario) } }] });
+    }
+    if (u.startsWith('https://api.openai.com/')) {
+      const cuerpo = JSON.parse(init.body);
+      pasos.push(`${tipoDe(cuerpo.instructions)}:luna`);
+      return Response.json({ status: 'completed', usage: { input_tokens: 4000, output_tokens: 2000 }, output: [{ type: 'message', content: [{ type: 'output_text', text: respuestaJson(cuerpo.instructions, cuerpo.input), annotations: [] }] }] });
+    }
+    return base(url, init);
+  };
+  const hoy = partesLocales(Date.now(), 'Europe/Madrid').fecha;
+  const nueve = desdeLocal(hoy, '09:00', 'Europe/Madrid');
+  try {
+    // Eficiente: puntuar, redactar e investigar con Groq; la revisión final con Luna.
+    await revisar(env, nueve + 60_000);
+    await revisar(env, nueve + 120_000);
+    assert.deepEqual(pasos, ['puntuar:groq', 'redactar:groq', 'investigar:groq', 'revisar:luna']);
+
+    // Si Groq falla, lo hace Luna (y al revés).
+    pasos = [];
+    groqCaido = true;
+    const cola = [{ id: 'z', puesto: 'Otra', empresa: 'Zeta', descripcion: 'React' }];
+    await env.DB.prepare("INSERT OR REPLACE INTO ajustes (clave, valor) VALUES ('empleoCola', ?)").bind(JSON.stringify(cola)).run();
+    await revisar(env, nueve + 180_000);
+    assert.deepEqual(pasos, ['redactar:luna', 'investigar:luna', 'revisar:luna']);
+    groqCaido = false;
+
+    // Ahorro: todo con Groq.
+    await pedir(env, '/empleo/alerta', { metodo: 'PUT', token, cuerpo: { ...alerta, modo: 'ahorro' } });
+    pasos = [];
+    await env.DB.prepare("INSERT OR REPLACE INTO ajustes (clave, valor) VALUES ('empleoCola', ?)").bind(JSON.stringify(cola)).run();
+    await revisar(env, nueve + 240_000);
+    assert.deepEqual(pasos, ['redactar:groq', 'investigar:groq', 'revisar:groq']);
+
+    // Calidad con el presupuesto del mes agotado: sigue, pero solo con Groq (gratis).
+    await pedir(env, '/empleo/alerta', { metodo: 'PUT', token, cuerpo: { ...alerta, modo: 'calidad' } });
+    await env.DB.prepare("INSERT OR REPLACE INTO ajustes (clave, valor) VALUES ('consumoOpenAI', ?)").bind(JSON.stringify({ [new Date(nueve).toISOString().slice(0, 7)]: { usd: 1.5, peticiones: 50 } })).run();
+    pasos = [];
+    await env.DB.prepare("INSERT OR REPLACE INTO ajustes (clave, valor) VALUES ('empleoCola', ?)").bind(JSON.stringify(cola)).run();
+    await revisar(env, nueve + 300_000);
+    assert.deepEqual(pasos, ['redactar:groq', 'investigar:groq', 'revisar:groq']);
+  } finally {
+    globalThis.fetch = base;
+  }
 });
