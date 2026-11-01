@@ -452,7 +452,7 @@ export async function investigarEmpresa(ia, oferta) {
 }
 
 // Redactor (paso 1); el revisor investiga la empresa y lo critica y pule (paso 2), como /apply.
-export async function adaptarCV(ia, perfil, oferta, { alPaso = () => {}, idioma = '' } = {}) {
+export async function adaptarCV(ia, perfil, oferta, { alPaso = () => {}, idioma = '', investigar = true } = {}) {
   alPaso('redactar');
   const borrador = await ia({
     sistema:
@@ -470,7 +470,8 @@ export async function adaptarCV(ia, perfil, oferta, { alPaso = () => {}, idioma 
   alPaso('investigar');
   let empresa = '';
   try {
-    empresa = await investigarEmpresa(ia, oferta);
+    // La investigación usa una búsqueda web (0,01 $ con OpenAI): se puede saltar.
+    if (investigar) empresa = await investigarEmpresa(ia, oferta);
   } catch {
     // Sin investigación, el revisor trabaja con la oferta.
   }
@@ -590,6 +591,56 @@ export function normalizarEstiloCV(e = {}) {
 }
 const fotoValida = (f) => (typeof f === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(f) && f.length < 600_000 ? f : '');
 
+// Cómo se mandó: por correo (con el hilo de Gmail) o rellenando el formulario de la empresa.
+function normalizarEnvio(e) {
+  if (!e || typeof e !== 'object' || !['correo', 'formulario'].includes(e.via)) return null;
+  return { via: e.via, a: cadena(e.a, 200), fecha: Number(e.fecha) || Date.now(), hilo: cadena(e.hilo, 40) };
+}
+
+// ---------- Candidatar por correo ----------
+// Muchas ofertas (sobre todo de empresas pequeñas) piden «envía tu CV a…».
+// Se busca esa dirección en la oferta: la que va cerca de «CV» o «candidatura»
+// gana; las de no-reply, privacidad o protección de datos no valen.
+const CORREO = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+const NO_VALE = /no-?reply|noreply|donotreply|privacy|privacidad|gdpr|rgpd|lopd|protecciondedatos|dpo@|datos@|unsubscribe|baja@|abuse@|soporte@|support@/i;
+const CERCA_CV = /\b(cv|c\.v\.|curr[ií]cul|resume|r[ée]sum[ée]|candidatur|apply|aplicar|post[uú]late|env[ií]a|send|interesad|interested|solicitud)/i;
+
+export function correoDeOferta(oferta = {}) {
+  const texto = [oferta.descripcion, oferta.resumen, ...(oferta.requisitos ?? [])].filter(Boolean).join('\n');
+  const candidatos = [];
+  for (const m of texto.matchAll(CORREO)) {
+    const correo = m[0].replace(/\.+$/, '');
+    if (NO_VALE.test(correo)) continue;
+    const alrededor = texto.slice(Math.max(0, m.index - 140), m.index + correo.length + 60);
+    candidatos.push({ correo: correo.toLowerCase(), puntos: CERCA_CV.test(alrededor) ? 2 : /rrhh|hr@|talent|jobs@|empleo@|careers@|trabaja|seleccion|recruit/i.test(correo) ? 1 : 0 });
+  }
+  candidatos.sort((a, b) => b.puntos - a.puntos);
+  return candidatos[0]?.correo ?? '';
+}
+
+// Asunto y texto del correo de candidatura (la carta va adjunta en PDF).
+export function correoCandidatura(p, { idioma = p.idioma } = {}) {
+  const nombre = p.cv?.nombre || '';
+  const puesto = p.oferta?.puesto || '';
+  const empresa = p.oferta?.empresa || '';
+  if (idioma === 'en') {
+    return {
+      asunto: `Application: ${puesto}${nombre ? ` – ${nombre}` : ''}`,
+      cuerpo:
+        `Dear ${empresa ? `${empresa} ` : ''}hiring team,\n\nI would like to apply for the ${puesto} position. I attach my CV and a cover letter ` +
+        `explaining why I think I am a good fit.\n\nI am available for an interview whenever suits you.\n\nKind regards,\n${nombre}` +
+        `${p.cv?.telefono ? `\n${p.cv.telefono}` : ''}`,
+    };
+  }
+  return {
+    asunto: `Candidatura: ${puesto}${nombre ? ` – ${nombre}` : ''}`,
+    cuerpo:
+      `Hola${empresa ? `, equipo de ${empresa}` : ''}:\n\nMe gustaría presentar mi candidatura al puesto de ${puesto}. Os adjunto mi CV y una carta ` +
+      `en la que explico por qué creo que encajo.\n\nQuedo a vuestra disposición para una entrevista cuando os venga bien.\n\nUn saludo,\n${nombre}` +
+      `${p.cv?.telefono ? `\n${p.cv.telefono}` : ''}`,
+  };
+}
+
 export function normalizarDatosEmpleo(d = {}) {
   return {
     foto: fotoValida(d.foto),
@@ -610,6 +661,10 @@ export function normalizarDatosEmpleo(d = {}) {
       oferta: normalizarOferta(p.oferta),
       ...normalizarAdaptado(p, p.cv ?? {}),
       entrevista: p.entrevista ? normalizarEntrevista(p.entrevista) : null,
+      // Las que preparó el servidor por la mañana, hasta que las abres.
+      origen: p.origen === 'automatica' ? 'automatica' : 'manual',
+      revisada: p.origen === 'automatica' ? Boolean(p.revisada) : true,
+      envio: normalizarEnvio(p.envio),
     })),
   };
 }

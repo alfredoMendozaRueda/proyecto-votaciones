@@ -116,13 +116,16 @@ export class ClienteGmail {
     });
   }
 
-  async enviar({ para, asunto, cuerpo, responderA = null }) {
+  async enviar({ para, asunto, cuerpo, responderA = null, adjuntos = [] }) {
     if (!validarDestinatarios(para)) throw new Error('Revisa las direcciones de "Para".');
+    const validos = (Array.isArray(adjuntos) ? adjuntos : []).filter((a) => a?.datos?.byteLength).slice(0, 5);
+    if (validos.reduce((t, a) => t + a.datos.byteLength, 0) > 4 * 1024 * 1024) throw new Error('Los adjuntos pesan demasiado (máximo 4 MB).');
     const original = responderA ? await this.leer(responderA) : null;
     const raw = construirMensaje({
       para,
       asunto: original ? asuntoRespuesta(original.asunto) : asunto,
       cuerpo,
+      adjuntos: validos.map((a) => ({ nombre: String(a.nombre ?? 'adjunto').slice(0, 120), tipo: String(a.tipo ?? 'application/octet-stream'), datos: new Uint8Array(a.datos) })),
       enRespuestaA: original?.idMensaje || null,
       referencias: original?.referencias || null,
     });

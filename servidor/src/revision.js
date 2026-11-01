@@ -6,7 +6,7 @@ import { Nucleo } from './nucleo.js';
 import { partesLocales, desdeLocal, horaLocal, fechaLegible, enSilencio, aMinutos } from './tiempo.js';
 import { coincideCorreo, coincideCita, duracion } from '../../src/compartido/automatizaciones.js';
 import { extraerEvento } from './ia.js';
-import { tocaAlerta, alertaEmpleo } from './empleo.js';
+import { tocaAlerta, alertaEmpleo, hayCola, prepararSiguiente } from './empleo.js';
 import { aviso } from '../../src/compartido/notificaciones.js';
 
 // Pestañas de Gmail de las que no se avisa si «solo lo principal» está activo.
@@ -27,6 +27,15 @@ export async function revisar(env, ahora = Date.now()) {
   if (await tocaAlerta(n, local)) {
     try {
       await alertaEmpleo(n);
+    } catch (error) {
+      await fallo(n, error);
+    }
+    return;
+  }
+  // Candidaturas en cola tras la alerta: una por minuto, sola (son varias llamadas a la IA).
+  if (await hayCola(n)) {
+    try {
+      await prepararSiguiente(n);
     } catch (error) {
       await fallo(n, error);
     }

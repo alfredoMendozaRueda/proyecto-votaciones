@@ -248,6 +248,8 @@ export function crearAvisos({ leerSecreto, guardarSecreto, borrarSecreto, obtene
       alerta: () => usar((c) => c.empleoAlerta()),
       guardarAlerta: (datos) => usar((c) => c.guardarEmpleoAlerta(datos)),
       probarAlerta: () => usar((c) => c.probarEmpleoAlerta()),
+      preparadas: () => usar((c) => c.empleoPreparadas()),
+      recogerPreparadas: (ids) => usar((c) => c.recogerEmpleoPreparadas(ids)),
     },
     transcribir: (audio, tipo) => usar((c) => c.transcribir(audio, tipo)),
     // Voz natural: MP3 de un trozo de texto.

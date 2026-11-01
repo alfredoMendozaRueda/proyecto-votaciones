@@ -428,7 +428,7 @@ test('alerta de empleo: a su hora busca, puntúa con Groq y avisa solo de lo nue
   const guardada = await (
     await pedir(env, '/empleo/alerta', { metodo: 'PUT', token, cuerpo: { activa: true, puestos: 'frontend react', ubicacion: 'Madrid', hora: '09:00', minEncaje: 60, perfil } })
   ).json();
-  assert.deepEqual({ ...guardada.alerta }, { activa: true, puestos: 'frontend react', ubicacion: 'Madrid', zonas: ['Madrid'], distancia: 0, modalidad: '', hora: '09:00', minEncaje: 60, conPerfil: true });
+  assert.deepEqual({ ...guardada.alerta }, { activa: true, puestos: 'frontend react', ubicacion: 'Madrid', zonas: ['Madrid'], distancia: 0, modalidad: '', hora: '09:00', minEncaje: 60, preparar: 2, investigar: true, presupuesto: 1.5, conPerfil: true });
   const fila = await env.DB.prepare("SELECT valor FROM ajustes WHERE clave = 'empleoAlerta'").first();
   assert.doesNotMatch(fila.valor, /Lucía/, 'el perfil se guarda cifrado');
 
@@ -709,4 +709,73 @@ test('sincronización: el gasto de cada dispositivo llega al otro sin pisarse', 
     assert.equal(Math.round(r.total.usd * 100) / 100, 0.4, 'iPhone 0,20 $ + PC 0,20 $');
     assert.equal(r.dispositivos.length, 2);
   }
+});
+
+test('candidaturas de la mañana: tras la alerta prepara las mejores (una por minuto), avisa y respeta el gasto máximo', async () => {
+  const env = entorno();
+  const { token } = await vincular(env);
+  const nav = await navegador();
+  await pedir(env, '/suscripcion', { metodo: 'PUT', token, cuerpo: { suscripcion: nav.suscripcion } });
+  internet();
+  await pedir(env, '/openai', { metodo: 'PUT', token, cuerpo: { clave: 'sk-proj-abcdefghijklmnopqrstuvwxyz0123' } });
+  const perfil = { nombre: 'Lucía Prieto', email: 'lucia@ejemplo.es', titular: 'Frontend', habilidades: ['React'], experiencia: [{ puesto: 'Frontend', empresa: 'Faro', logros: ['Migré a React'] }] };
+  await pedir(env, '/empleo/alerta', { metodo: 'PUT', token, cuerpo: { activa: true, puestos: 'frontend', zonas: ['Valencia'], hora: '09:00', preparar: 2, investigar: false, presupuesto: 1, perfil } });
+
+  const llamadas = internet();
+  const base = globalThis.fetch;
+  const pasos = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.startsWith('https://www.linkedin.com/')) return new Response('');
+    if (u.startsWith('https://freehire.me/')) {
+      return Response.json({
+        data: ['a', 'b', 'c'].map((x) => ({ public_slug: `o-${x}`, title: `Frontend ${x}`, company: `Empresa ${x}`, location: 'Valencia', url: `https://freehire.me/jobs/o-${x}`, description: 'React y TypeScript' })),
+      });
+    }
+    if (u.startsWith('https://api.openai.com/')) {
+      const cuerpo = JSON.parse(init.body);
+      let texto;
+      if (/evaluaciones/.test(cuerpo.instructions)) {
+        const ids = [...cuerpo.input.matchAll(/<oferta id="([^"]+)">/g)].map((m) => m[1]);
+        texto = JSON.stringify({ evaluaciones: ids.map((id, i) => ({ id, puerta: 'pasa', tecnica: 90 - i * 10, experiencia: 80, cultura: 70, carrera: 80 })) });
+      } else {
+        pasos.push(/revisor/.test(cuerpo.instructions) ? 'revisar' : 'redactar');
+        texto = JSON.stringify({ idioma: 'es', cv: { nombre: 'Lucía Prieto', email: 'otro@x.es', titular: 'Frontend React', experiencia: [{ puesto: 'Frontend', empresa: 'Faro', logros: ['Migré a React'] }] }, carta: 'Hola, soy Lucía.', palabrasClave: ['React'], encaje: 85 });
+      }
+      return Response.json({ status: 'completed', usage: { input_tokens: 4000, output_tokens: 2000 }, output: [{ type: 'message', content: [{ type: 'output_text', text: texto, annotations: [] }] }] });
+    }
+    return base(url, init);
+  };
+
+  const hoy = partesLocales(Date.now(), 'Europe/Madrid').fecha;
+  const nueve = desdeLocal(hoy, '09:00', 'Europe/Madrid');
+  await revisar(env, nueve + 60_000); // alerta: puntúa 3 y deja 2 en cola
+  assert.deepEqual(pasos, []);
+  await revisar(env, nueve + 120_000); // primera candidatura
+  assert.deepEqual(pasos, ['redactar', 'revisar'], 'sin investigar la empresa (está desactivado)');
+  await revisar(env, nueve + 180_000); // segunda
+  await revisar(env, nueve + 240_000); // cola vacía: nada más
+  assert.equal(pasos.length, 4);
+
+  const { preparadas } = await (await pedir(env, '/empleo/preparadas', { token })).json();
+  assert.deepEqual(preparadas.map((p) => p.oferta.empresa), ['Empresa b', 'Empresa a']);
+  assert.equal(preparadas[0].cv.email, 'lucia@ejemplo.es', 'el contacto siempre es el del CV original');
+  assert.equal(preparadas[0].carta, 'Hola, soy Lucía.');
+  const fila = await env.DB.prepare("SELECT valor FROM ajustes WHERE clave = 'empleoPreparadas'").first();
+  assert.doesNotMatch(fila.valor, /Lucía/, 'guardadas cifradas');
+  const avisos = await Promise.all(llamadas.push.map((p) => nav.descifrar(p.cuerpo).then(JSON.parse)));
+  const listas = avisos.filter((a) => a.etiqueta === 'empleo-listas');
+  assert.equal(listas.length, 1, 'un solo aviso al final de la tanda');
+  assert.equal(listas[0].titulo, 'Kitsune: 2 candidaturas listas para revisar');
+
+  await pedir(env, '/empleo/preparadas/recoger', { metodo: 'POST', token, cuerpo: { ids: [preparadas[0].id] } });
+  assert.equal((await (await pedir(env, '/empleo/preparadas', { token })).json()).preparadas.length, 1);
+
+  // Gasto máximo: con el mes ya en 1 $, la cola se vacía sin llamar a la IA.
+  await env.DB.prepare("UPDATE ajustes SET valor = ? WHERE clave = 'consumoOpenAI'").bind(JSON.stringify({ [new Date(nueve).toISOString().slice(0, 7)]: { usd: 1.2, peticiones: 50 } })).run();
+  await env.DB.prepare("INSERT OR REPLACE INTO ajustes (clave, valor) VALUES ('empleoCola', ?)").bind(JSON.stringify([{ id: 'x', puesto: 'Otra', descripcion: 'React' }])).run();
+  await revisar(env, nueve + 300_000);
+  assert.equal(pasos.length, 4, 'no ha gastado más');
+  const registro = await (await pedir(env, '/registro', { token })).json();
+  assert.ok(registro.some((r) => /límite 1 \$/.test(r.texto)));
 });

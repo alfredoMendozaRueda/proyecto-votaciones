@@ -137,6 +137,14 @@ export class ClienteServidor {
     return this.pedir('/empleo/alerta', { metodo: 'PUT', cuerpo: datos });
   }
 
+  empleoPreparadas() {
+    return this.pedir('/empleo/preparadas');
+  }
+
+  recogerEmpleoPreparadas(ids) {
+    return this.pedir('/empleo/preparadas/recoger', { metodo: 'POST', cuerpo: { ids } });
+  }
+
   probarEmpleoAlerta() {
     return this.pedir('/empleo/alerta/probar', { metodo: 'POST' });
   }

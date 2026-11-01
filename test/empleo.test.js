@@ -205,3 +205,54 @@ test('zonas: cada zona se busca en los dos portales, con distancia y país; remo
   assert.equal(linkedin[2].distance, undefined);
   assert.deepEqual(freehire.map((p) => p.get('countries')), ['es', 'de', null]);
 });
+
+import { correoDeOferta, correoCandidatura } from '../src/compartido/empleo.js';
+import { datosParaFormulario } from '../src/compartido/rellenar.js';
+
+test('encuentra el correo para enviar la candidatura y descarta los que no valen', () => {
+  assert.equal(
+    correoDeOferta({ descripcion: 'Política de privacidad: privacidad@empresa.es. Interesados, enviad el CV a Seleccion@Empresa.es. Dudas: info@empresa.es.' }),
+    'seleccion@empresa.es',
+  );
+  assert.equal(correoDeOferta({ resumen: 'Escríbenos a noreply@empresa.es' }), '');
+  assert.equal(correoDeOferta({ descripcion: 'Contacto: jobs@empresa.com.' }), 'jobs@empresa.com');
+  assert.equal(correoDeOferta({}), '');
+});
+
+test('prepara el asunto y el texto del correo de candidatura en el idioma de la oferta', () => {
+  const p = { idioma: 'es', cv: { nombre: 'Elena Martín', telefono: '600 000 000' }, oferta: { puesto: 'Frontend', empresa: 'Senda' } };
+  const es = correoCandidatura(p);
+  assert.equal(es.asunto, 'Candidatura: Frontend – Elena Martín');
+  assert.match(es.cuerpo, /equipo de Senda/);
+  assert.match(es.cuerpo, /600 000 000$/);
+  assert.match(correoCandidatura({ ...p, idioma: 'en' }).asunto, /^Application: Frontend/);
+});
+
+test('datos para rellenar el formulario de una empresa', () => {
+  const d = datosParaFormulario(
+    { nombre: 'Elena Martín Rubio', email: 'elena@correo.es', telefono: '+34 600', ubicacion: 'Madrid', enlaces: ['linkedin.com/in/elena', 'https://github.com/elena', 'elena.dev'] },
+    { carta: 'Hola', cvPdf: 'JVBERg==' },
+  );
+  assert.equal(d.nombre, 'Elena');
+  assert.equal(d.apellidos, 'Martín Rubio');
+  assert.equal(d.linkedin, 'https://linkedin.com/in/elena');
+  assert.equal(d.github, 'https://github.com/elena');
+  assert.equal(d.web, 'https://elena.dev');
+  assert.equal(d.nombreCv, 'CV.pdf');
+});
+
+test('las candidaturas guardan cómo se enviaron y si vienen de la mañana', () => {
+  const d = normalizarDatosEmpleo({
+    postulaciones: [
+      { id: 'a', origen: 'automatica', revisada: false, oferta: { puesto: 'X' }, cv: {} },
+      { id: 'b', oferta: { puesto: 'Y' }, cv: {}, estado: 'enviada', envio: { via: 'correo', a: 'rrhh@x.es', fecha: 5, hilo: 'h1' } },
+      { id: 'c', oferta: { puesto: 'Z' }, cv: {}, envio: { via: 'paloma' } },
+    ],
+  });
+  const [a, b, c] = d.postulaciones;
+  assert.equal(a.origen, 'automatica');
+  assert.equal(a.revisada, false);
+  assert.equal(b.revisada, true);
+  assert.deepEqual(b.envio, { via: 'correo', a: 'rrhh@x.es', fecha: 5, hilo: 'h1' });
+  assert.equal(c.envio, null);
+});

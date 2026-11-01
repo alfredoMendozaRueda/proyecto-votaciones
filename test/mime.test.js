@@ -85,3 +85,29 @@ test('valida destinatarios', () => {
   assert.equal(validarDestinatarios('no-es-un-correo'), false);
   assert.equal(validarDestinatarios(''), false);
 });
+
+test('adjunta archivos en un multipart/mixed (CV y carta en PDF)', () => {
+  const pdf = new Uint8Array(70_000).map((_, i) => i % 251);
+  const raw = construirMensaje({
+    para: 'seleccion@empresa.es',
+    asunto: 'Candidatura: Frontend',
+    cuerpo: 'Hola:\nAdjunto mi CV.',
+    adjuntos: [
+      { nombre: 'CV - Elena Martín.pdf', tipo: 'application/pdf', datos: pdf },
+      { nombre: 'Carta.pdf', tipo: 'application/pdf', datos: new Uint8Array([37, 80, 68, 70]) },
+    ],
+  });
+  const texto = new TextDecoder().decode(base64UrlABytes(raw));
+  const frontera = texto.match(/^Content-Type: multipart\/mixed; boundary="([^"]+)"$/m)?.[1];
+  assert.ok(frontera, 'cabecera multipart con frontera');
+  const partes = texto.split(`--${frontera}`);
+  assert.equal(partes.length, 5, 'cabeceras, texto, dos adjuntos y cierre');
+  assert.match(partes.at(-1), /^--\r\n$/);
+  assert.match(partes[1], /text\/plain; charset="UTF-8"/);
+  assert.equal(Buffer.from(partes[1].split('\r\n\r\n')[1].replace(/\r\n/g, ''), 'base64').toString('utf8'), 'Hola:\r\nAdjunto mi CV.');
+  assert.match(partes[2], /Content-Disposition: attachment; filename="=\?UTF-8\?B\?/);
+  const datos = Buffer.from(partes[2].split('\r\n\r\n')[1].replace(/\r\n/g, ''), 'base64');
+  assert.deepEqual(new Uint8Array(datos), pdf);
+  assert.match(partes[3], /filename="Carta\.pdf"/);
+  assert.ok(partes[2].split('\r\n\r\n')[1].split('\r\n').every((l) => l.length <= 76), 'líneas de base64 de 76 como mucho');
+});

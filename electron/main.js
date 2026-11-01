@@ -35,6 +35,7 @@ import {
   coleccionConsumo,
 } from '../src/compartido/sincro.js';
 import { Consumo } from '../src/compartido/consumo.js';
+import { abrirFormulario } from './formulario.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const URL_DESARROLLO = process.env.KITSUNE_DEV_URL;
@@ -478,6 +479,11 @@ function registrarCanales() {
     const servidorConsumo = leerSecreto('servidorToken') ? await Promise.resolve().then(() => clienteServidor().consumo()).catch(() => null) : null;
     return consumo.resumen({ servidor: servidorConsumo?.meses ?? null });
   });
+  // Candidatura en la web de la empresa: ventana aparte con el formulario relleno.
+  manejar('formulario:abrir', ({ url, id, datos } = {}) => {
+    abrirFormulario({ url, datos, alCerrar: () => ventana?.webContents.send('formulario:cerrado', { id: String(id ?? '') }) });
+    return true;
+  });
   manejar('sincro:resumen', () => sincro.resumen());
   manejar('sincro:activar', () => sincro.activar());
   manejar('sincro:solicitar', () => sincro.solicitar());
@@ -519,6 +525,8 @@ function registrarCanales() {
   manejar('servidor:empleoAlerta', () => servidor.empleo.alerta());
   manejar('servidor:guardarEmpleoAlerta', (datos) => servidor.empleo.guardarAlerta(datos));
   manejar('servidor:probarEmpleoAlerta', () => servidor.empleo.probarAlerta());
+  manejar('servidor:empleoPreparadas', () => servidor.empleo.preparadas());
+  manejar('servidor:recogerEmpleoPreparadas', (ids) => servidor.empleo.recogerPreparadas(ids));
   manejar('servidor:resumen', () => servidor.resumen());
   manejar('servidor:codigo', () => servidor.crearCodigo());
   manejar('servidor:avisos', (avisos) => servidor.avisos(avisos));

@@ -139,7 +139,8 @@ function trocear(texto, ancho = 76) {
 }
 
 // Correo de texto plano en UTF-8 listo para users.messages.send (campo "raw").
-export function construirMensaje({ de, para, asunto, cuerpo, enRespuestaA, referencias }) {
+// adjuntos: [{ nombre, tipo, datos: Uint8Array }] (por ejemplo, el CV y la carta en PDF).
+export function construirMensaje({ de, para, asunto, cuerpo, enRespuestaA, referencias, adjuntos = [] }) {
   const cabeceras = [
     de ? `From: ${limpiarCabecera(de)}` : null,
     `To: ${limpiarCabecera(para)}`,
@@ -147,11 +148,25 @@ export function construirMensaje({ de, para, asunto, cuerpo, enRespuestaA, refer
     enRespuestaA ? `In-Reply-To: ${limpiarCabecera(enRespuestaA)}` : null,
     enRespuestaA ? `References: ${limpiarCabecera([referencias, enRespuestaA].filter(Boolean).join(' '))}` : null,
     'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset="UTF-8"',
-    'Content-Transfer-Encoding: base64',
   ].filter(Boolean);
   const cuerpoCrlf = String(cuerpo ?? '').replace(/\r?\n/g, '\r\n');
-  const mensaje = `${cabeceras.join('\r\n')}\r\n\r\n${trocear(bytesABase64(utf8(cuerpoCrlf)))}`;
+  const texto = `Content-Type: text/plain; charset="UTF-8"\r\nContent-Transfer-Encoding: base64\r\n\r\n${trocear(bytesABase64(utf8(cuerpoCrlf)))}`;
+  if (!adjuntos.length) return bytesABase64Url(utf8(`${cabeceras.join('\r\n')}\r\n${texto}`));
+  const frontera = `kitsune-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  const partes = [
+    texto,
+    ...adjuntos.map((a) => {
+      const nombre = codificarCabecera(String(a.nombre ?? 'adjunto').replace(/["\\\r\n]/g, ''));
+      return (
+        `Content-Type: ${limpiarCabecera(a.tipo || 'application/octet-stream')}; name="${nombre}"\r\n` +
+        `Content-Disposition: attachment; filename="${nombre}"\r\nContent-Transfer-Encoding: base64\r\n\r\n${trocear(bytesABase64(a.datos))}`
+      );
+    }),
+  ];
+  const mensaje =
+    `${cabeceras.join('\r\n')}\r\nContent-Type: multipart/mixed; boundary="${frontera}"\r\n\r\n` +
+    partes.map((p) => `--${frontera}\r\n${p}`).join('\r\n') +
+    `\r\n--${frontera}--\r\n`;
   return bytesABase64Url(utf8(mensaje));
 }
 

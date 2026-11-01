@@ -63,6 +63,10 @@ contextBridge.exposeInMainWorld('asistente', {
   consumo: {
     resumen: () => invocar('consumo:resumen'),
   },
+  formulario: {
+    abrir: (datos) => invocar('formulario:abrir', datos),
+    alCerrar: (callback) => escuchar('formulario:cerrado', callback),
+  },
   sincro: {
     resumen: () => invocar('sincro:resumen'),
     activar: () => invocar('sincro:activar'),
@@ -107,6 +111,8 @@ contextBridge.exposeInMainWorld('asistente', {
       alerta: () => invocar('servidor:empleoAlerta'),
       guardarAlerta: (datos) => invocar('servidor:guardarEmpleoAlerta', datos),
       probarAlerta: () => invocar('servidor:probarEmpleoAlerta'),
+      preparadas: () => invocar('servidor:empleoPreparadas'),
+      recogerPreparadas: (ids) => invocar('servidor:recogerEmpleoPreparadas', ids),
     },
     resumen: () => invocar('servidor:resumen'),
     crearCodigo: () => invocar('servidor:codigo'),

@@ -68,6 +68,8 @@ export const servidor = {
     alerta: () => usar((c) => c.empleoAlerta()),
     guardarAlerta: (datos) => usar((c) => c.guardarEmpleoAlerta(datos)),
     probarAlerta: () => usar((c) => c.probarEmpleoAlerta()),
+    preparadas: () => usar((c) => c.empleoPreparadas()),
+    recogerPreparadas: (ids) => usar((c) => c.recogerEmpleoPreparadas(Array.isArray(ids) ? ids.map(String) : [])),
   },
   resumen: () => usar((c) => c.resumen()),
   crearCodigo: () => usar((c) => c.crearCodigo()),

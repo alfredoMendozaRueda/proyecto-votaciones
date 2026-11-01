@@ -17,7 +17,10 @@ import {
   MAX_POSTULACIONES,
   MAX_ZONAS,
   normalizarEstiloCV,
+  correoDeOferta,
+  correoCandidatura,
 } from '../compartido/empleo.js';
+import { datosParaFormulario } from '../compartido/rellenar.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const dosCifras = (n) => String(n).padStart(2, '0');
@@ -40,6 +43,20 @@ const NIVELES_ALERTA = [
   [45, 'Encaje medio (45+)'],
   [0, 'Todas las nuevas'],
 ];
+// Candidaturas que el servidor deja listas cada mañana, y el gasto máximo al mes.
+const PREPARAR = [
+  [0, 'Ninguna'],
+  [1, 'La mejor'],
+  [2, 'Las 2 mejores'],
+  [3, 'Las 3 mejores'],
+  [5, 'Las 5 mejores'],
+];
+const PRESUPUESTOS = [0.5, 1, 1.5, 2, 3, 5];
+const dolares = (n) => `${n.toLocaleString('es-ES', { minimumFractionDigits: n < 1 && n > 0 ? 2 : 0, maximumFractionDigits: 2 })} $`;
+// Medido con los prompts reales y GPT-6 Luna: puntuar ~12 ofertas al día cuesta
+// unos 0,0015 $; cada candidatura (redactar + revisar) 0,0034 $ y, si se
+// investiga la empresa, 0,0105 $ más (la búsqueda web cuesta 0,01 $).
+const costeMensual = ({ preparar = 0, investigar = true }) => 30 * (0.0015 + preparar * (0.0034 + (investigar ? 0.0105 : 0)));
 // Diseños y colores del CV (los mismos que el PDF, ver empleo-pdf.js).
 const PLANTILLAS = [
   ['clasica', 'Clásico'],
@@ -76,6 +93,13 @@ const TITULOS_HTML = {
   es: ['Perfil', 'Experiencia', 'Formación', 'Habilidades', 'Idiomas', 'Certificaciones'],
   en: ['Profile', 'Experience', 'Education', 'Skills', 'Languages', 'Certifications'],
 };
+
+// Bytes → base64 por trozos (un PDF entero de golpe desborda la pila).
+function aBase64(bytes) {
+  let binario = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binario += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binario);
+}
 
 const nivelEncaje = (n) => (n == null ? '' : n >= 75 ? 'alto' : n >= 50 ? 'medio' : 'bajo');
 const nombreArchivo = (tipo, p) =>
@@ -118,6 +142,9 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
   const alertas = api.servidor?.empleo?.alerta ? api.servidor.empleo : null;
   let estadoAlerta = null;
   let alertaCargada = 0;
+  // Al cerrar la ventana del formulario de una empresa (Windows), ¿se envió?
+  let preguntaFormulario = () => {};
+  api.formulario?.alCerrar?.(({ id } = {}) => preguntaFormulario(String(id ?? '')));
   const nuevas = new Set();
 
   async function cargar() {
@@ -495,11 +522,34 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     } catch (error) {
       estadoAlerta = { error: error.message };
     }
-    if (incorporarUltimas(estadoAlerta.ultimas)) {
+    const llegadas = incorporarUltimas(estadoAlerta.ultimas);
+    const listas = await importarPreparadas();
+    if (llegadas || listas) {
       await guardar();
       pintarOfertas();
+      pintarCandidaturas();
     }
     pintarAlerta();
+  }
+
+  // Las candidaturas que el servidor preparó esta mañana: pasan a «tus candidaturas»
+  // como «lista para revisar» y se borran del servidor.
+  async function importarPreparadas() {
+    if (!alertas.preparadas || !datos?.cv) return 0;
+    let lista = [];
+    try {
+      ({ preparadas: lista = [] } = await alertas.preparadas());
+    } catch {
+      return 0;
+    }
+    if (!lista.length) return 0;
+    const nuevasCand = lista.filter((x) => x?.oferta && !candidaturaDe(x.oferta)).map((x) => ({ ...x, estado: 'preparada', origen: 'automatica', revisada: false, entrevista: null }));
+    if (nuevasCand.length) {
+      const juntas = normalizarDatosEmpleo({ postulaciones: [...nuevasCand, ...datos.postulaciones] }).postulaciones;
+      datos.postulaciones = juntas;
+    }
+    await alertas.recogerPreparadas(lista.map((x) => x.id)).catch(() => {});
+    return nuevasCand.length;
   }
 
   // Las ofertas que trajo la alerta (y aún no estaban), arriba y marcadas como nuevas.
@@ -515,7 +565,53 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     return llegadas.length || 1;
   }
 
-  const alertaActual = () => estadoAlerta?.alerta ?? { activa: false, puestos: '', ubicacion: '', hora: '08:30', minEncaje: 60 };
+  const alertaActual = () => ({
+    activa: false,
+    puestos: '',
+    ubicacion: '',
+    hora: '08:30',
+    minEncaje: 60,
+    preparar: 2,
+    investigar: true,
+    presupuesto: 1.5,
+    ...(estadoAlerta?.alerta ?? {}),
+  });
+
+  // Candidaturas de cada mañana: cuántas, si investiga la empresa y cuánto gastar como mucho.
+  function opcionesPreparar(a) {
+    const conIA = estadoAlerta.ia ?? (estadoAlerta.groq ? 'groq' : null);
+    if (!conIA) return '';
+    const openai = conIA === 'openai';
+    const estimado = costeMensual(a);
+    const gastado = Number(estadoAlerta.gastado) || 0;
+    return `
+      <div class="empleo-alerta__preparar">
+        <p class="empleo-etiqueta">(candidaturas listas cada mañana)</p>
+        <div class="empleo-alerta__opciones">
+          <label class="empleo-campo"><span>Preparar</span><select class="campo" id="alerta-preparar" data-bloquear>${PREPARAR.map(
+            ([v, n]) => `<option value="${v}"${v === a.preparar ? ' selected' : ''}>${n}</option>`,
+          ).join('')}</select></label>
+          ${
+            openai
+              ? `<label class="empleo-campo"><span>Gasto máximo al mes</span><select class="campo" id="alerta-presupuesto" data-bloquear>${PRESUPUESTOS.map(
+                  (v) => `<option value="${v}"${v === a.presupuesto ? ' selected' : ''}>${dolares(v)}</option>`,
+                ).join('')}</select></label>`
+              : ''
+          }
+        </div>
+        ${
+          a.preparar
+            ? `<label class="empleo-casilla"><input type="checkbox" id="alerta-investigar" ${a.investigar ? 'checked' : ''} data-bloquear> Investigar cada empresa en internet${openai ? ' (+0,01 $ por candidatura)' : ''}</label>
+        <p class="ajuste__ayuda">Tras la búsqueda de la mañana dejo hechos el CV y la carta de las mejores ofertas y te aviso al móvil. No se envía nada: tú las revisas y decides.</p>`
+            : ''
+        }
+        <p class="empleo-mono empleo-alerta__coste">${
+          openai
+            ? `≈ ${dolares(Math.round(estimado * 100) / 100)} al mes con GPT-6 Luna · este mes, ${dolares(Math.round(gastado * 100) / 100)} de ${dolares(a.presupuesto)}`
+            : 'con Groq en el servidor: gratis'
+        }</p>
+      </div>`;
+  }
 
   function pintarAlerta(nota = '') {
     const caja = contenedor.querySelector('#empleo-alerta');
@@ -551,6 +647,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
               ).join('')}</select></label>
             </div>
             <p class="ajuste__ayuda">${escapar(busca)}Usa lo que tengas en «qué buscas»: al buscar con otros puestos, la alerta se actualiza.</p>
+            ${opcionesPreparar(a)}
             ${estadoAlerta.groq ? '' : '<p class="ajuste__ayuda empleo-alerta__ojo">Sin IA en el servidor te llegan todas las ofertas nuevas, sin puntuar. Para que solo te avise de las que encajan, activa tu clave de OpenAI o de Groq en el servidor (Ajustes → Avisos).</p>'}
             <div class="empleo-alerta__acciones"><button type="button" class="boton" id="alerta-probar" data-bloquear>${icono('actualizar', 15)} Probar ahora</button></div>`
           : ''
@@ -567,6 +664,9 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       if (/^\d{2}:\d{2}$/.test(e.target.value)) tarea(() => guardarAlerta({ hora: e.target.value }));
     });
     caja.querySelector('#alerta-encaje')?.addEventListener('change', (e) => tarea(() => guardarAlerta({ minEncaje: Number(e.target.value) })));
+    caja.querySelector('#alerta-preparar')?.addEventListener('change', (e) => tarea(() => guardarAlerta({ preparar: Number(e.target.value) })));
+    caja.querySelector('#alerta-presupuesto')?.addEventListener('change', (e) => tarea(() => guardarAlerta({ presupuesto: Number(e.target.value) })));
+    caja.querySelector('#alerta-investigar')?.addEventListener('change', (e) => tarea(() => guardarAlerta({ investigar: e.target.checked })));
     caja.querySelector('#alerta-probar')?.addEventListener('click', () => tarea(probarAlerta));
   }
 
@@ -574,7 +674,17 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
   async function guardarAlerta(cambios = {}, { callada = false } = {}) {
     const a = alertaActual();
     datos.preferencias = preferenciasDelFormulario();
-    const nueva = { activa: a.activa, hora: a.hora, minEncaje: a.minEncaje, ...datos.preferencias, ...cambios, perfil: datos.cv.perfil };
+    const nueva = {
+      activa: a.activa,
+      hora: a.hora,
+      minEncaje: a.minEncaje,
+      preparar: a.preparar,
+      investigar: a.investigar,
+      presupuesto: a.presupuesto,
+      ...datos.preferencias,
+      ...cambios,
+      perfil: datos.cv.perfil,
+    };
     try {
       const { alerta } = await alertas.guardarAlerta(nueva);
       estadoAlerta = { ...estadoAlerta, alerta };
@@ -702,7 +812,9 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       return;
     }
     seccion.innerHTML = `
-      <p class="empleo-etiqueta">(tus candidaturas · ${datos.postulaciones.length})</p>
+      <p class="empleo-etiqueta">(tus candidaturas · ${datos.postulaciones.length}${
+        datos.postulaciones.some((p) => !p.revisada) ? ` · ${datos.postulaciones.filter((p) => !p.revisada).length} preparadas esta mañana` : ''
+      })</p>
       <ul class="filas">
         ${datos.postulaciones
           .map(
@@ -711,7 +823,11 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
               <span class="fila__cuerpo"><span class="fila__titulo">${escapar(p.oferta.puesto)}</span><span class="fila__detalle">${escapar(
                 [p.oferta.empresa, fechaCorta(p.fecha)].filter(Boolean).join(' · '),
               )}</span></span>
-              <span class="chip empleo-estado" data-estado="${p.estado}">${ESTADOS.find(([v]) => v === p.estado)[1]}</span>
+              ${
+                p.revisada
+                  ? `<span class="chip empleo-estado" data-estado="${p.estado}">${ESTADOS.find(([v]) => v === p.estado)[1]}</span>`
+                  : '<span class="chip empleo-estado" data-estado="lista">Lista para revisar</span>'
+              }
             </button></li>`,
           )
           .join('')}
@@ -756,6 +872,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       oferta: { ...completa, encaje: resultado.encaje ?? completa.encaje },
       ...resultado,
       entrevista: null,
+      envio: rehacer?.envio ?? null,
     };
     datos.postulaciones = [nueva, ...datos.postulaciones.filter((x) => x.id !== nueva.id)].slice(0, MAX_POSTULACIONES);
     await guardar();
@@ -872,6 +989,11 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
   }
 
   function detalle(p) {
+    // Abrirla es revisarla: deja de salir como «lista para revisar».
+    if (!p.revisada) {
+      p.revisada = true;
+      guardar();
+    }
     // Los PDF se preparan ya: así, al pulsar, se comparten sin esperas (el
     // iPhone solo deja compartir justo después del toque).
     let pdfs = null;
@@ -890,8 +1012,12 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       }));
     comprobar().catch(() => {});
     const o = p.oferta;
+    const porCorreo = Boolean(api.correo?.enviar);
+    const conFormulario = Boolean(api.formulario?.abrir && o.url);
+    const textoEnvio = (e) =>
+      e ? `Enviada ${e.via === 'correo' ? `por correo${e.a ? ` a ${e.a}` : ''}` : 'con el formulario de la empresa'} el ${fechaCorta(e.fecha)}` : '';
     contenedor.innerHTML = `
-      <div class="apartado desplazable empleo">
+      <div class="apartado desplazable empleo" data-cand-id="${escapar(p.id)}">
         <div class="apartado__cabecera">
           <button type="button" class="icono-boton" id="cand-volver" aria-label="Volver a Empleo">${icono('volver')}</button>
           <h2>Candidatura</h2>
@@ -905,6 +1031,8 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
               ${ESTADOS.map(([v, n]) => `<option value="${v}" ${p.estado === v ? 'selected' : ''}>${n}</option>`).join('')}
             </select>
           </div>
+          <p class="empleo-mono candidatura__envio" id="cand-enviada"${p.envio ? '' : ' hidden'}>${escapar(textoEnvio(p.envio))}</p>
+          ${p.origen === 'automatica' ? '<p class="ajuste__ayuda">La preparé esta mañana con la alerta. Repásala antes de enviarla.</p>' : ''}
         </header>
         <div class="segmentado candidatura__pestanas" role="tablist">
           <button type="button" role="tab" data-pestana="cv" aria-pressed="true">CV</button>
@@ -920,6 +1048,20 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
           <button type="button" class="boton" id="cand-copiar">Copiar texto</button>
           ${o.url ? `<button type="button" class="boton" id="cand-oferta">${icono('enlace', 15)} Ver oferta</button>` : ''}
         </div>
+        ${
+          porCorreo || conFormulario
+            ? `<section class="empleo-envio" aria-labelledby="et-envio">
+          <p class="empleo-etiqueta" id="et-envio">(enviarla)</p>
+          <div class="candidatura__acciones">
+            ${porCorreo ? `<button type="button" class="boton" id="cand-correo" data-bloquear>${icono('enviar', 15)} Enviar por correo</button>` : ''}
+            ${conFormulario ? `<button type="button" class="boton" id="cand-formulario" data-bloquear>${icono('documento', 15)} Rellenar el formulario de la empresa</button>` : ''}
+          </div>
+          ${conFormulario ? '<p class="ajuste__ayuda">Abro la oferta en una ventana de Kitsune y relleno tus datos, el CV y la carta. Si es de LinkedIn, pulsa allí «Solicitar» en la web de la empresa. El botón de enviar lo pulsas tú.</p>' : ''}
+          <div id="cand-correo-panel" hidden></div>
+          <div id="cand-pregunta" class="empleo-pregunta-envio" role="status" hidden></div>
+        </section>`
+            : ''
+        }
         <p class="apartado__mensaje" role="alert" hidden></p>
         <div class="apartado__pie">
           <button type="button" class="boton" id="cand-rehacer-todo" data-bloquear>${icono('actualizar', 15)} Rehacer con la IA</button>
@@ -1084,6 +1226,144 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       }
     });
     contenedor.querySelector('#cand-oferta')?.addEventListener('click', () => api.ventana.abrirEnlace(o.url));
+
+    // Marcarla como enviada (y recordar cómo).
+    async function marcarEnviada(envio) {
+      p.estado = 'enviada';
+      p.envio = { fecha: Date.now(), ...envio };
+      await guardar();
+      const linea = contenedor.querySelector('#cand-enviada');
+      if (linea) {
+        linea.hidden = false;
+        linea.textContent = textoEnvio(p.envio);
+      }
+      const selector = contenedor.querySelector('#cand-estado');
+      if (selector) selector.value = 'enviada';
+    }
+
+    // ---------- Por correo: se revisa todo y se confirma dos veces ----------
+    contenedor.querySelector('#cand-correo')?.addEventListener('click', () =>
+      tarea(async () => {
+        const panelCorreo = contenedor.querySelector('#cand-correo-panel');
+        if (!panelCorreo.hidden) {
+          panelCorreo.hidden = true;
+          return;
+        }
+        const estadoCorreo = await api.correo.estado().catch(() => null);
+        if (!estadoCorreo?.conectado) {
+          panelCorreo.hidden = false;
+          panelCorreo.innerHTML = `<p class="ajuste__ayuda">Para enviarla por correo, conecta antes tu Gmail.</p>
+            <button type="button" class="boton" id="envio-conectar">${icono('sobre', 15)} Conectar Gmail</button>`;
+          panelCorreo.querySelector('#envio-conectar').addEventListener('click', () => abrirAjustes('correo'));
+          return;
+        }
+        const encontrado = correoDeOferta(o);
+        const { asunto, cuerpo } = correoCandidatura(p);
+        panelCorreo.hidden = false;
+        panelCorreo.innerHTML = `
+          <form class="empleo-correo" id="envio-form" novalidate>
+            <label class="empleo-campo"><span>Para</span><input class="campo" type="email" name="para" value="${escapar(encontrado)}" placeholder="seleccion@empresa.com" autocomplete="off" required></label>
+            <p class="ajuste__ayuda">${
+              encontrado
+                ? 'He sacado esta dirección de la oferta: comprueba que es la de las candidaturas.'
+                : 'No he encontrado ninguna dirección en la oferta. Escríbela si el anuncio pide enviar el CV por correo; si no, usa su formulario.'
+            }</p>
+            <label class="empleo-campo"><span>Asunto</span><input class="campo" name="asunto" value="${escapar(asunto)}" maxlength="200"></label>
+            <label class="empleo-campo"><span>Mensaje</span><textarea class="campo empleo-correo__cuerpo" name="cuerpo" rows="9">${escapar(cuerpo)}</textarea></label>
+            <fieldset class="empleo-correo__adjuntos"><legend>Adjuntos</legend>
+              <label class="empleo-casilla"><input type="checkbox" name="cv" checked> ${escapar(nombreArchivo('CV', p))}</label>
+              <label class="empleo-casilla"><input type="checkbox" name="carta" checked> ${escapar(nombreArchivo('Carta', p))}</label>
+            </fieldset>
+            <p class="ajuste__ayuda">Sale desde tu Gmail (${escapar(estadoCorreo.email ?? '')}) y queda en Enviados.</p>
+            <p class="empleo-correo__error" role="alert" hidden></p>
+            <div class="candidatura__acciones">
+              <button type="submit" class="boton boton--primario" id="envio-confirmar" data-bloquear>${icono('enviar', 15)} Enviar ahora</button>
+              <button type="button" class="boton boton--texto" id="envio-cancelar">Cancelar</button>
+            </div>
+          </form>`;
+        const form = panelCorreo.querySelector('#envio-form');
+        const boton = form.querySelector('#envio-confirmar');
+        const error = form.querySelector('.empleo-correo__error');
+        const fallo = (texto) => {
+          error.hidden = false;
+          error.textContent = texto;
+        };
+        form.querySelector('#envio-cancelar').addEventListener('click', () => {
+          panelCorreo.hidden = true;
+          panelCorreo.innerHTML = '';
+        });
+        form.addEventListener('input', () => {
+          delete boton.dataset.confirmar;
+          boton.innerHTML = `${icono('enviar', 15)} Enviar ahora`;
+          error.hidden = true;
+        });
+        form.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const para = form.para.value.trim();
+          if (!/^[^\s@,;]+@[^\s@,;]+\.[a-z]{2,}$/i.test(para)) return fallo('Escribe una dirección de correo válida.');
+          if (!form.cv.checked) return fallo('Adjunta al menos el CV.');
+          // Segunda confirmación, con el destinatario a la vista.
+          if (boton.dataset.confirmar !== 'si') {
+            boton.dataset.confirmar = 'si';
+            boton.textContent = `¿Enviar a ${para}? Pulsa otra vez`;
+            return;
+          }
+          tarea(async () => {
+            const listos = await pdfs;
+            const adjuntos = [
+              { nombre: nombreArchivo('CV', p), tipo: 'application/pdf', datos: listos.cv.slice() },
+              ...(form.carta.checked ? [{ nombre: nombreArchivo('Carta', p), tipo: 'application/pdf', datos: listos.carta.slice() }] : []),
+            ];
+            progreso('Enviando tu candidatura…');
+            const r = await api.correo.enviar({ para, asunto: form.asunto.value.trim() || asunto, cuerpo: form.cuerpo.value.trim(), adjuntos });
+            await marcarEnviada({ via: 'correo', a: para, hilo: r?.threadId ?? '' });
+            panelCorreo.innerHTML = `<p class="empleo-correo__hecho" role="status">${icono('hecho', 15)} Enviada a ${escapar(para)}. La tienes en Enviados de Gmail.</p>`;
+          });
+        });
+        form.para.focus();
+      }),
+    );
+
+    // ---------- Formulario de la empresa (Kitsune para Windows) ----------
+    contenedor.querySelector('#cand-formulario')?.addEventListener('click', () =>
+      tarea(async () => {
+        progreso('Preparando tus datos y los PDF…');
+        const listos = await pdfs;
+        await api.formulario.abrir({
+          url: o.url,
+          id: p.id,
+          datos: datosParaFormulario(p.cv, {
+            carta: p.carta,
+            cvPdf: aBase64(listos.cv),
+            cartaPdf: aBase64(listos.carta),
+            nombreCv: nombreArchivo('CV', p),
+            nombreCarta: nombreArchivo('Carta', p),
+          }),
+        });
+        const pregunta = contenedor.querySelector('#cand-pregunta');
+        pregunta.hidden = false;
+        pregunta.innerHTML = '<p class="ajuste__ayuda">He abierto el formulario en otra ventana. Cuando la cierres te pregunto si la has enviado.</p>';
+      }),
+    );
+    preguntaFormulario = (id) => {
+      if (id !== p.id || !contenedor.querySelector(`[data-cand-id="${CSS.escape(p.id)}"]`)) return;
+      const pregunta = contenedor.querySelector('#cand-pregunta');
+      if (!pregunta || p.estado === 'enviada') return pregunta && (pregunta.hidden = true);
+      pregunta.hidden = false;
+      pregunta.innerHTML = `<p><strong>¿La has enviado?</strong></p>
+        <div class="candidatura__acciones">
+          <button type="button" class="boton boton--primario" data-enviada="si">Sí, la he enviado</button>
+          <button type="button" class="boton boton--texto" data-enviada="no">Todavía no</button>
+        </div>`;
+      pregunta.querySelector('[data-enviada="si"]').addEventListener('click', async () => {
+        await marcarEnviada({ via: 'formulario', a: o.empresa || '' });
+        pregunta.innerHTML = `<p class="empleo-correo__hecho">${icono('hecho', 15)} Apuntada como enviada.</p>`;
+      });
+      pregunta.querySelector('[data-enviada="no"]').addEventListener('click', () => {
+        pregunta.hidden = true;
+      });
+    };
+
     const rehacerTodo = contenedor.querySelector('#cand-rehacer-todo');
     rehacerTodo.addEventListener('click', () => {
       if (rehacerTodo.dataset.confirmar !== 'si') {

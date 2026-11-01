@@ -482,9 +482,9 @@ export function crearDemo() {
         if (papelera) c.papelera = true;
         return {};
       },
-      async enviar() {
-        await espera(600);
-        return {};
+      async enviar({ adjuntos = [] } = {}) {
+        await espera(600 + adjuntos.length * 200);
+        return { id: 'demo-enviado', threadId: 'demo-hilo' };
       },
       alNuevo: (f) => escuchar('nuevo', f),
     },
@@ -629,6 +629,30 @@ export function crearDemo() {
     servidor: (() => {
       let alertaDemo = null;
       let ultimasDemo = null;
+      // Una candidatura «preparada esta mañana» por el servidor, para ver cómo llega.
+      let preparadasDemo = [
+        {
+          id: 'pdemo1',
+          fecha: Date.now() - 2 * HORA,
+          oferta: {
+            ...OFERTA_ALERTA_DEMO,
+            id: 'alerta-preparada',
+            descripcion:
+              'Planificador de rutas para repartidores. Buscamos frontend con React y TypeScript que cuide la accesibilidad. ' +
+              'Si te interesa, envía tu CV a seleccion@senda-rutas.ejemplo.es indicando la referencia FE-24.',
+          },
+          cv: { ...PERFIL_DEMO, titular: 'Frontend Engineer · React y TypeScript' },
+          carta:
+            'Hola, equipo de Senda Rutas:\n\nOs escribo por la oferta de frontend (ref. FE-24). Llevo seis años con React y TypeScript y en Tranvía Software reduje un 38 % el tiempo de carga.\n\n' +
+            'Un planificador de rutas se usa en la calle y con prisa: justo donde la accesibilidad y el rendimiento en móvil marcan la diferencia.\n\nUn saludo,\nElena Martín Rubio',
+          palabrasClave: ['React', 'TypeScript', 'Accesibilidad'],
+          terminosOferta: ['React', 'TypeScript', 'Accesibilidad'],
+          notas: ['Carta centrada en el uso en movilidad.', 'Añadida la referencia FE-24 que pide la oferta.'],
+          encaje: 84,
+          idioma: 'es',
+          empresa: 'Senda Rutas (ejemplo): software de rutas para repartos de última milla, equipo pequeño en Madrid.',
+        },
+      ];
       let autos = PLANTILLAS.slice(0, 2).map((p, i) => normalizarAutomatizacion(p.automatizacion, `ademo${i}`));
       let avisos = { correo: true, soloPrincipal: true, correoCadaMin: 2, citas: 15, silencio: { activo: true, desde: '23:00', hasta: '08:00' } };
       let pushAqui = false;
@@ -662,11 +686,27 @@ export function crearDemo() {
             return { ofertas: OFERTAS_DEMO.map((o, i) => ({ ...o, id: `demo-${i}`, fuente: i === 1 ? 'freehire' : 'LinkedIn' })), errores: [] };
           },
           async alerta() {
-            return { alerta: alertaDemo, ultimas: ultimasDemo, groq: true };
+            return { alerta: alertaDemo, ultimas: ultimasDemo, groq: true, ia: 'openai', gastado: 0.31 };
+          },
+          preparadas: async () => ({ preparadas: preparadasDemo }),
+          async recogerPreparadas(ids) {
+            preparadasDemo = preparadasDemo.filter((p) => !ids.includes(p.id));
+            return { ok: true };
           },
           async guardarAlerta(datos) {
             if (datos.activa && !String(datos.puestos ?? '').trim()) throw new Error('Di qué puesto buscar para las alertas.');
-            alertaDemo = { activa: Boolean(datos.activa), puestos: datos.puestos ?? '', ubicacion: datos.ubicacion ?? '', modalidad: datos.modalidad ?? '', hora: datos.hora || '08:30', minEncaje: Number(datos.minEncaje ?? 60), conPerfil: true };
+            alertaDemo = {
+              activa: Boolean(datos.activa),
+              puestos: datos.puestos ?? '',
+              ubicacion: datos.ubicacion ?? '',
+              modalidad: datos.modalidad ?? '',
+              hora: datos.hora || '08:30',
+              minEncaje: Number(datos.minEncaje ?? 60),
+              preparar: Number(datos.preparar ?? 2),
+              investigar: datos.investigar !== false,
+              presupuesto: Number(datos.presupuesto ?? 1.5),
+              conPerfil: true,
+            };
             return { alerta: alertaDemo };
           },
           async probarAlerta() {

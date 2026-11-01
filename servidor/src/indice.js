@@ -13,8 +13,9 @@ import { aviso } from '../../src/compartido/notificaciones.js';
 import { sintetizar, validarVoz } from './voz.js';
 import { limpiarTranscripcion, MAX_AUDIO } from '../../src/compartido/dictado.js';
 import { buscarEnPortales, detalleOferta } from '../../src/compartido/portales.js';
-import { guardarAlerta, alertaPublica, alertaEmpleo } from './empleo.js';
+import { guardarAlerta, alertaPublica, alertaEmpleo, preparadas, recogerPreparadas } from './empleo.js';
 import { rutaSincro } from './sincro.js';
+import { mesDe } from '../../src/compartido/consumo.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -425,7 +426,8 @@ async function atender(peticion, env) {
   }
   if (m === 'GET' && ruta === '/empleo/alerta') {
     const a = await n.ajustes();
-    return json({ alerta: alertaPublica(a.empleoAlerta), ultimas: a.empleoUltimas ?? null, groq: Boolean(await n.iaServidor()) });
+    const motor = await n.iaServidor();
+    return json({ alerta: alertaPublica(a.empleoAlerta), ultimas: a.empleoUltimas ?? null, groq: Boolean(motor), ia: motor?.proveedor ?? null, gastado: a.consumoOpenAI?.[mesDe(n.ahora)]?.usd ?? 0 });
   }
   if (m === 'PUT' && ruta === '/empleo/alerta') {
     try {
@@ -433,6 +435,12 @@ async function atender(peticion, env) {
     } catch (error) {
       throw new ErrorHttp(400, error.message);
     }
+  }
+  if (m === 'GET' && ruta === '/empleo/preparadas') return json({ preparadas: await preparadas(n) });
+  if (m === 'POST' && ruta === '/empleo/preparadas/recoger') {
+    const { ids } = await cuerpo(peticion);
+    await recogerPreparadas(n, ids);
+    return json({ ok: true });
   }
   if (m === 'POST' && ruta === '/empleo/alerta/probar') {
     return json({ ultimas: await alertaEmpleo(n, { avisar: false }) });
