@@ -105,6 +105,9 @@ test('OpenAI: las tareas de Empleo que piden JSON lo reciben garantizado; con we
   assert.deepEqual(peticiones[0].cuerpo.text, { format: { type: 'json_object' } });
   assert.equal(peticiones[0].cuerpo.reasoning.effort, 'low');
   assert.equal(peticiones[0].cuerpo.instructions, 'Devuelve SOLO JSON: {"evaluaciones":[]}');
+  // OpenAI rechaza json_object si la palabra «json» no está en la entrada (las instrucciones no cuentan).
+  assert.match(peticiones[0].cuerpo.input, /json/i);
+  assert.ok(peticiones[0].cuerpo.input.startsWith('ofertas'));
   const b = await tareaOpenAI({ apiKey: 'sk-x', modelo: 'gpt-6-luna', sistema: 'Investiga la empresa', usuario: 'Brújula Labs', web: true, fetch });
   assert.deepEqual(peticiones[1].cuerpo.tools, [{ type: 'web_search' }]);
   assert.equal(peticiones[1].cuerpo.text, undefined);

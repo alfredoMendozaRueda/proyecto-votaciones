@@ -136,12 +136,15 @@ export async function textoOpenAI({ apiKey, modelo, sistema, usuario, fetch, alU
 // respuesta sea JSON válido. Con web, busca en internet. Devuelve { texto, fuentes }.
 export async function tareaOpenAI({ apiKey, modelo, sistema, usuario, web = false, max = 8000, fetch, alUso }) {
   const json = !web && /\bJSON\b/.test(`${sistema}\n${usuario}`);
+  // Con json_object, OpenAI exige la palabra «json» en la entrada (las
+  // instrucciones no cuentan): si solo la dice el sistema, se recuerda al final.
+  const entrada = json && !/json/i.test(usuario) ? `${usuario}\n\nResponde solo con el JSON pedido.` : usuario;
   return responder(
     apiKey,
     {
       model: modelo,
       instructions: sistema,
-      input: usuario,
+      input: entrada,
       reasoning: { effort: web ? 'medium' : 'low' },
       // El razonamiento cuenta para el máximo: se deja margen.
       max_output_tokens: max + 6000,
