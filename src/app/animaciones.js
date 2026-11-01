@@ -49,6 +49,8 @@ export function prepararIndicador(barra) {
     const activo = [...barra.querySelectorAll('button')].find(
       (b) => b.offsetParent && (b.classList.contains('activo') || b.getAttribute('aria-selected') === 'true'),
     );
+    // Sin apartado activo (en Ajustes), la raya se esconde.
+    raya.style.opacity = activo ? '' : '0';
     if (!activo || !barra.offsetWidth) return;
     const primera = !raya.classList.contains('lista');
     // En escritorio la barra es un riel vertical: la raya va a su izquierda y baja.

@@ -46,6 +46,35 @@ const IA = {
   },
 };
 
+const ESTILOS = { ilustracion: 'Ilustración', realista: 'Realista', anime: 'Anime', kawaii: 'Kawaii', tinta: 'Tinta' };
+
+// Ajustes por temas: la portada enseña cada uno con su valor actual y lleva a su página.
+const TEMAS = [
+  { id: 'kitsune', nombre: 'Kitsune', icono: 'chispa', detalle: 'Aspecto, voz y comportamiento' },
+  { id: 'ia', nombre: 'IA y gasto', icono: 'pulso', detalle: 'Claves, modo, modelo y lo gastado' },
+  { id: 'cuentas', nombre: 'Cuentas', icono: 'sobre', detalle: 'Google: correo y calendario' },
+  { id: 'avisos', nombre: 'Avisos y servidor', icono: 'campana', detalle: 'Avisos en el móvil y servidor propio' },
+  { id: 'dispositivos', nombre: 'Dispositivos', icono: 'actualizar', detalle: 'Sincronizar iPhone y Windows' },
+  { id: 'privacidad', nombre: 'Privacidad', icono: 'llave', detalle: 'Permisos y bloqueo' },
+];
+// De qué tema es cada bloque (el id de su <section>, sin «seccion-»).
+const TEMA_DE_SECCION = {
+  kitsune: 'kitsune',
+  comportamiento: 'kitsune',
+  claude: 'ia',
+  'registro-ia': 'ia',
+  correo: 'cuentas',
+  avisos: 'avisos',
+  sincro: 'dispositivos',
+  bloqueo: 'privacidad',
+  permisos: 'privacidad',
+};
+const sinTildes = (t) =>
+  String(t ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
 // Atajos para poner todos los permisos de golpe. Leer y consultar no cambian.
 const PREAJUSTES = [
   ['preguntar', 'Preguntar antes de cambiar nada'],
@@ -93,7 +122,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
     const { groq, openai } = estado.claves ?? {};
     if (!groq && !openai) return '';
     if (!groq || !openai) {
-      return `<p class="ajuste__ayuda modos__pista">Añade también tu clave de ${groq ? 'OpenAI' : 'Groq'} (elígela arriba) y Kitsune podrá mezclar las dos: modos Ahorro, Eficiente y Calidad.</p>`;
+      return `<p class="ajuste__ayuda modos__pista">Añade también tu clave de ${groq ? 'OpenAI' : 'Groq'} (abajo, en «Tus claves») y Kitsune podrá mezclar las dos: modos Ahorro, Eficiente y Calidad.</p>`;
     }
     const modo = normalizarModo(ajustes.modoIA);
     return `
@@ -138,7 +167,9 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
     el.classList.toggle('ok', ok);
   }
 
-  async function pintar(seccion = null) {
+  // Sin sección se queda en el tema que estaba (repintar tras un cambio); con null, la portada.
+  async function pintar(seccion) {
+    if (seccion === undefined) seccion = temaActual ? Object.keys(TEMA_DE_SECCION).find((k) => TEMA_DE_SECCION[k] === temaActual) : null;
     ajustes = await api.ajustes.obtener();
     // La versión web no tiene ventana propia, atajo global ni inicio con Windows.
     const escritorio = api.plataforma !== 'web';
@@ -170,12 +201,41 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
                 : ''
             }`;
 
+    // Lo que enseña la portada junto a cada tema.
+    const dos = estadoClaude.claves?.groq && estadoClaude.claves?.openai && ajustes.proveedor !== 'claude';
+    const voz = VOCES.find((v) => v.id === ajustes.vozNombre);
+    const resumenes = {
+      kitsune: [ESTILOS[ajustes.estilo], PALETAS[ajustes.paleta]?.nombre, ajustes.voz ? `lee en voz alta${voz ? ` · ${voz.nombre}` : ''}` : 'sin voz'].filter(Boolean).join(' · '),
+      ia: dos ? `${INFO_MODOS[normalizarModo(ajustes.modoIA)].nombre} · Groq + GPT-6 Luna` : `${ia.nombre}${estadoClaude.configurado ? '' : ' · falta la clave'}`,
+      cuentas: estadoCorreo.conectado ? `Google: ${estadoCorreo.email}` : 'Google sin conectar',
+      avisos: !estadoAvisos ? 'No disponible' : estadoAvisos.vinculado ? (estadoAvisos.pushAqui ? 'Avisos activos en este dispositivo' : 'Servidor vinculado') : 'Sin conectar',
+      dispositivos: estadoAvisos?.vinculado ? `${estadoAvisos.dispositivos?.length ?? 1} vinculados` : 'Hay que conectar antes el servidor',
+      privacidad: 'Qué puede hacer Kitsune por su cuenta',
+    };
+
     contenedor.innerHTML = `
       <div class="ajustes desplazable">
         <div class="ajustes__titulo">
           <button type="button" class="icono-boton" id="ajustes-volver" aria-label="Cerrar ajustes" title="Volver">${icono('volver')}</button>
-          <h2>Ajustes</h2>
+          <h2 id="ajustes-titulo">Ajustes</h2>
         </div>
+
+        <nav class="ajustes-portada" id="ajustes-portada" aria-label="Temas de ajustes">
+          <label class="ajustes-buscar">
+            ${icono('buscar', 16)}
+            <input class="campo" type="search" id="ajustes-buscar" placeholder="Buscar: voz, clave, Face ID…" autocomplete="off" aria-label="Buscar en ajustes">
+          </label>
+          <ul class="ajustes-temas" id="ajustes-temas">
+            ${TEMAS.map(
+              (t) => `<li><button type="button" class="ajustes-tema" data-tema="${t.id}">
+              <span class="ajustes-tema__icono">${icono(t.icono, 18)}</span>
+              <span class="ajustes-tema__texto"><span>${t.nombre}</span><small id="resumen-${t.id}">${escapar(resumenes[t.id] ?? t.detalle)}</small></span>
+              <span class="ajustes-tema__flecha" aria-hidden="true">›</span>
+            </button></li>`,
+            ).join('')}
+          </ul>
+          <ul class="ajustes-resultados" id="ajustes-resultados" hidden></ul>
+        </nav>
 
         <section class="grupo" id="seccion-kitsune" aria-label="Kitsune">
           <h3>Kitsune</h3>
@@ -262,9 +322,18 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
           </div>
           <div class="botonera"><button type="button" class="boton" id="voz-probar">${icono('altavoz', 15)} Escuchar la voz</button></div>
           <p class="mensaje-ajuste" id="mensaje-voz" role="status"></p>
-          ${
-            api.plataforma === 'web' && !api.demo
-              ? `<div id="ajuste-bloqueo" hidden>
+          ${interruptor('pulsoDiario', 'Pulso del día', 'La primera vez que abres Kitsune cada día te ofrece un resumen de correo y recordatorios.')}
+        </section>
+
+        ${estadoAvisos ? seccionAvisos(estadoAvisos) : ''}
+
+        ${api.sincro && estadoAvisos ? '<section class="grupo sincro" id="seccion-sincro" aria-label="Sincronizar con tus dispositivos"></section>' : ''}
+
+        ${
+          api.plataforma === 'web' && !api.demo
+            ? `<section class="grupo" id="seccion-bloqueo" aria-label="Bloqueo">
+          <h3>Bloqueo</h3>
+          <div id="ajuste-bloqueo" hidden>
             <div class="ajuste ajuste--fila">
               <div>
                 <div class="ajuste__etiqueta" id="et-bloqueo">Bloquear con ${nombreBiometria() === 'Face ID' ? 'Face ID' : 'huella o cara'}</div>
@@ -277,16 +346,11 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
               <div style="width:170px"><select class="campo" id="bloqueo-tras">${OPCIONES_TRAS.map(([v, n]) => `<option value="${v}" ${leerBloqueo()?.tras === v ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
             </div>
             <p class="mensaje-ajuste" id="mensaje-bloqueo" role="status"></p>
-          </div>`
-              : ''
-          }
-          ${interruptor('pulsoDiario', 'Pulso del día', 'La primera vez que abres Kitsune cada día te ofrece un resumen de correo y recordatorios.')}
-        </section>
-
-        ${estadoAvisos ? seccionAvisos(estadoAvisos) : ''}
-
-        ${api.sincro && estadoAvisos ? '<section class="grupo sincro" id="seccion-sincro" aria-label="Sincronizar con tus dispositivos"></section>' : ''}
-        ${api.servidor?.empleo?.registroIA && estadoAvisos?.vinculado ? '<section class="grupo" id="seccion-registro-ia" aria-label="Registro de la IA"></section>' : ''}
+          </div>
+          <p class="ajuste__ayuda" id="bloqueo-no-disponible">Este navegador no permite bloquear Kitsune con la cara o la huella.</p>
+        </section>`
+            : ''
+        }
 
         <section class="grupo" id="seccion-permisos" aria-label="Permisos">
           <h3>Permisos</h3>
@@ -343,16 +407,29 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
             }</p>
           </div>
           ${bloqueModos(estadoClaude)}
-          <div class="estado-cuenta ${estadoClaude.configurado ? 'ok' : ''}"><span class="punto"></span>${
-            estadoClaude.configurado ? `Clave de ${ia.nombre} guardada y cifrada ${dondeSeGuarda}` : `Sin clave de ${ia.nombre}: añádela para poder chatear`
-          }</div>
           <div class="ajuste">
-            <label class="ajuste__etiqueta" for="clave-claude">${estadoClaude.configurado ? 'Cambiar la clave' : `Clave de ${ia.nombre}`}</label>
-            <div style="display:flex;gap:6px">
-              <input class="campo" id="clave-claude" type="password" placeholder="${ia.marcador}" autocomplete="off" spellcheck="false">
-              <button type="button" class="boton boton--primario" id="guardar-clave">Guardar</button>
-            </div>
-            <p class="ajuste__ayuda">${ia.ayuda}${estadoClaude.configurado ? ' <button type="button" class="boton" id="quitar-clave" style="margin-left:6px;padding:2px 10px">Quitar clave</button>' : ''}</p>
+            <span class="ajuste__etiqueta">Tus claves</span>
+            <ul class="claves" aria-label="Claves de IA">
+              ${['groq', 'openai', 'claude']
+                .map((p) => {
+                  const hay = Boolean(estadoClaude.claves?.[p] ?? (p === ajustes.proveedor && estadoClaude.configurado));
+                  return `<li class="clave" data-proveedor="${p}">
+                <div class="clave__fila">
+                  <span class="clave__punto${hay ? ' ok' : ''}" aria-hidden="true"></span>
+                  <span class="clave__nombre">${IA[p].nombre}<small>${hay ? `guardada y cifrada ${dondeSeGuarda}` : p === 'groq' ? 'gratis · sin clave' : 'de pago por uso · sin clave'}</small></span>
+                  <button type="button" class="boton" data-editar-clave="${p}" aria-expanded="false">${hay ? 'Cambiar' : 'Añadir'}</button>
+                </div>
+                <div class="clave__editor" hidden>
+                  <div class="clave__campo">
+                    <input class="campo" id="clave-${p}" type="password" placeholder="${IA[p].marcador}" autocomplete="off" spellcheck="false" aria-label="Clave de ${IA[p].nombre}">
+                    <button type="button" class="boton boton--primario" data-guardar-clave="${p}">Guardar</button>
+                  </div>
+                  <p class="ajuste__ayuda">${IA[p].ayuda}${hay ? ` <button type="button" class="boton boton--texto" data-quitar-clave="${p}">Quitar esta clave</button>` : ''}</p>
+                </div>
+              </li>`;
+                })
+                .join('')}
+            </ul>
             <p class="mensaje-ajuste" id="mensaje-claude" role="status"></p>
           </div>
           ${
@@ -377,6 +454,8 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
             <textarea class="campo" id="ajuste-personalidad" rows="3" maxlength="2000" placeholder="Por ejemplo: tutéame, sé breve y avísame primero de lo urgente.">${escapar(ajustes.personalidad)}</textarea>
           </div>
         </section>
+
+        ${api.servidor?.empleo?.registroIA && estadoAvisos?.vinculado ? '<section class="grupo" id="seccion-registro-ia" aria-label="Registro de la IA"></section>' : ''}
 
         <section class="grupo" id="seccion-correo" aria-label="Google: correo y calendario">
           <h3>Google: correo y calendario</h3>
@@ -425,7 +504,87 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
     if (api.sincro && estadoAvisos) pintarSincro(estadoAvisos.vinculado);
     if (contenedor.querySelector('#seccion-registro-ia')) pintarRegistroIA();
     if (api.consumo) pintarGasto();
-    if (seccion) contenedor.querySelector(`#seccion-${seccion}`)?.scrollIntoView({ block: 'start' });
+    for (const sec of contenedor.querySelectorAll('.ajustes > section.grupo')) {
+      sec.dataset.tema = TEMA_DE_SECCION[sec.id.replace(/^seccion-/, '')] ?? 'kitsune';
+    }
+    conectarPortada();
+    verTema(seccion ? TEMA_DE_SECCION[seccion] ?? null : temaActual, { seccion });
+  }
+
+  // ---------- Portada y temas ----------
+
+  let temaActual = null;
+
+  function verTema(tema, { seccion = null } = {}) {
+    temaActual = TEMAS.some((t) => t.id === tema) ? tema : null;
+    const raiz = contenedor.querySelector('.ajustes');
+    if (!raiz) return;
+    raiz.dataset.tema = temaActual ?? '';
+    contenedor.querySelector('#ajustes-portada').hidden = Boolean(temaActual);
+    for (const sec of raiz.querySelectorAll(':scope > section.grupo')) sec.hidden = sec.dataset.tema !== temaActual;
+    contenedor.querySelector('#ajustes-titulo').textContent = temaActual ? TEMAS.find((t) => t.id === temaActual).nombre : 'Ajustes';
+    const volver = contenedor.querySelector('#ajustes-volver');
+    volver.setAttribute('aria-label', temaActual ? 'Volver a Ajustes' : 'Cerrar ajustes');
+    const destino = seccion ? contenedor.querySelector(`#seccion-${seccion}`) : null;
+    if (destino && destino !== raiz.querySelector(`:scope > section.grupo[data-tema="${temaActual}"]`)) destino.scrollIntoView({ block: 'start' });
+    else raiz.scrollTo?.(0, 0);
+  }
+
+  function conectarPortada() {
+    contenedor.querySelectorAll('.ajustes-tema').forEach((b) => b.addEventListener('click', () => verTema(b.dataset.tema)));
+    const buscar = contenedor.querySelector('#ajustes-buscar');
+    const temas = contenedor.querySelector('#ajustes-temas');
+    const resultados = contenedor.querySelector('#ajustes-resultados');
+    buscar.addEventListener('input', () => {
+      const q = sinTildes(buscar.value.trim());
+      temas.hidden = Boolean(q);
+      resultados.hidden = !q;
+      if (!q) return;
+      // Se busca en lo que ya está pintado: títulos, nombres de cada ajuste y permisos.
+      const vistos = new Set();
+      const encontrados = [];
+      for (const el of contenedor.querySelectorAll('.ajustes > section.grupo :is(h3, .ajuste__etiqueta, .permiso__nombre, summary)')) {
+        const texto = el.textContent.replace(/\s+/g, ' ').trim();
+        const seccion = el.closest('section.grupo');
+        if (!texto || !sinTildes(texto).includes(q) || vistos.has(texto)) continue;
+        vistos.add(texto);
+        encontrados.push({ texto, el, seccion });
+        if (encontrados.length >= 12) break;
+      }
+      resultados.innerHTML = encontrados.length
+        ? encontrados
+            .map(
+              (r, i) => `<li><button type="button" class="ajustes-resultado" data-i="${i}"><span>${escapar(r.texto)}</span><small>${escapar(
+                TEMAS.find((t) => t.id === r.seccion.dataset.tema)?.nombre ?? '',
+              )}</small></button></li>`,
+            )
+            .join('')
+        : '<li class="ajustes-resultados__vacio">No hay ningún ajuste con ese nombre.</li>';
+      resultados.querySelectorAll('[data-i]').forEach((b) =>
+        b.addEventListener('click', () => {
+          const { el, seccion } = encontrados[Number(b.dataset.i)];
+          buscar.value = '';
+          temas.hidden = false;
+          resultados.hidden = true;
+          verTema(seccion.dataset.tema);
+          const fila = el.closest('.ajuste, .permiso, details, section') ?? el;
+          fila.scrollIntoView({ block: 'center' });
+          fila.classList.remove('resaltado');
+          void fila.offsetWidth;
+          fila.classList.add('resaltado');
+        }),
+      );
+    });
+    // El gasto del mes, en el resumen de IA (llega después).
+    if (api.consumo) {
+      api.consumo
+        .resumen()
+        .then((r) => {
+          const el = contenedor.querySelector('#resumen-ia');
+          if (el && r?.total?.usd) el.textContent += ` · ${r.total.usd.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`;
+        })
+        .catch(() => {});
+    }
   }
 
   // ---------- Registro de la IA ----------
@@ -987,7 +1146,8 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
   }
 
   function conectar() {
-    contenedor.querySelector('#ajustes-volver').addEventListener('click', alCerrar);
+    // La flecha vuelve a la portada desde un tema, y cierra Ajustes desde la portada.
+    contenedor.querySelector('#ajustes-volver').addEventListener('click', () => (temaActual ? verTema(null) : alCerrar()));
 
     contenedor.querySelectorAll('[data-clave]').forEach((b) =>
       b.addEventListener('click', async () => {
@@ -1038,7 +1198,11 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
     });
     const bloque = contenedor.querySelector('#ajuste-bloqueo');
     if (bloque) {
-      bloqueoDisponible().then((ok) => (bloque.hidden = !ok));
+      bloqueoDisponible().then((ok) => {
+        bloque.hidden = !ok;
+        const aviso = contenedor.querySelector('#bloqueo-no-disponible');
+        if (aviso) aviso.hidden = ok;
+      });
       const interruptorBloqueo = bloque.querySelector('#bloqueo-interruptor');
       interruptorBloqueo.addEventListener('click', async () => {
         const activo = interruptorBloqueo.getAttribute('aria-checked') === 'true';
@@ -1107,25 +1271,42 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
       contenedor.querySelector('#atajo-teclas').innerHTML = teclasDe(ajustes.atajo);
     }
 
-    contenedor.querySelector('#guardar-clave').addEventListener('click', async () => {
-      const campo = contenedor.querySelector('#clave-claude');
-      if (!campo.value.trim()) return mostrarMensaje('mensaje-claude', 'Pega primero la clave.', false);
-      mostrarMensaje('mensaje-claude', 'Comprobando la clave…', true);
-      try {
-        await api.claude.guardarClave(campo.value.trim(), ajustes.proveedor);
-        campo.value = '';
+    // Tus claves: cada una se abre, se guarda o se quita por separado.
+    contenedor.querySelectorAll('[data-editar-clave]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const editor = b.closest('.clave').querySelector('.clave__editor');
+        editor.hidden = !editor.hidden;
+        b.setAttribute('aria-expanded', String(!editor.hidden));
+        if (!editor.hidden) editor.querySelector('input').focus();
+      }),
+    );
+    contenedor.querySelectorAll('[data-guardar-clave]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const proveedor = b.dataset.guardarClave;
+        const campo = contenedor.querySelector(`#clave-${proveedor}`);
+        if (!campo.value.trim()) return mostrarMensaje('mensaje-claude', 'Pega primero la clave.', false);
+        mostrarMensaje('mensaje-claude', `Comprobando la clave de ${IA[proveedor].nombre}…`, true);
+        try {
+          await api.claude.guardarClave(campo.value.trim(), proveedor);
+          campo.value = '';
+          await pintar('claude');
+          mostrarMensaje('mensaje-claude', `Clave de ${IA[proveedor].nombre} válida y guardada.`, true);
+          alCambiar(ajustes, { claveClaude: true });
+        } catch (e) {
+          mostrarMensaje('mensaje-claude', e.message, false);
+        }
+      }),
+    );
+    contenedor.querySelectorAll('[data-quitar-clave]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        await api.claude.guardarClave('', b.dataset.quitarClave);
         await pintar('claude');
-        mostrarMensaje('mensaje-claude', 'Clave válida y guardada.', true);
-        alCambiar(ajustes, { claveClaude: true });
-      } catch (e) {
-        mostrarMensaje('mensaje-claude', e.message, false);
-      }
-    });
-    contenedor.querySelector('#quitar-clave')?.addEventListener('click', async () => {
-      await api.claude.guardarClave('', ajustes.proveedor);
-      await pintar('claude');
-      alCambiar(ajustes, { claveClaude: false });
-    });
+        alCambiar(ajustes, { claveClaude: false });
+      }),
+    );
+    contenedor.querySelectorAll('.clave__campo input').forEach((campo) =>
+      campo.addEventListener('keydown', (e) => e.key === 'Enter' && campo.nextElementSibling.click()),
+    );
 
     contenedor.querySelector('#google-id')?.addEventListener('change', (e) => guardar({ googleClientId: e.target.value.trim() }));
     contenedor.querySelector('#conectar-correo')?.addEventListener('click', async () => {
