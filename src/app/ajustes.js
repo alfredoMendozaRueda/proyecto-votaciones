@@ -13,6 +13,12 @@ const MODELOS = [
   ['claude-haiku-5-5', 'Claude Haiku 5.5 · el más económico'],
 ];
 
+const MODELOS_OPENAI = [
+  ['gpt-6-luna', 'GPT-6 Luna · el más barato (recomendado)'],
+  ['gpt-6.1-terra', 'GPT-6.1 Terra · más listo, 10 veces más caro'],
+  ['gpt-6.1-sol', 'GPT-6.1 Sol · el más capaz, 20 veces más caro'],
+];
+
 const MODELOS_GROQ = [
   ['openai/gpt-oss-120b', 'GPT-OSS 120B · el más capaz (recomendado)'],
   ['openai/gpt-oss-20b', 'GPT-OSS 20B · el más rápido'],
@@ -25,6 +31,11 @@ const IA = {
     nombre: 'Groq',
     marcador: 'gsk_…',
     ayuda: 'Créala gratis, sin tarjeta, en <strong>console.groq.com</strong> → API Keys → Create API Key.',
+  },
+  openai: {
+    nombre: 'OpenAI',
+    marcador: 'sk-…',
+    ayuda: 'De pago por uso: créala en <strong>platform.openai.com/api-keys</strong> y añade saldo en Billing.',
   },
   claude: {
     nombre: 'Claude',
@@ -287,9 +298,9 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
             ${interruptor(
               'busquedaWeb',
               'Buscar en internet',
-              ajustes.proveedor === 'claude'
-                ? 'Para noticias, precios u horarios. Cada búsqueda suma un pequeño coste en tu cuenta de Claude.'
-                : 'Para noticias, precios u horarios. Gratis: cuenta para el límite diario de Groq.',
+              ajustes.proveedor === 'groq'
+                ? 'Para noticias, precios u horarios. Gratis: cuenta para el límite diario de Groq.'
+                : `Para noticias, precios u horarios. Cada búsqueda suma un pequeño coste en tu cuenta de ${ajustes.proveedor === 'openai' ? 'OpenAI' : 'Claude'}.`,
             )}
           </div>
           <p class="ajuste__ayuda">Enviar un correo siempre te lo enseña antes, entero. Lo que Kitsune lee en correos o páginas nunca le da órdenes.</p>
@@ -300,11 +311,13 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
           <h3>Inteligencia artificial</h3>
           <div class="ajuste">
             <span class="ajuste__etiqueta">Qué IA usa Kitsune</span>
-            ${segmentado('proveedor', [['groq', 'Groq · gratis'], ['claude', 'Claude · de pago']])}
+            ${segmentado('proveedor', [['groq', 'Groq · gratis'], ['openai', 'OpenAI'], ['claude', 'Claude']])}
             <p class="ajuste__ayuda">${
               ajustes.proveedor === 'groq'
                 ? 'Gratis, con un límite de mensajes por minuto y por día que da de sobra para el uso personal.'
-                : 'Más lista y con búsqueda en internet; pagas lo que usas con tu cuenta de Anthropic.'
+                : ajustes.proveedor === 'openai'
+                ? 'GPT-6 Luna: rápido, sin límites por minuto y muy barato (céntimos al mes con un uso normal). Pagas lo que usas con tu saldo de OpenAI.'
+                : 'La más lista y con búsqueda en internet; pagas lo que usas con tu cuenta de Anthropic.'
             }</p>
           </div>
           <div class="estado-cuenta ${estadoClaude.configurado ? 'ok' : ''}"><span class="punto"></span>${
@@ -324,6 +337,11 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
               ? `<div class="ajuste">
             <label class="ajuste__etiqueta" for="ajuste-modelo">Modelo</label>
             ${selector('modelo', 'ajuste-modelo', MODELOS)}
+          </div>`
+              : ajustes.proveedor === 'openai'
+              ? `<div class="ajuste">
+            <label class="ajuste__etiqueta" for="ajuste-modelo-openai">Modelo</label>
+            ${selector('modeloOpenAI', 'ajuste-modelo-openai', MODELOS_OPENAI)}
           </div>`
               : `<div class="ajuste">
             <label class="ajuste__etiqueta" for="ajuste-modelo-groq">Modelo</label>
@@ -684,7 +702,8 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
               <select class="campo" id="srv-hasta" aria-label="Hasta">${opciones(horas.map((h) => [h, `Hasta las ${h}`]), a.silencio?.hasta)}</select>
             </div>
             <span class="permisos__grupo">IA en el servidor</span>
-            ${interruptorAviso('groq', 'Usar mi clave de Groq en el servidor', e.groq, 'Para que las automatizaciones puedan crear eventos a partir de los correos. Se guarda cifrada en tu servidor.')}
+            ${interruptorAviso('openai', 'Usar mi clave de OpenAI en el servidor', e.openai, 'GPT-6 Luna para crear eventos desde los correos y puntuar las alertas de empleo. Si están las dos, se usa esta. Se guarda cifrada en tu servidor.')}
+            ${interruptorAviso('groq', 'Usar mi clave de Groq en el servidor', e.groq, 'Lo mismo, gratis, con los modelos de Groq. Se guarda cifrada en tu servidor.')}
             <span class="permisos__grupo">Dispositivos</span>
             <ul class="dispositivos">
               ${(e.dispositivos ?? [])
@@ -781,6 +800,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
         b.disabled = true;
         try {
           if (clave === 'groq') await api.servidor.groq(nuevo);
+          else if (clave === 'openai') await api.servidor.openai(nuevo);
           else if (clave === 'silencio') {
             avisos.silencio = { ...avisos.silencio, activo: nuevo };
             $('#srv-horas').hidden = !nuevo;

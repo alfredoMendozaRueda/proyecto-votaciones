@@ -207,6 +207,12 @@ export async function turnoGroq({ apiKey, modelo, sistema, historial, inicioTurn
     { alEsperar, signal },
   );
 
+  return leerFlujoChat(respuesta, alTexto, (detalle) => new ErrorGroq(mensajeDeEstado(0, detalle)));
+}
+
+// Lee una respuesta en directo de Chat Completions (Groq y OpenAI) y la
+// devuelve en el formato de Claude: { content: [...bloques], stop_reason }.
+export async function leerFlujoChat(respuesta, alTexto, crearError = (detalle) => new Error(detalle)) {
   let texto = '';
   let motivo = null;
   const llamadas = [];
@@ -224,7 +230,7 @@ export async function turnoGroq({ apiKey, modelo, sistema, historial, inicioTurn
       const datos = linea.slice(5).trim();
       if (!datos || datos === '[DONE]') continue;
       const trozo = JSON.parse(datos);
-      if (trozo.error) throw new ErrorGroq(mensajeDeEstado(0, trozo.error.message));
+      if (trozo.error) throw crearError(trozo.error.message ?? '');
       const eleccion = trozo.choices?.[0];
       if (!eleccion) continue;
       const delta = eleccion.delta ?? {};

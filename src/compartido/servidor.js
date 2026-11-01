@@ -87,6 +87,10 @@ export class ClienteServidor {
     return this.pedir('/groq', { metodo: 'PUT', cuerpo: { clave } });
   }
 
+  openai(clave) {
+    return this.pedir('/openai', { metodo: 'PUT', cuerpo: { clave } });
+  }
+
   automatizaciones() {
     return this.pedir('/automatizaciones');
   }

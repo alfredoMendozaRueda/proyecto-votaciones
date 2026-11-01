@@ -205,10 +205,10 @@ async function ejecutarEnCorreo(n, r, m, gmail, zona) {
 
 // Lee el correo entero, saca el evento con la IA y lo crea en el calendario.
 async function eventoDesdeCorreo(n, m, gmail, zona) {
-  const clave = await n.claveGroq();
-  if (!clave) throw new Error('Para crear eventos desde el correo, activa «Usar mi clave de Groq en el servidor» en Ajustes.');
+  const ia = await n.iaServidor();
+  if (!ia) throw new Error('Para crear eventos desde el correo, activa «Usar mi clave de Groq» o «de OpenAI» en el servidor (Ajustes → Avisos).');
   const completo = await gmail.leer(m.id);
-  const extraido = await extraerEvento({ clave, correo: completo, zona, ahora: n.ahora });
+  const extraido = await extraerEvento({ ...ia, correo: completo, zona, ahora: n.ahora });
   if (!extraido) return null;
   const { calendario } = await n.google();
   const todoElDia = extraido.inicio.length === 10;

@@ -120,14 +120,14 @@ sincro = new Sincronizador({
   alCambiar: (colecciones) => ventana?.webContents.send('sincro:cambios', colecciones),
 });
 // Cada IA tiene su clave, cifrada con el sistema.
-const SECRETO_CLAVE = { claude: 'claveClaude', groq: 'claveGroq' };
-const proveedorValido = (p) => (p === 'groq' || p === 'claude' ? p : obtenerAjustes().proveedor);
+const SECRETO_CLAVE = { claude: 'claveClaude', groq: 'claveGroq', openai: 'claveOpenAI' };
+const proveedorValido = (p) => (p in SECRETO_CLAVE ? p : obtenerAjustes().proveedor);
 const estadoIA = () => {
   const proveedor = obtenerAjustes().proveedor;
   return {
     proveedor,
     configurado: Boolean(leerSecreto(SECRETO_CLAVE[proveedor])),
-    claves: { claude: Boolean(leerSecreto('claveClaude')), groq: Boolean(leerSecreto('claveGroq')) },
+    claves: { claude: Boolean(leerSecreto('claveClaude')), groq: Boolean(leerSecreto('claveGroq')), openai: Boolean(leerSecreto('claveOpenAI')) },
   };
 };
 
@@ -507,6 +507,7 @@ function registrarCanales() {
   manejar('servidor:codigo', () => servidor.crearCodigo());
   manejar('servidor:avisos', (avisos) => servidor.avisos(avisos));
   manejar('servidor:groq', (activar) => servidor.groq(activar === true));
+  manejar('servidor:openai', (activar) => servidor.openai(activar === true));
   manejar('servidor:automatizaciones', () => servidor.automatizaciones.listar());
   manejar('servidor:crearAutomatizacion', (datos) => servidor.automatizaciones.crear(datos));
   manejar('servidor:actualizarAutomatizacion', (id, datos) => servidor.automatizaciones.actualizar(String(id), datos));

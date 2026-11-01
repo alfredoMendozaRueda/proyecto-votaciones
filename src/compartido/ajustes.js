@@ -1,9 +1,10 @@
 // Ajustes por defecto y validación, compartidos por Electron y la web.
 import { MODELOS_GROQ } from './groq.js';
+import { MODELOS_OPENAI } from './openai.js';
 import { permisosPorDefecto, opcionesPermisos } from './permisos.js';
 import { IDS_VOCES } from './voz.js';
 
-export const PROVEEDORES = ['groq', 'claude'];
+export const PROVEEDORES = ['groq', 'openai', 'claude'];
 export const MODELOS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
 
 export const AJUSTES_POR_DEFECTO = {
@@ -32,6 +33,7 @@ export const AJUSTES_POR_DEFECTO = {
   // La IA gratuita por defecto; Claude, para quien tenga clave de pago.
   proveedor: 'groq',
   modeloGroq: MODELOS_GROQ[0],
+  modeloOpenAI: MODELOS_OPENAI[0],
   modelo: 'claude-opus-5-5',
   personalidad: '',
   correoCadaMin: 5,
@@ -56,6 +58,7 @@ const OPCIONES = {
   modelo: MODELOS,
   proveedor: PROVEEDORES,
   modeloGroq: MODELOS_GROQ,
+  modeloOpenAI: MODELOS_OPENAI,
   vozTipo: ['natural', 'dispositivo', 'voicestudio'],
   vozNombre: IDS_VOCES,
   ...opcionesPermisos(),

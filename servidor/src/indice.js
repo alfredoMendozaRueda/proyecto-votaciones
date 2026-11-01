@@ -201,6 +201,7 @@ async function estado(n, d) {
     google: Boolean(a.google && !a.google.caducado),
     googleCaducado: Boolean(a.google?.caducado),
     groq: Boolean(a.groq),
+    openai: Boolean(a.openai),
     // Voz natural: hace falta la IA de Cloudflare (binding AI).
     voz: Boolean(n.env.AI),
     zona: await n.zona(),
@@ -376,6 +377,13 @@ async function atender(peticion, env) {
     else throw new ErrorHttp(400, 'Esa no parece una clave de Groq (gsk_…).');
     return json({ ok: true });
   }
+  if (m === 'PUT' && ruta === '/openai') {
+    const { clave } = await cuerpo(peticion);
+    if (clave === null) await n.quitar('openai');
+    else if (typeof clave === 'string' && /^sk-[A-Za-z0-9_-]{20,300}$/.test(clave.trim())) await n.poner('openai', await cifrarTexto(clave.trim(), env.CLAVE_CIFRADO));
+    else throw new ErrorHttp(400, 'Esa no parece una clave de OpenAI (sk-…).');
+    return json({ ok: true });
+  }
   if (m === 'GET' && ruta === '/automatizaciones') return json(await n.automatizaciones());
   if (m === 'POST' && ruta === '/automatizaciones') return guardarAutomatizacion(n, peticion);
   if (ruta.startsWith('/automatizaciones/')) {
@@ -414,7 +422,7 @@ async function atender(peticion, env) {
   }
   if (m === 'GET' && ruta === '/empleo/alerta') {
     const a = await n.ajustes();
-    return json({ alerta: alertaPublica(a.empleoAlerta), ultimas: a.empleoUltimas ?? null, groq: Boolean(await n.claveGroq().catch(() => null)) });
+    return json({ alerta: alertaPublica(a.empleoAlerta), ultimas: a.empleoUltimas ?? null, groq: Boolean(await n.iaServidor()) });
   }
   if (m === 'PUT' && ruta === '/empleo/alerta') {
     try {

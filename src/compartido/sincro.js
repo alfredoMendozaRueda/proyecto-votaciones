@@ -253,8 +253,8 @@ export function coleccionAjustes({ leer, guardar }) {
   };
 }
 
-// Claves de la IA (Claude y Groq).
-export const SECRETOS_CLAVES = { claude: 'claveClaude', groq: 'claveGroq' };
+// Claves de la IA (Claude, Groq y OpenAI).
+export const SECRETOS_CLAVES = { claude: 'claveClaude', groq: 'claveGroq', openai: 'claveOpenAI' };
 export function coleccionClaves({ leer, guardar, borrar, despues }) {
   return {
     async leer() {

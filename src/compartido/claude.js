@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { historialValido, mensajesVisibles } from './historial.js';
 import { nuevoIdConversacion } from './conversaciones.js';
 import { turnoGroq, textoGroq, tareaGroq, probarClaveGroq, buscarEnInternetGroq } from './groq.js';
+import { turnoOpenAI, textoOpenAI, tareaOpenAI, probarClaveOpenAI, buscarEnInternetOpenAI } from './openai.js';
 import { verTiempo } from './tiempo.js';
 import { PERMISOS, nivel, nivelHerramienta } from './permisos.js';
 import { normalizarAutomatizacion, describirCuando, describirHacer } from './automatizaciones.js';
@@ -297,7 +298,9 @@ const HERRAMIENTA_TIEMPO = {
   },
 };
 
-// Con Groq, la búsqueda la hace Kitsune en una petición aparte (ver groq.js).
+const NOMBRE_IA = { groq: 'Groq', openai: 'OpenAI', claude: 'Claude' };
+
+// Con Groq y OpenAI, la búsqueda la hace Kitsune en una petición aparte (ver groq.js y openai.js).
 const HERRAMIENTA_BUSQUEDA_GROQ = {
   name: 'buscar_en_internet',
   description:
@@ -668,15 +671,16 @@ export class ConversacionClaude {
     this.numConfirmacion = 0;
   }
 
-  // La IA elegida en Ajustes: Claude (de pago) o Groq (gratis).
+  // La IA elegida en Ajustes: Groq (gratis), OpenAI o Claude (de pago).
   #proveedor() {
-    return this.obtenerAjustes().proveedor === 'groq' ? 'groq' : 'claude';
+    const p = this.obtenerAjustes().proveedor;
+    return p === 'groq' || p === 'openai' ? p : 'claude';
   }
 
   async #cliente(proveedor) {
     const apiKey = await this.obtenerClave(proveedor);
-    if (!apiKey) throw new Error(`Añade tu clave de ${proveedor === 'groq' ? 'Groq' : 'Claude'} en Ajustes para poder hablar conmigo.`);
-    return proveedor === 'groq' ? { apiKey } : new Anthropic({ apiKey, ...this.opcionesCliente });
+    if (!apiKey) throw new Error(`Añade tu clave de ${NOMBRE_IA[proveedor]} en Ajustes para poder hablar conmigo.`);
+    return proveedor === 'claude' ? new Anthropic({ apiKey, ...this.opcionesCliente }) : { apiKey };
   }
 
   #parametros({ sistema, mensajes, herramientas = [], maxTokens = 64000 }) {
@@ -721,7 +725,7 @@ export class ConversacionClaude {
       ...(memoria ? HERRAMIENTAS_MEMORIA : []),
       ...(automatizaciones ? HERRAMIENTAS_AUTOMATIZACION : []),
       HERRAMIENTA_TIEMPO,
-      ...(busqueda ? [proveedor === 'groq' ? HERRAMIENTA_BUSQUEDA_GROQ : herramientaBusqueda(ajustes.modelo)] : []),
+      ...(busqueda ? [proveedor === 'claude' ? herramientaBusqueda(ajustes.modelo) : HERRAMIENTA_BUSQUEDA_GROQ] : []),
       // Lo que el usuario no permite ni se ofrece.
     ].filter((h) => nivelHerramienta(ajustes, h.name) !== 'no');
     if (proveedor !== 'groq') {
@@ -831,7 +835,19 @@ export class ConversacionClaude {
       for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta++) {
         if (!pausado) this.emitir({ tipo: 'pensando' });
         let mensaje;
-        if (proveedor === 'groq') {
+        if (proveedor === 'openai') {
+          mensaje = await turnoOpenAI({
+            apiKey: cliente.apiKey,
+            modelo: this.obtenerAjustes().modeloOpenAI,
+            sistema,
+            historial: this.historial,
+            inicioTurno: inicio,
+            herramientas,
+            signal: this.controlador.signal,
+            alTexto: (delta) => this.emitir({ tipo: 'texto', delta }),
+            fetch: this.opcionesCliente.fetch,
+          });
+        } else if (proveedor === 'groq') {
           mensaje = await turnoGroq({
             apiKey: cliente.apiKey,
             modelo: this.obtenerAjustes().modeloGroq,
@@ -1118,7 +1134,8 @@ export class ConversacionClaude {
       case 'ver_tiempo':
         return verTiempo(entrada, this.opcionesCliente.fetch ?? fetch);
       case 'buscar_en_internet': {
-        const { resultado, fuentes } = await buscarEnInternetGroq({
+        const buscar = this.proveedorTurno === 'openai' ? buscarEnInternetOpenAI : buscarEnInternetGroq;
+        const { resultado, fuentes } = await buscar({
           apiKey: this.clienteTurno.apiKey,
           consulta: entrada.consulta,
           signal: this.controlador?.signal,
@@ -1148,6 +1165,9 @@ export class ConversacionClaude {
     if (proveedor === 'groq') {
       return textoGroq({ apiKey: cliente.apiKey, modelo: this.obtenerAjustes().modeloGroq, sistema, usuario, fetch: this.opcionesCliente.fetch });
     }
+    if (proveedor === 'openai') {
+      return textoOpenAI({ apiKey: cliente.apiKey, modelo: this.obtenerAjustes().modeloOpenAI, sistema, usuario, fetch: this.opcionesCliente.fetch });
+    }
     const flujo = cliente.beta.messages.stream(
       this.#parametros({ maxTokens: 16000, sistema, mensajes: [{ role: 'user', content: usuario }] }),
     );
@@ -1167,6 +1187,9 @@ export class ConversacionClaude {
     const cliente = await this.#cliente(proveedor);
     if (proveedor === 'groq') {
       return tareaGroq({ apiKey: cliente.apiKey, modelo: this.obtenerAjustes().modeloGroq, sistema, usuario, web, max, fetch: this.opcionesCliente.fetch });
+    }
+    if (proveedor === 'openai') {
+      return tareaOpenAI({ apiKey: cliente.apiKey, modelo: this.obtenerAjustes().modeloOpenAI, sistema, usuario, web, max, fetch: this.opcionesCliente.fetch });
     }
     const { modelo } = this.obtenerAjustes();
     const mensajes = [{ role: 'user', content: usuario }];
@@ -1195,6 +1218,7 @@ export class ConversacionClaude {
   // Comprueba la clave con una llamada que no consume tokens.
   static async probarClave(apiKey, modelo, opcionesCliente = {}, proveedor = 'claude') {
     if (proveedor === 'groq') return probarClaveGroq(apiKey, opcionesCliente.fetch);
+    if (proveedor === 'openai') return probarClaveOpenAI(apiKey, opcionesCliente.fetch);
     await new Anthropic({ apiKey, ...opcionesCliente }).models.retrieve(modelo);
   }
 }

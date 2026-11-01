@@ -383,7 +383,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
               ).join('')}</select></label>
             </div>
             <p class="ajuste__ayuda">${escapar(busca)}Usa lo que tengas en «qué buscas»: al buscar con otros puestos, la alerta se actualiza.</p>
-            ${estadoAlerta.groq ? '' : '<p class="ajuste__ayuda empleo-alerta__ojo">Sin Groq en el servidor te llegan todas las ofertas nuevas, sin puntuar. Para que solo te avise de las que encajan, activa Groq en Ajustes → Avisos.</p>'}
+            ${estadoAlerta.groq ? '' : '<p class="ajuste__ayuda empleo-alerta__ojo">Sin IA en el servidor te llegan todas las ofertas nuevas, sin puntuar. Para que solo te avise de las que encajan, activa tu clave de OpenAI o de Groq en el servidor (Ajustes → Avisos).</p>'}
             <div class="empleo-alerta__acciones"><button type="button" class="boton" id="alerta-probar" data-bloquear>${icono('actualizar', 15)} Probar ahora</button></div>`
           : ''
       }

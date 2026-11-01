@@ -624,3 +624,39 @@ test('recordatorios: un dispositivo no borra en el servidor los que creó otro',
   await subir(tokenPc, [], ['rpc0001']);
   assert.deepEqual(await ids(), ['rmovil1']);
 });
+
+test('servidor con OpenAI: guarda la clave cifrada y puntúa las alertas de empleo con GPT-6 Luna', async () => {
+  const env = entorno();
+  const { token } = await vincular(env);
+  internet();
+  assert.equal((await pedir(env, '/openai', { metodo: 'PUT', token, cuerpo: { clave: 'gsk_no_es_de_openai_12345678901234' } })).status, 400);
+  assert.equal((await pedir(env, '/openai', { metodo: 'PUT', token, cuerpo: { clave: 'sk-proj-abcdefghijklmnopqrstuvwxyz0123' } })).status, 200);
+  const fila = await env.DB.prepare("SELECT valor FROM ajustes WHERE clave = 'openai'").first();
+  assert.doesNotMatch(fila.valor, /abcdefghijklmnop/);
+  assert.equal((await (await pedir(env, '/estado', { token })).json()).openai, true);
+
+  await pedir(env, '/empleo/alerta', { metodo: 'PUT', token, cuerpo: { activa: true, puestos: 'frontend', ubicacion: 'Madrid', minEncaje: 60, perfil: { nombre: 'Lucía', habilidades: ['React'] } } });
+  const base = globalThis.fetch;
+  const ia = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.startsWith('https://www.linkedin.com/')) return new Response('');
+    if (u.startsWith('https://freehire.me/')) return Response.json({ data: [{ public_slug: 'faro', title: 'React Developer', company: 'Faro', location: 'Madrid', url: 'https://freehire.me/jobs/faro', description: 'React' }] });
+    if (u.startsWith('https://api.openai.com/')) {
+      const cuerpo = JSON.parse(init.body);
+      ia.push({ url: u, cuerpo, auth: init.headers.Authorization });
+      const id = cuerpo.input.match(/<oferta id="([^"]+)">/)[1];
+      const texto = JSON.stringify({ evaluaciones: [{ id, puerta: 'pasa', tecnica: 90, experiencia: 80, cultura: 70, carrera: 80 }] });
+      return Response.json({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: texto, annotations: [] }] }] });
+    }
+    return base(url, init);
+  };
+  const { ultimas } = await (await pedir(env, '/empleo/alerta/probar', { metodo: 'POST', token })).json();
+  assert.equal(ia.length, 1);
+  assert.equal(ia[0].url, 'https://api.openai.com/v1/responses');
+  assert.equal(ia[0].auth, 'Bearer sk-proj-abcdefghijklmnopqrstuvwxyz0123');
+  assert.equal(ia[0].cuerpo.model, 'gpt-6-luna');
+  assert.deepEqual(ia[0].cuerpo.text, { format: { type: 'json_object' } });
+  assert.equal(ultimas.evaluadas, true);
+  assert.ok(ultimas.ofertas[0].encaje >= 80);
+});

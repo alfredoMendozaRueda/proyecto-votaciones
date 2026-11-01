@@ -5,6 +5,7 @@
 import { buscarEnPortales } from '../../src/compartido/portales.js';
 import { evaluarEncaje, normalizarOferta, normalizarPerfil, normalizarPreferencias } from '../../src/compartido/empleo.js';
 import { tareaGroq } from '../../src/compartido/groq.js';
+import { tareaOpenAI } from '../../src/compartido/openai.js';
 import { aviso } from '../../src/compartido/notificaciones.js';
 import { cifrarTexto, descifrarTexto } from './cifrado.js';
 import { aMinutos } from './tiempo.js';
@@ -61,11 +62,15 @@ export async function alertaEmpleo(n, { avisar = true, hacerFetch = fetch } = {}
   await n.marcar(ofertas.map((o) => `oferta:${o.id}`));
 
   let evaluadas = false;
-  const clave = await n.claveGroq();
-  if (clave && alerta.perfil && ofertas.length) {
+  // Con OpenAI (GPT-6 Luna) si su clave está en el servidor; si no, con Groq.
+  const motor = await n.iaServidor();
+  if (motor && alerta.perfil && ofertas.length) {
     try {
       const perfil = normalizarPerfil(JSON.parse(await descifrarTexto(alerta.perfil, n.env.CLAVE_CIFRADO)));
-      const ia = (p) => tareaGroq({ apiKey: clave, modelo: 'openai/gpt-oss-20b', fetch: hacerFetch, ...p });
+      const ia =
+        motor.proveedor === 'openai'
+          ? (p) => tareaOpenAI({ apiKey: motor.clave, modelo: 'gpt-6-luna', fetch: hacerFetch, ...p })
+          : (p) => tareaGroq({ apiKey: motor.clave, modelo: 'openai/gpt-oss-20b', fetch: hacerFetch, ...p });
       ofertas = await evaluarEncaje(ia, perfil, ofertas, { preferencias: alerta });
       evaluadas = true;
     } catch (error) {
@@ -85,6 +90,6 @@ export async function alertaEmpleo(n, { avisar = true, hacerFetch = fetch } = {}
       etiqueta: 'empleo',
     });
   }
-  await n.registrar('automatizacion', `Alertas de empleo: ${ofertas.length} nuevas, ${buenas.length} ${evaluadas ? `con encaje de ${alerta.minEncaje} o más` : 'sin puntuar (sin Groq en el servidor)'}.`);
+  await n.registrar('automatizacion', `Alertas de empleo: ${ofertas.length} nuevas, ${buenas.length} ${evaluadas ? `con encaje de ${alerta.minEncaje} o más` : 'sin puntuar (sin IA en el servidor)'}.`);
   return ultimas;
 }

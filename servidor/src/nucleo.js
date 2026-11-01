@@ -165,6 +165,19 @@ export class Nucleo {
     return cifrada ? descifrarTexto(cifrada, this.env.CLAVE_CIFRADO) : null;
   }
 
+  async claveOpenAI() {
+    const cifrada = (await this.ajustes()).openai;
+    return cifrada ? descifrarTexto(cifrada, this.env.CLAVE_CIFRADO) : null;
+  }
+
+  // La IA que usa el servidor: OpenAI si está su clave; si no, Groq; si no, ninguna.
+  async iaServidor() {
+    const openai = await this.claveOpenAI().catch(() => null);
+    if (openai) return { proveedor: 'openai', clave: openai };
+    const groq = await this.claveGroq().catch(() => null);
+    return groq ? { proveedor: 'groq', clave: groq } : null;
+  }
+
   async automatizaciones() {
     const { results } = await this.db.prepare('SELECT datos FROM automatizaciones ORDER BY creada').all();
     return results.map((r) => JSON.parse(r.datos));

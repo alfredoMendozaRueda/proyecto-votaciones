@@ -109,6 +109,7 @@ contextBridge.exposeInMainWorld('asistente', {
     crearCodigo: () => invocar('servidor:codigo'),
     avisos: (avisos) => invocar('servidor:avisos', avisos),
     groq: (activar) => invocar('servidor:groq', activar),
+    openai: (activar) => invocar('servidor:openai', activar),
     automatizaciones: {
       listar: () => invocar('servidor:automatizaciones'),
       crear: (datos) => invocar('servidor:crearAutomatizacion', datos),

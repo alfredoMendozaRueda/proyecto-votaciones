@@ -78,6 +78,12 @@ export const servidor = {
     if (!clave) throw new Error('Añade primero tu clave de Groq en Ajustes → Inteligencia artificial.');
     return usar((c) => c.groq(clave));
   },
+  openai(activar) {
+    if (!activar) return usar((c) => c.openai(null));
+    const clave = leerSecreto('claveOpenAI');
+    if (!clave) throw new Error('Añade primero tu clave de OpenAI en Ajustes → Inteligencia artificial.');
+    return usar((c) => c.openai(clave));
+  },
   automatizaciones: {
     listar: () => usar((c) => c.automatizaciones()),
     crear: (datos) => usar((c) => c.crearAutomatizacion(datos)),

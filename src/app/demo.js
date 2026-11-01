@@ -347,6 +347,7 @@ export function crearDemo() {
     pulsoDiario: true,
     proveedor: 'groq',
     modeloGroq: 'openai/gpt-oss-120b',
+    modeloOpenAI: 'gpt-6-luna',
     usarMemoria: true,
     busquedaWeb: true,
     avisarCitas: true,
@@ -631,6 +632,7 @@ export function crearDemo() {
         email: 'tu.cuenta@gmail.com',
         google: true,
         groq: true,
+        openai: false,
         avisos,
         pushAqui,
         dispositivos: [
@@ -686,6 +688,7 @@ export function crearDemo() {
           return avisos;
         },
         groq: async () => ({ ok: true }),
+        openai: async () => ({ ok: true }),
         automatizaciones: {
           listar: async () => autos,
           async crear(datos) {

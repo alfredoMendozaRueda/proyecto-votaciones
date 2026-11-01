@@ -31,7 +31,7 @@ const CLAVE_SINCRO = 'kitsune.sincro';
 const PERMISOS = `https://www.googleapis.com/auth/gmail.modify ${PERMISO_CALENDARIO}`;
 const OPCIONES_CLAUDE = { dangerouslyAllowBrowser: true };
 // Cada IA tiene su clave, cifrada en el navegador.
-const SECRETO_CLAVE = { claude: 'claveClaude', groq: 'claveGroq' };
+const SECRETO_CLAVE = { claude: 'claveClaude', groq: 'claveGroq', openai: 'claveOpenAI' };
 
 function leerLocal(clave) {
   try {
@@ -307,10 +307,10 @@ export function crearBackendWeb() {
 
   // ---------- Claude / Groq ----------
 
-  const proveedorValido = (p) => (p === 'groq' || p === 'claude' ? p : ajustes.proveedor);
+  const proveedorValido = (p) => (p in SECRETO_CLAVE ? p : ajustes.proveedor);
   async function estadoIA() {
-    const [claude, groq] = await Promise.all([leerSecreto('claveClaude'), leerSecreto('claveGroq')]);
-    const claves = { claude: Boolean(claude), groq: Boolean(groq) };
+    const [claude, groq, openai] = await Promise.all([leerSecreto('claveClaude'), leerSecreto('claveGroq'), leerSecreto('claveOpenAI')]);
+    const claves = { claude: Boolean(claude), groq: Boolean(groq), openai: Boolean(openai) };
     return { proveedor: ajustes.proveedor, configurado: claves[ajustes.proveedor], claves };
   }
 
