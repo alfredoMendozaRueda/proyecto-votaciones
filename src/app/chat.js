@@ -1,6 +1,7 @@
 import { icono } from './iconos.js';
 import { markdownAHtml } from './markdown.js';
 import { cuandoLegible } from './fechas.js';
+import { normalizarGastos, borrarFijo, borrarMovimiento } from '../compartido/gastos.js';
 
 const PEDIR_PULSO = 'Prepárame el pulso de hoy';
 const CLAVE_PULSO = 'kitsune.pulso';
@@ -9,6 +10,8 @@ const ETIQUETAS_HERRAMIENTA = {
   buscar_correos: 'Revisando tu correo…',
   leer_correo: 'Leyendo el correo…',
   crear_recordatorio: 'Apuntando el recordatorio…',
+  apuntar_gasto: 'Apuntando el gasto…',
+  ver_gastos: 'Mirando tus gastos…',
   ver_recordatorios: 'Mirando tus recordatorios…',
   borrar_recordatorio: 'Borrando el recordatorio…',
   web_search: 'Buscando en internet…',
@@ -453,6 +456,25 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
       case 'recordatorio':
         notaRecordatorio(e.recordatorio);
         break;
+      case 'gasto': {
+        const g = e.gasto;
+        nota({
+          simbolo: 'cartera',
+          etiqueta: g.tipo === 'fijo' ? `Gasto fijo · ${g.cuando.toLowerCase()}` : `Gasto · ${g.categoria}`,
+          texto: `${g.concepto} · ${g.importe}`,
+          deshacer: api.gastos
+            ? {
+                etiqueta: 'Deshacer',
+                hecho: 'Quitado',
+                accion: async () => {
+                  const datos = normalizarGastos((await api.gastos.leer()) ?? {});
+                  await api.gastos.guardar(g.tipo === 'fijo' ? borrarFijo(datos, g.id) : borrarMovimiento(datos, g.id));
+                },
+              }
+            : null,
+        });
+        break;
+      }
       case 'memoria':
         nota({
           simbolo: 'memoria',

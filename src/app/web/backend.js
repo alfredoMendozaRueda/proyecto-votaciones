@@ -12,11 +12,13 @@ import { Consumo } from '../../compartido/consumo.js';
 import { aviso } from '../../compartido/notificaciones.js';
 import { transcribirGroq } from '../../compartido/dictado.js';
 import { normalizarDatosEmpleo } from '../../compartido/empleo.js';
+import { crearAlmacenGastos, normalizarGastos } from '../../compartido/gastos.js';
 import {
   Sincronizador,
   coleccionLista,
   coleccionConversaciones,
   coleccionEmpleo,
+  coleccionGastos,
   coleccionAjustes,
   coleccionClaves,
   coleccionConsumo,
@@ -82,6 +84,18 @@ export function crearBackendWeb() {
   // Sincronización con tus otros dispositivos: cada cambio guardado la avisa.
   let sincro = null;
   const tocado = () => sincro?.marcar();
+  // Gastos: datos personales, cifrados como las claves.
+  const gastos = crearAlmacenGastos({
+    leer: async () => {
+      try {
+        return JSON.parse((await leerSecreto('gastos')) ?? 'null');
+      } catch {
+        return null;
+      }
+    },
+    guardar: (datos) => guardarSecreto('gastos', JSON.stringify(datos)),
+    alCambiar: () => tocado(),
+  });
   // Lo que se gasta en OpenAI desde este dispositivo (y lo que llega de los demás).
   const consumo = new Consumo({
     leer: async () => leerLocal(CLAVE_CONSUMO),
@@ -377,6 +391,7 @@ export function crearBackendWeb() {
         alRegistroIA: (entrada) => registroIA(entrada),
         recordatorios,
         memoria,
+        gastos,
         calendario: {
           estado: async () => {
             const e = await estadoCorreo();
@@ -454,6 +469,7 @@ export function crearBackendWeb() {
       }),
       claves: coleccionClaves({ leer: leerSecreto, guardar: guardarSecreto, borrar: borrarSecreto }),
       consumo: coleccionConsumo({ leer: async () => leerLocal(CLAVE_CONSUMO), guardar: async (d) => guardarLocal(CLAVE_CONSUMO, d) }),
+      gastos: coleccionGastos({ leer: () => gastos.leer(), guardar: (d) => guardarSecreto('gastos', JSON.stringify(d)), normalizar: normalizarGastos }),
     },
     leerEstado: async () => leerLocal(CLAVE_SINCRO),
     guardarEstado: async (estado) => guardarLocal(CLAVE_SINCRO, estado),
@@ -590,6 +606,11 @@ export function crearBackendWeb() {
     empleo: {
       leer: leerEmpleo,
       guardar: guardarEmpleo,
+    },
+    // Gastos puntuales y fijos: cifrados y sincronizados.
+    gastos: {
+      leer: () => gastos.leer(),
+      guardar: (datos) => gastos.guardar(datos),
     },
     consumo: {
       async resumen() {

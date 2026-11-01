@@ -24,6 +24,7 @@ import { crearEnvioRegistroIA } from '../src/compartido/registro-ia.js';
 import { servidor, sincronizarRecordatorios, automatizacionesChat, clienteServidor } from './avisos.js';
 import { aviso } from '../src/compartido/notificaciones.js';
 import { normalizarDatosEmpleo } from '../src/compartido/empleo.js';
+import { crearAlmacenGastos, normalizarGastos } from '../src/compartido/gastos.js';
 import { hablarVoiceStudio, vocesVoiceStudio } from './voicestudio.js';
 import { transcribirGroq } from '../src/compartido/dictado.js';
 import {
@@ -31,6 +32,7 @@ import {
   coleccionLista,
   coleccionConversaciones,
   coleccionEmpleo,
+  coleccionGastos,
   coleccionAjustes,
   coleccionClaves,
   coleccionConsumo,
@@ -57,6 +59,18 @@ const gmail = new Gmail(obtenerAjustes);
 // Sincronización con tus otros dispositivos: cada cambio guardado la avisa.
 let sincro = null;
 const tocado = () => sincro?.marcar();
+// Gastos: datos personales, cifrados como las claves.
+const gastos = crearAlmacenGastos({
+  leer: async () => {
+    try {
+      return JSON.parse(leerSecreto('gastos') ?? 'null');
+    } catch {
+      return null;
+    }
+  },
+  guardar: async (datos) => guardarSecreto('gastos', JSON.stringify(datos)),
+  alCambiar: () => tocado(),
+});
 // Lo que se gasta en OpenAI desde este ordenador (y lo que llega de los demás).
 const consumo = new Consumo({
   leer: () => leerObjeto('consumo'),
@@ -121,6 +135,7 @@ sincro = new Sincronizador({
     }),
     conversaciones: coleccionConversaciones(almacenConversaciones),
     empleo: coleccionEmpleo({ leer: leerEmpleo, guardar: guardarEmpleo }),
+    gastos: coleccionGastos({ leer: () => gastos.leer(), guardar: (d) => guardarSecreto('gastos', JSON.stringify(d)), normalizar: normalizarGastos }),
     ajustes: coleccionAjustes({ leer: () => obtenerAjustes(), guardar: (cambios) => guardarAjustes(cambios) }),
     claves: coleccionClaves({ leer: leerSecreto, guardar: guardarSecreto, borrar: borrarSecreto }),
     consumo: coleccionConsumo({ leer: () => leerObjeto('consumo'), guardar: (d) => guardarDatos('consumo', d) }),
@@ -160,6 +175,7 @@ const claude = new ConversacionClaude({
     borrar: (id) => gmail.calendario.borrar(id),
   },
   recordatorios,
+  gastos,
   memoria,
   automatizaciones: automatizacionesChat,
   emitir: (evento) => ventana?.webContents.send('claude:evento', evento),
@@ -481,6 +497,8 @@ function registrarCanales() {
   });
   manejar('empleo:leer', () => leerEmpleo());
   manejar('empleo:guardar', (datos) => guardarEmpleo(datos));
+  manejar('gastos:leer', () => gastos.leer());
+  manejar('gastos:guardar', (datos) => gastos.guardar(datos));
   manejar('consumo:resumen', async () => {
     const servidorConsumo = leerSecreto('servidorToken') ? await Promise.resolve().then(() => clienteServidor().consumo()).catch(() => null) : null;
     return consumo.resumen({ servidor: servidorConsumo?.meses ?? null });

@@ -20,7 +20,11 @@ export const COLECCIONES_SINCRO = [
   ['ajustes', 'Ajustes'],
   ['claves', 'Claves de la IA'],
   ['consumo', 'Gasto de la IA'],
+  ['gastos', 'Gastos'],
 ];
+// Colecciones que llegaron después: en los dispositivos que ya sincronizaban se
+// activan solas una vez (y se baja todo, por si otro dispositivo ya las subió).
+const COLECCIONES_NUEVAS = ['gastos'];
 // Ajustes que son de cada dispositivo (pantalla, atajos, motor de voz…).
 export const AJUSTES_LOCALES = new Set([
   'atajo',
@@ -279,6 +283,37 @@ export function coleccionClaves({ leer, guardar, borrar, despues }) {
   };
 }
 
+// Gastos: cada gasto (m:) y cada fijo (f:) por separado, y el presupuesto aparte;
+// así dos dispositivos pueden apuntar a la vez sin pisarse.
+export function coleccionGastos({ leer, guardar, normalizar = (d) => d, despues }) {
+  return {
+    async leer() {
+      const d = await leer();
+      const mapa = new Map();
+      if (!d || typeof d !== 'object') return mapa;
+      const base = { presupuesto: d.presupuesto ?? 0 };
+      mapa.set('base', { firma: comoTexto(base), valor: comoTexto(base) });
+      for (const m of d.movimientos ?? []) if (m?.id) mapa.set(`m:${m.id}`, { firma: comoTexto(m), valor: comoTexto(m) });
+      for (const f of d.fijos ?? []) if (f?.id) mapa.set(`f:${f.id}`, { firma: comoTexto(f), valor: comoTexto(f) });
+      return mapa;
+    },
+    firma: (v) => v,
+    async aplicar(cambios) {
+      const d = (await leer()) ?? {};
+      let base = { presupuesto: d.presupuesto ?? 0 };
+      const movimientos = new Map((d.movimientos ?? []).filter((m) => m?.id).map((m) => [m.id, m]));
+      const fijos = new Map((d.fijos ?? []).filter((f) => f?.id).map((f) => [f.id, f]));
+      for (const { id, valor } of cambios) {
+        if (id === 'base') base = valor === null ? { presupuesto: 0 } : JSON.parse(valor);
+        else if (id.startsWith('m:')) valor === null ? movimientos.delete(id.slice(2)) : movimientos.set(id.slice(2), JSON.parse(valor));
+        else if (id.startsWith('f:')) valor === null ? fijos.delete(id.slice(2)) : fijos.set(id.slice(2), JSON.parse(valor));
+      }
+      await guardar(normalizar({ ...base, movimientos: [...movimientos.values()], fijos: [...fijos.values()] }));
+      await despues?.();
+    },
+  };
+}
+
 // Gasto de la IA: cada dispositivo escribe solo el suyo y recibe el de los demás.
 export function coleccionConsumo({ leer, guardar, despues }) {
   return {
@@ -315,7 +350,7 @@ export function coleccionConsumo({ leer, guardar, despues }) {
 
 // ---------- Motor ----------
 
-const estadoNuevo = () => ({ cursor: 0, base: {}, pendientes: {}, ultima: 0, error: '', primera: true, colecciones: COLECCIONES_SINCRO.map(([c]) => c) });
+const estadoNuevo = () => ({ cursor: 0, base: {}, pendientes: {}, ultima: 0, error: '', primera: true, colecciones: COLECCIONES_SINCRO.map(([c]) => c), ofrecidas: COLECCIONES_SINCRO.map(([c]) => c) });
 const espera = (ms, signal) =>
   new Promise((ok, mal) => {
     const t = setTimeout(ok, ms);
@@ -338,7 +373,19 @@ export class Sincronizador {
 
   async #estado() {
     const e = await this.leerEstado();
-    return e && typeof e === 'object' ? { ...estadoNuevo(), ...e } : estadoNuevo();
+    if (!e || typeof e !== 'object') return estadoNuevo();
+    const estado = { ...estadoNuevo(), ...e };
+    const ofrecidas = Array.isArray(e.ofrecidas) ? e.ofrecidas : COLECCIONES_SINCRO.map(([c]) => c).filter((c) => !COLECCIONES_NUEVAS.includes(c));
+    const nuevas = COLECCIONES_NUEVAS.filter((c) => !ofrecidas.includes(c));
+    if (nuevas.length || !Array.isArray(e.ofrecidas)) {
+      estado.ofrecidas = COLECCIONES_SINCRO.map(([c]) => c);
+      if (nuevas.length) {
+        estado.colecciones = [...new Set([...estado.colecciones, ...nuevas])];
+        estado.cursor = 0;
+      }
+      await this.guardarEstado(estado);
+    }
+    return estado;
   }
 
   async activaAqui() {

@@ -566,6 +566,16 @@ export function crearDemo() {
         return { texto: typeof r === 'string' ? r : JSON.stringify(r), fuentes: [] };
       },
     },
+    // Gastos de ejemplo: fijos de casa y unos meses de gastos del día a día.
+    gastos: (() => {
+      let guardado = JSON.stringify(gastosDemo());
+      return {
+        leer: async () => JSON.parse(guardado),
+        guardar: async (datos) => {
+          guardado = JSON.stringify(datos);
+        },
+      };
+    })(),
     empleo: (() => {
       let guardado = null;
       return {
@@ -965,4 +975,47 @@ function respuestaEmpleoDemo(sistema, usuario) {
     };
   }
   return {};
+}
+
+// Gastos de ejemplo, relativos a hoy: fijos desde hace medio año y gastos sueltos de los últimos tres meses.
+function gastosDemo(ahora = new Date()) {
+  const dos = (n) => String(n).padStart(2, '0');
+  const fecha = (d) => `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
+  const inicio = new Date(ahora.getFullYear(), ahora.getMonth() - 5, 1);
+  const desde = fecha(inicio);
+  const fijo = (id, concepto, euros, categoria, dia, extra = {}) => ({ id, concepto, centimos: Math.round(euros * 100), categoria, frecuencia: 'mensual', dia, desde, ...extra });
+  const fijos = [
+    fijo('fdemo01', 'Alquiler', 850, 'casa', 1),
+    fijo('fdemo02', 'Gimnasio', 34.9, 'salud', 2),
+    fijo('fdemo03', 'Fibra y móvil', 45, 'facturas', 5),
+    fijo('fdemo04', 'Luz', 62, 'facturas', 12),
+    fijo('fdemo05', 'Netflix', 13.99, 'suscripciones', 18),
+    fijo('fdemo06', 'Spotify', 10.99, 'suscripciones', 22),
+    fijo('fdemo07', 'Seguro del coche', 412, 'facturas', 15, { frecuencia: 'anual', mes: 3 }),
+  ];
+  const sueltos = [
+    ['Mercadona', 'super', [62.4, 48.15, 71.3, 55.8]],
+    ['Gasolina', 'transporte', [58, 61.5]],
+    ['Cena con Lucía', 'comer', [38.5]],
+    ['Café', 'comer', [2.4, 2.4, 3.1]],
+    ['Cine', 'ocio', [9.5]],
+    ['Farmacia', 'salud', [12.75]],
+    ['Zapatillas', 'compras', [64.99]],
+    ['Metro', 'transporte', [12.2]],
+  ];
+  const movimientos = [];
+  let n = 0;
+  for (let atras = 2; atras >= 0; atras--) {
+    const primero = new Date(ahora.getFullYear(), ahora.getMonth() - atras, 1);
+    const ultimo = atras ? new Date(ahora.getFullYear(), ahora.getMonth() - atras + 1, 0).getDate() : ahora.getDate();
+    for (const [concepto, categoria, importes] of sueltos) {
+      importes.forEach((euros, i) => {
+        // Repartidos por el mes (en el actual, solo hasta hoy); cada mes cambia un poco.
+        if (atras === 0 && (n + i) % 3 === 0) return;
+        const dia = Math.max(1, Math.min(ultimo, Math.round(((i + 1) * ultimo) / (importes.length + 1)) - ((n + atras) % 3)));
+        movimientos.push({ id: `gdemo${dos(n++)}${atras}`, fecha: fecha(new Date(primero.getFullYear(), primero.getMonth(), dia)), centimos: Math.round(euros * (1 + atras * 0.07) * 100), concepto, categoria, creado: n });
+      });
+    }
+  }
+  return { movimientos, fijos, presupuesto: 160000 };
 }

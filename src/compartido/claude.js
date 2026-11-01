@@ -7,6 +7,7 @@ import { rutaIA, conRespaldo } from './modos.js';
 import { verTiempo } from './tiempo.js';
 import { PERMISOS, nivel, nivelHerramienta } from './permisos.js';
 import { normalizarAutomatizacion, describirCuando, describirHacer } from './automatizaciones.js';
+import { CATEGORIAS, FRECUENCIAS, fechaValida, mesValido, euros, cuandoFijo } from './gastos.js';
 
 export { mensajesVisibles, recortarHistorial } from './historial.js';
 
@@ -196,6 +197,42 @@ const HERRAMIENTAS_RECORDATORIOS = [
       type: 'object',
       properties: { id: { type: 'string', description: 'Id del recordatorio.' } },
       required: ['id'],
+      additionalProperties: false,
+    },
+  },
+];
+
+const HERRAMIENTAS_GASTOS = [
+  {
+    name: 'apuntar_gasto',
+    description:
+      'Apunta un gasto en el apartado Gastos del usuario. Úsala cuando diga que ha gastado o pagado algo ("apunta 12 € de ' +
+      'gasolina", "ayer pagué 30 en la cena"). Si se repite (alquiler, una suscripción, "cada mes", "al año"), pon frecuencia: ' +
+      'así queda como gasto fijo y se cuenta solo cada vez. Si no dice cuánto, pregúntaselo antes.',
+    eager_input_streaming: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        concepto: { type: 'string', description: 'Qué es, corto: "Gasolina", "Cena con Ana", "Netflix".' },
+        importe: { type: 'number', description: 'En euros, por ejemplo 12.5.' },
+        categoria: { type: 'string', enum: CATEGORIAS.map((c) => c.id), description: 'La que mejor encaje.' },
+        fecha: { type: 'string', description: 'Día del gasto, AAAA-MM-DD. Si no lo dice, hoy; para "ayer", calcúlalo con la fecha local de su mensaje.' },
+        frecuencia: { type: 'string', enum: FRECUENCIAS.map((f) => f.id), description: 'Solo si es un gasto fijo que se repite.' },
+        dia: { type: 'integer', description: 'Para un fijo: el día del mes en que se cobra (1-31). Si no lo dice, el de la fecha.' },
+      },
+      required: ['concepto', 'importe'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'ver_gastos',
+    description:
+      'Devuelve los gastos de un mes: lo gastado, los fijos que faltan por pagar, el presupuesto y lo que queda, el reparto ' +
+      'por categorías, sus gastos fijos y los últimos gastos. Úsala para "¿cuánto llevo gastado?", "¿en qué gasto más?"…',
+    eager_input_streaming: true,
+    input_schema: {
+      type: 'object',
+      properties: { mes: { type: 'string', description: 'AAAA-MM. Si no lo dice, el mes actual.' } },
       additionalProperties: false,
     },
   },
@@ -440,6 +477,23 @@ function validarEntrada(nombre, entrada) {
       return { texto: entrada.texto, cuando: entrada.cuando };
     case 'ver_recordatorios':
       return {};
+    case 'apuntar_gasto': {
+      const importe = Number(entrada.importe);
+      if (typeof entrada.concepto !== 'string' || !entrada.concepto.trim() || !(importe > 0) || importe > 1_000_000) return null;
+      if (entrada.fecha !== undefined && !fechaValida(entrada.fecha)) return null;
+      if (entrada.frecuencia !== undefined && !FRECUENCIAS.some((f) => f.id === entrada.frecuencia)) return null;
+      if (entrada.dia !== undefined && !(Number.isInteger(entrada.dia) && entrada.dia >= 1 && entrada.dia <= 31)) return null;
+      return {
+        concepto: entrada.concepto.slice(0, 80),
+        importe: Math.round(importe * 100) / 100,
+        categoria: CATEGORIAS.some((c) => c.id === entrada.categoria) ? entrada.categoria : undefined,
+        fecha: entrada.fecha,
+        frecuencia: entrada.frecuencia,
+        dia: entrada.dia,
+      };
+    }
+    case 'ver_gastos':
+      return entrada.mes === undefined || mesValido(entrada.mes) ? { mes: entrada.mes } : null;
     case 'borrar_recordatorio':
       return typeof entrada.id === 'string' && /^r[0-9a-z]+$/.test(entrada.id) ? { id: entrada.id } : null;
     case 'recordar':
@@ -486,6 +540,7 @@ function resumenPermisos(ajustes, servicios) {
     Correo: servicios.correo,
     Agenda: servicios.calendario,
     Avisos: servicios.conRecordatorios,
+    Gastos: servicios.gastos,
     Memoria: servicios.memoria,
     Automatizaciones: servicios.automatizaciones,
   };
@@ -516,6 +571,7 @@ const GRUPO_DE = {
   buscar_correos: 'correo', leer_correo: 'correo', organizar_correo: 'correo', borrar_correo: 'correo', enviar_correo: 'correo',
   ver_agenda: 'agenda', crear_evento: 'agenda', modificar_evento: 'agenda', borrar_evento: 'agenda',
   crear_recordatorio: 'recordatorios', ver_recordatorios: 'recordatorios', borrar_recordatorio: 'recordatorios',
+  apuntar_gasto: 'gastos', ver_gastos: 'gastos',
   recordar: 'memoria', olvidar: 'memoria',
   crear_automatizacion: 'automatizaciones', ver_automatizaciones: 'automatizaciones',
   ver_tiempo: 'tiempo',
@@ -527,6 +583,7 @@ const PISTAS = {
   recordatorios: /recuerd|recordatorio|avis|alarma|pendiente|no se me olvide|apunta/,
   memoria: /recuerda que|apunta que|olvida|sabes de mi|que sabes|me llamo|\bsoy\b|me gusta|no me gusta|prefiero|mi (mujer|marido|pareja|novi[oa]|madre|padre|hij[oa]|herman[oa]|perro|gato|jefe)/,
   automatizaciones: /automatiz|cada vez que|siempre que|a partir de ahora|todos los dias|cada dia|cada manana|cada semana|regla|flujo|workflow/,
+  gastos: /gast[oeaé]|gaste\b|pague|pagado|pagar|euros?\b|€|\d\s*eur\b|presupuesto|cuanto llevo|suscripci|alquiler|hipoteca|cuesta al mes|me cobra|cobran/,
   tiempo: /tiempo|llov|llue|lluvia|tormenta|temperatura|calor|frio|clima|paraguas|nieve|viento|grados|\bsol\b/,
   web: /busca|internet|noticia|precio|quien (es|fue|gano)|gano|cuanto cuesta|resultado|ultima hora|actualidad|\bweb\b|google|partido|cotiza|bolsa|estreno|que paso/,
   pulso: /pulso|resumen del dia|mi dia\b|que hay de nuevo|novedades/,
@@ -551,7 +608,7 @@ export function herramientasParaGroq(herramientas, grupos) {
 }
 
 // Con Groq algunas partes se omiten (null) cuando su herramienta no va en la petición.
-function promptSistema({ ajustes, correo, calendario, conRecordatorios, memoria, busqueda, automatizaciones, pulso = true, permisos = null, recordar = true, tiempo = true }) {
+function promptSistema({ ajustes, correo, calendario, conRecordatorios, conGastos = false, memoria, busqueda, automatizaciones, pulso = true, permisos = null, recordar = true, tiempo = true }) {
   return [
     'Eres Kitsune, el asistente personal del usuario: un zorro de nueve colas que vive en su escritorio o en su móvil ' +
       'y habla con él en un diálogo pequeño que aparece encima de ti.',
@@ -565,12 +622,16 @@ function promptSistema({ ajustes, correo, calendario, conRecordatorios, memoria,
         'en Ajustes, sección Google.',
     calendario ? 'Tienes acceso a su Google Calendar.' : '',
     conRecordatorios ? 'Puedes apuntar y consultar recordatorios. Al crear uno, confirma en una frase qué y cuándo.' : '',
+    conGastos
+      ? 'Llevas sus gastos (apartado Gastos): apunta los que te cuente con apuntar_gasto y consúltalos con ver_gastos. ' +
+        'Al apuntar uno, confírmalo en una frase con el importe; si es fijo, di cada cuánto se cobra.'
+      : '',
     automatizaciones
       ? 'Puedes crear automatizaciones con crear_automatizacion: avisos y acciones que el servidor de Kitsune hace solo, ' +
         'aunque la app esté cerrada (al llegar ciertos correos, antes de las citas o a una hora). Para algo puntual usa un ' +
         'recordatorio; para «cada vez que…» o «a partir de ahora…», una automatización.'
       : '',
-    resumenPermisos(ajustes, permisos ?? { correo: correo.conectado, calendario, conRecordatorios, memoria: Boolean(memoria), automatizaciones }),
+    resumenPermisos(ajustes, permisos ?? { correo: correo.conectado, calendario, conRecordatorios, gastos: conGastos, memoria: Boolean(memoria), automatizaciones }),
     tiempo ? 'Para el tiempo de un lugar usa ver_tiempo. Si no sabes de qué lugar se trata, mira tu memoria o pregúntaselo.' : '',
     busqueda === null
       ? ''
@@ -646,6 +707,7 @@ export class ConversacionClaude {
     gmail,
     calendario = null,
     recordatorios = null,
+    gastos = null,
     memoria = null,
     automatizaciones = null,
     emitir,
@@ -660,6 +722,7 @@ export class ConversacionClaude {
     this.gmail = gmail;
     this.calendario = calendario;
     this.recordatorios = recordatorios;
+    this.gastos = gastos;
     this.memoria = memoria;
     this.automatizaciones = automatizaciones;
     this.emitir = emitir;
@@ -743,11 +806,13 @@ export class ConversacionClaude {
     ]);
     const conCalendario = Boolean(calendario.conectado);
     const conRecordatorios = Boolean(this.recordatorios);
+    const conGastos = Boolean(this.gastos);
     const busqueda = Boolean(ajustes.busquedaWeb);
     const herramientas = [
       ...(correo.conectado ? HERRAMIENTAS_CORREO : []),
       ...(conCalendario ? HERRAMIENTAS_CALENDARIO : []),
       ...(conRecordatorios ? HERRAMIENTAS_RECORDATORIOS : []),
+      ...(conGastos ? HERRAMIENTAS_GASTOS : []),
       ...(memoria ? HERRAMIENTAS_MEMORIA : []),
       ...(automatizaciones ? HERRAMIENTAS_AUTOMATIZACION : []),
       HERRAMIENTA_TIEMPO,
@@ -755,7 +820,7 @@ export class ConversacionClaude {
       // Lo que el usuario no permite ni se ofrece.
     ].filter((h) => nivelHerramienta(ajustes, h.name) !== 'no');
     if (proveedor !== 'groq') {
-      const sistema = promptSistema({ ajustes, correo, calendario: conCalendario, conRecordatorios, memoria, busqueda, automatizaciones });
+      const sistema = promptSistema({ ajustes, correo, calendario: conCalendario, conRecordatorios, conGastos, memoria, busqueda, automatizaciones });
       return { sistema, herramientas };
     }
     // Groq: solo los grupos que encajan con este mensaje y el anterior.
@@ -770,13 +835,14 @@ export class ConversacionClaude {
       correo: correo.conectado && !tiene('correo') ? { oculto: true } : correo,
       calendario: conCalendario && tiene('agenda'),
       conRecordatorios: tiene('recordatorios'),
+      conGastos: tiene('gastos'),
       memoria,
       recordar: tiene('memoria'),
       tiempo: tiene('tiempo'),
       busqueda: tiene('web') ? true : busqueda ? null : false,
       automatizaciones: automatizaciones && tiene('automatizaciones'),
       pulso: grupos.has('pulso'),
-      permisos: { correo: correo.conectado && tiene('correo'), calendario: conCalendario && tiene('agenda'), conRecordatorios: tiene('recordatorios'), memoria: tiene('memoria'), automatizaciones: tiene('automatizaciones') },
+      permisos: { correo: correo.conectado && tiene('correo'), calendario: conCalendario && tiene('agenda'), conRecordatorios: tiene('recordatorios'), gastos: tiene('gastos'), memoria: tiene('memoria'), automatizaciones: tiene('automatizaciones') },
     });
     return { sistema, herramientas: elegidas };
   }
@@ -1061,6 +1127,13 @@ export class ConversacionClaude {
           boton: nombre === 'borrar_correo' ? 'A la papelera' : 'Sí', peligro: nombre === 'borrar_correo', hecho: accion.hecho,
         };
       }
+      case 'apuntar_gasto':
+        return {
+          tipo: 'gasto', icono: 'pulso', pregunta: e.frecuencia ? '¿Apunto este gasto fijo?' : '¿Apunto este gasto?',
+          titulo: `${e.concepto} · ${euros(Math.round(e.importe * 100))}`,
+          detalle: e.frecuencia ? cuandoFijo({ frecuencia: e.frecuencia, dia: e.dia ?? (Number((e.fecha ?? '').slice(8)) || new Date().getDate()), diaSemana: 1, mes: 1 }) : e.fecha ?? 'Hoy',
+          boton: 'Apuntar', hecho: 'Apuntado',
+        };
       case 'crear_recordatorio':
         return {
           tipo: 'recordatorio', icono: 'campana', pregunta: '¿Apunto este recordatorio?', titulo: e.texto,
@@ -1158,6 +1231,13 @@ export class ConversacionClaude {
         this.emitir({ tipo: 'recordatorio', recordatorio: r });
         return { id: r.id, texto: r.texto, cuando: fechaLocal(r.cuando) };
       }
+      case 'apuntar_gasto': {
+        const gasto = await this.gastos.apuntar(entrada);
+        this.emitir({ tipo: 'gasto', gasto });
+        return gasto;
+      }
+      case 'ver_gastos':
+        return this.gastos.resumen(entrada.mes);
       case 'ver_recordatorios':
         return (await this.recordatorios.listar()).map((r) => ({ id: r.id, texto: r.texto, cuando: fechaLocal(r.cuando) }));
       case 'borrar_recordatorio':

@@ -5,6 +5,7 @@ const TRAZOS = {
   cerrar: '<path d="M6 6l12 12M18 6L6 18"/>',
   ondas: '<path d="M4 10v4"/><path d="M8 6.5v11"/><path d="M12 3.5v17"/><path d="M16 6.5v11"/><path d="M20 10v4"/>',
   altavoz: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18.3 6.5a8 8 0 0 1 0 11"/>',
+  cartera: '<path d="M5 8V6.5A2.5 2.5 0 0 1 7.5 4h8.5a1 1 0 0 1 1 1v3"/><rect x="3" y="8" width="18" height="12" rx="2.5"/><path d="M21 12h-4a2 2 0 0 0 0 4h4"/><circle cx="17.2" cy="14" r=".6" fill="currentColor" stroke="none"/>',
   maletin: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M3 12.5h18"/><path d="M11 12.5v1.5h2v-1.5"/>',
   documento: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/>',
   subir: '<path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M5 20h14"/>',

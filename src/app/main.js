@@ -5,6 +5,7 @@ import { crearChat } from './chat.js';
 import { crearCorreo } from './correo.js';
 import { crearAjustes } from './ajustes.js';
 import { crearEmpleo } from './empleo.js';
+import { crearGastos } from './gastos.js';
 import { crearHoy } from './hoy.js';
 import { crearBuscador } from './buscador.js';
 import { crearAgenda, crearRecordatorios, crearMemoria, crearHistorial } from './vistas.js';
@@ -34,7 +35,7 @@ const insigniaRecordatorios = document.getElementById('insignia-recordatorios');
 const insigniaAgenda = document.getElementById('insignia-agenda');
 const insigniaEmpleo = document.getElementById('insignia-empleo');
 const vistas = Object.fromEntries(
-  ['hoy', 'chat', 'correo', 'agenda', 'recordatorios', 'memoria', 'historial', 'empleo', 'ajustes'].map((v) => [v, document.getElementById(`vista-${v}`)]),
+  ['hoy', 'chat', 'correo', 'agenda', 'recordatorios', 'memoria', 'historial', 'empleo', 'gastos', 'ajustes'].map((v) => [v, document.getElementById(`vista-${v}`)]),
 );
 // Los cinco apartados de la barra. Recordatorios vive dentro de Agenda; las
 // conversaciones y la memoria, dentro del Chat (botones de la cabecera).
@@ -83,7 +84,7 @@ function aplicarAjustes(a) {
 }
 
 // Orden de los apartados: la vista nueva entra desde el lado hacia el que se va.
-const ORDEN_VISTAS = ['hoy', 'chat', 'historial', 'memoria', 'correo', 'agenda', 'recordatorios', 'empleo', 'ajustes'];
+const ORDEN_VISTAS = ['hoy', 'chat', 'historial', 'memoria', 'correo', 'agenda', 'recordatorios', 'empleo', 'gastos', 'ajustes'];
 let moverIndicador = null;
 
 function mostrarVista(nombre, seccionAjustes = null) {
@@ -148,11 +149,13 @@ function pulsarCuandoExista(contenedor, selector, plazo = 4000) {
   };
   mirar();
 }
-function ir(nombre, { buscarYPreparar = false, nuevo = false } = {}) {
+function ir(nombre, { buscarYPreparar = false, nuevo = false, pestana = null } = {}) {
   if (nombre === 'correo' || nombre === 'agenda') api.correo.renovar?.();
+  if (nombre === 'gastos' && pestana) apartados.gastos?.abrirPestana(pestana);
   mostrarVista(nombre);
   if (buscarYPreparar) pulsarCuandoExista(vistas.empleo, '#empleo-preparar-cand');
-  if (nuevo) pulsarCuandoExista(vistas.recordatorios, '#rec-nuevo');
+  if (nuevo && nombre === 'gastos') setTimeout(() => apartados.gastos?.apuntar(), 120);
+  else if (nuevo) pulsarCuandoExista(vistas.recordatorios, '#rec-nuevo');
 }
 
 function abrirDialogo() {
@@ -477,6 +480,13 @@ async function iniciar() {
     abrirAjustes: (seccion) => mostrarVista('ajustes', seccion),
     alCambiar: ponerInsigniaEmpleo,
   });
+  if (api.gastos) {
+    apartados.gastos = crearGastos({ contenedor: vistas.gastos, api });
+  } else {
+    // Sin dónde guardarlos (versión antigua del puente de Windows): sin apartado.
+    pestanas.gastos?.remove();
+    delete pestanas.gastos;
+  }
   apartados.hoy = crearHoy({
     contenedor: vistas.hoy,
     api,
@@ -577,16 +587,19 @@ async function iniciar() {
     if (colecciones.includes('ajustes') || colecciones.includes('claves')) chat.comprobarClave();
     if (colecciones.includes('recordatorios')) contarRecordatoriosDeHoy();
     if (colecciones.includes('empleo')) apartados.empleo.recargar();
+    if (colecciones.includes('gastos')) apartados.gastos?.recargar();
     const vista = { memoria: 'memoria', recordatorios: 'recordatorios', conversaciones: 'historial' };
     if (colecciones.some((c) => vista[c] === vistaActual)) apartados[vistaActual]?.mostrar();
   });
   contarRecordatoriosDeHoy();
   setInterval(contarRecordatoriosDeHoy, 60_000);
   api.claude.alEvento((e) => e.tipo === 'recordatorio' && contarRecordatoriosDeHoy());
+  api.claude.alEvento((e) => e.tipo === 'gasto' && apartados.gastos?.recargar());
   api.claude.alEvento((e) => e.tipo === 'automatizacion' && apartados.recordatorios.recargarAutomatizaciones());
   // El zorro reacciona a lo que pasa en la conversación.
   const GESTOS = {
     recordatorio: 'asentir',
+    gasto: 'asentir',
     memoria: 'asentir',
     evento: 'celebrar',
     'agenda-cambiada': 'asentir',

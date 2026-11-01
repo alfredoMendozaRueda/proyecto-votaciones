@@ -4,6 +4,7 @@
 // Sin texto, enseña los accesos rápidos.
 import { icono } from './iconos.js';
 import { normalizarDatosEmpleo } from '../compartido/empleo.js';
+import { normalizarGastos, categoria, euros, cuandoFijo } from '../compartido/gastos.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const plano = (t) =>
@@ -59,12 +60,13 @@ export function crearBuscador({ dialogo, api, ir, abrirAjustes, abrirConversacio
   async function cargarFuentes() {
     const seguro = (p) => Promise.resolve(p).catch(() => null);
     const ahora = Date.now();
-    const [recordatorios, empleo, conversaciones, memoria, calendario] = await Promise.all([
+    const [recordatorios, empleo, conversaciones, memoria, calendario, gastos] = await Promise.all([
       seguro(api.recordatorios?.listar()),
       seguro(api.empleo?.leer()),
       seguro(api.conversaciones?.listar()),
       seguro(api.memoria?.listar()),
       seguro(api.calendario?.estado()),
+      seguro(api.gastos?.leer()),
     ]);
     const conCalendario = calendario?.conectado && calendario.calendario && !calendario.necesitaReconectar;
     const eventos = conCalendario ? await seguro(api.calendario.eventos(ahora - 30 * 86_400_000, ahora + 120 * 86_400_000)) : null;
@@ -76,6 +78,7 @@ export function crearBuscador({ dialogo, api, ir, abrirAjustes, abrirConversacio
       ofertas: datos.ofertas,
       conversaciones: conversaciones?.lista ?? [],
       memoria: Array.isArray(memoria) ? memoria : [],
+      gastos: normalizarGastos(gastos ?? {}),
     };
   }
 
@@ -86,13 +89,21 @@ export function crearBuscador({ dialogo, api, ir, abrirAjustes, abrirConversacio
 
   function grupos(q) {
     const palabras = plano(q).split(/\s+/).filter(Boolean);
-    const f = fuentes ?? { recordatorios: [], eventos: [], candidaturas: [], ofertas: [], conversaciones: [], memoria: [] };
+    const f = fuentes ?? { recordatorios: [], eventos: [], candidaturas: [], ofertas: [], conversaciones: [], memoria: [], gastos: normalizarGastos({}) };
     const apartados = [
       { icono: 'sol', titulo: 'Hoy', detalle: 'Tu día de un vistazo', hacer: () => ir('hoy'), claves: 'hoy inicio resumen dia' },
       { icono: 'chat', titulo: 'Chat', detalle: 'Habla con Kitsune', hacer: () => ir('chat'), claves: 'chat hablar preguntar' },
       { icono: 'sobre', titulo: 'Correo', detalle: 'Tu bandeja de Gmail', hacer: () => ir('correo'), claves: 'correo gmail bandeja' },
       { icono: 'calendario', titulo: 'Agenda', detalle: 'Calendario y avisos', hacer: () => ir('agenda'), claves: 'agenda calendario citas' },
       { icono: 'maletin', titulo: 'Empleo', detalle: 'Ofertas, candidaturas y tu CV', hacer: () => ir('empleo'), claves: 'empleo trabajo ofertas cv' },
+      ...(api.gastos
+        ? [
+            { icono: 'cartera', titulo: 'Gastos', detalle: 'Lo que llevas gastado este mes', hacer: () => ir('gastos'), claves: 'gastos dinero cuentas presupuesto mes' },
+            { icono: 'cartera', titulo: 'Apuntar gasto', detalle: 'Gastos', hacer: () => ir('gastos', { nuevo: true }), claves: 'apuntar gasto nuevo pagar compra' },
+            { icono: 'actualizar', titulo: 'Gastos fijos', detalle: 'Alquiler, suscripciones…', hacer: () => ir('gastos', { pestana: 'fijos' }), claves: 'gastos fijos mensuales suscripciones alquiler recibos' },
+            { icono: 'pulso', titulo: 'Resumen de gastos', detalle: 'Por categorías, presupuesto y exportar', hacer: () => ir('gastos', { pestana: 'resumen' }), claves: 'resumen gastos categorias presupuesto exportar csv excel' },
+          ]
+        : []),
       { icono: 'nueva', titulo: 'Nuevo recordatorio', detalle: 'Agenda › Avisos', hacer: () => ir('recordatorios', { nuevo: true }), claves: 'nuevo recordatorio aviso recuerdame' },
       { icono: 'chispa', titulo: 'Buscar y preparar candidaturas', detalle: 'Empleo', hacer: () => ir('empleo', { buscarYPreparar: true }), claves: 'buscar preparar candidaturas ofertas' },
       { icono: 'conversacion', titulo: 'Nueva conversación', detalle: 'La actual queda guardada', hacer: nuevaConversacion, claves: 'nueva conversacion chat' },
@@ -100,7 +111,10 @@ export function crearBuscador({ dialogo, api, ir, abrirAjustes, abrirConversacio
       { icono: 'memoria', titulo: 'Lo que sé de ti', detalle: 'Chat › memoria', hacer: () => ir('memoria'), claves: 'memoria recuerda sabe' },
       { icono: 'ajustes', titulo: 'Ajustes', detalle: 'Todos los temas', hacer: () => abrirAjustes(null), claves: 'ajustes configuracion opciones' },
     ];
-    if (!palabras.length) return [['Ir a', apartados.slice(0, 7)]];
+    if (!palabras.length) {
+      const inicio = ['Hoy', 'Chat', 'Correo', 'Agenda', 'Empleo', 'Gastos', 'Nuevo recordatorio', 'Apuntar gasto', 'Buscar y preparar candidaturas'];
+      return [['Ir a', inicio.map((t) => apartados.find((a) => a.titulo === t)).filter(Boolean)]];
+    }
     const resultado = [];
     const poner = (titulo, items) => items.length && resultado.push([titulo, items.slice(0, POR_GRUPO)]);
     poner(
@@ -146,6 +160,17 @@ export function crearBuscador({ dialogo, api, ir, abrirAjustes, abrirConversacio
           detalle: [o.empresa, o.ubicacion, o.encaje != null ? `encaje ${o.encaje}` : ''].filter(Boolean).join(' · '),
           hacer: () => abrirPestanaEmpleo('ofertas'),
         })),
+    );
+    poner(
+      'Gastos',
+      [
+        ...f.gastos.fijos
+          .filter((x) => coincide(palabras, x.concepto, categoria(x.categoria).nombre, 'fijo'))
+          .map((x) => ({ icono: 'actualizar', titulo: x.concepto, detalle: `${euros(x.centimos)} · ${cuandoFijo(x).toLowerCase()}`, hacer: () => ir('gastos', { pestana: 'fijos' }) })),
+        ...f.gastos.movimientos
+          .filter((m) => coincide(palabras, m.concepto, m.nota, categoria(m.categoria).nombre))
+          .map((m) => ({ icono: 'cartera', titulo: m.concepto, detalle: `${euros(m.centimos)} · ${fecha(new Date(`${m.fecha}T12:00`).getTime())}`, hacer: () => ir('gastos') })),
+      ],
     );
     poner(
       'Conversaciones',

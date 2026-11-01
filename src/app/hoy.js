@@ -5,6 +5,7 @@
 import { icono } from './iconos.js';
 import { normalizarDatosEmpleo } from '../compartido/empleo.js';
 import { INFO_MODOS, normalizarModo } from '../compartido/modos.js';
+import { normalizarGastos, resumenMes, proximosFijos, euros, fechaISO, mesDe, nombreMes, sumarDias } from '../compartido/gastos.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const hora = (ms) => new Date(ms).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -81,6 +82,27 @@ export function crearHoy({ contenedor, api, ir, preguntar, abrirAjustes, instala
     const dos = ia?.claves?.groq && ia?.claves?.openai && ajustes?.proveedor !== 'claude';
     if (!r.total.usd && !dos && ajustes?.proveedor !== 'openai') return null;
     return { usd: r.total.usd, detalle: dos ? `modo ${INFO_MODOS[normalizarModo(ajustes.modoIA)].nombre}` : ajustes?.proveedor === 'openai' ? 'GPT-6 Luna' : '' };
+  }
+
+  async function datosGastos() {
+    if (!api.gastos) return null;
+    const datos = normalizarGastos((await seguro(api.gastos.leer())) ?? {});
+    const hoy = fechaISO();
+    if (!datos.movimientos.length && !datos.fijos.length) return { vacio: true };
+    return { hoy, resumen: resumenMes(datos, mesDe(hoy), hoy), proximos: proximosFijos(datos, hoy, 3) };
+  }
+
+  function tarjetaGastos(g) {
+    if (!g) return '';
+    if (g.vacio) return tarjeta({ accion: 'gasto', icono: 'cartera', etiqueta: 'gastos', valor: 'Lleva tus gastos', detalle: 'Escribe «12,50 súper» y mira en qué se va el mes' });
+    const r = g.resumen;
+    const [p] = g.proximos;
+    const cuando = p ? (p.fecha === g.hoy ? 'hoy' : p.fecha === sumarDias(g.hoy, 1) ? 'mañana' : `el ${Number(p.fecha.slice(8))}`) : '';
+    const detalle = [
+      r.presupuesto ? (r.disponible >= 0 ? `quedan ${euros(r.disponible, { redondo: true })} de ${euros(r.presupuesto, { redondo: true })}` : `te pasas ${euros(-r.disponible, { redondo: true })}`) : '',
+      p ? `${cuando}: ${p.concepto} ${euros(p.centimos, { redondo: true })}` : '',
+    ].filter(Boolean);
+    return tarjeta({ ir: 'gastos', icono: 'cartera', etiqueta: `gastos de ${nombreMes(r.mes, { corto: true })}`, valor: euros(r.gastado), detalle: detalle.join(' · ') });
   }
 
   const tarjeta = ({ ir: destino, icono: ico, etiqueta, valor, detalle = '', destacada = false, accion = '' }) => `
@@ -179,11 +201,13 @@ export function crearHoy({ contenedor, api, ir, preguntar, abrirAjustes, instala
           <div id="hoy-empleo"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div>
           <div id="hoy-agenda"><div class="hoy-dos"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div></div>
           <div id="hoy-correo"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div>
+          <div id="hoy-gastos"></div>
           <div id="hoy-gasto"></div>
           <div id="hoy-instalar"></div>
           <div class="hoy__acciones" role="group" aria-label="Accesos rápidos">
             <button type="button" class="chip chip--acento" data-accion="preparar">${icono('chispa', 14)} Buscar y preparar</button>
             <button type="button" class="chip" data-accion="recordatorio">${icono('nueva', 14)} Recordatorio</button>
+            ${api.gastos ? `<button type="button" class="chip" data-accion="gasto">${icono('cartera', 14)} Apuntar gasto</button>` : ''}
             <button type="button" class="chip" data-accion="pulso">${icono('sol', 14)} Pulso del día</button>
             <button type="button" class="chip" data-accion="hablar">${icono('chat', 14)} Preguntar</button>
           </div>
@@ -207,6 +231,7 @@ export function crearHoy({ contenedor, api, ir, preguntar, abrirAjustes, instala
       datosAgenda().then((a) => poner('hoy-agenda', tarjetasAgenda(a))),
       datosCorreo().then((c) => poner('hoy-correo', tarjetaCorreo(c))),
       datosGasto().then((g) => poner('hoy-gasto', tarjetaGasto(g))),
+      datosGastos().then((g) => poner('hoy-gastos', tarjetaGastos(g))),
     ]);
   }
 
@@ -219,6 +244,8 @@ export function crearHoy({ contenedor, api, ir, preguntar, abrirAjustes, instala
         return ir('empleo', { buscarYPreparar: true });
       case 'recordatorio':
         return ir('recordatorios', { nuevo: true });
+      case 'gasto':
+        return ir('gastos', { nuevo: true });
       case 'pulso':
         return preguntar('Prepárame el pulso de hoy');
       case 'hablar':
