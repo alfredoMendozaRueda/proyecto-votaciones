@@ -82,16 +82,31 @@ async function iaModo(n, { hacerFetch, usos, sinLuna = false }) {
 
 const gastadoEsteMes = (a, ahora) => a.consumoOpenAI?.[mesDe(ahora)]?.usd ?? 0;
 
-export async function alertaEmpleo(n, { avisar = true, hacerFetch = fetch } = {}) {
-  const alerta = (await n.ajustes()).empleoAlerta;
+// manual: el botón «Buscar y preparar ahora» de la app → { preparar, excluir }.
+// Busca en la última semana, también entre las ofertas que ya viste (menos
+// aquellas a las que ya tienes candidatura, que la app manda en excluir), y
+// deja en cola las mejores para preparar al momento, sin esperar a mañana.
+export async function alertaEmpleo(n, { avisar = true, hacerFetch = fetch, manual = null } = {}) {
+  const ajustes = await n.ajustes();
+  const alerta = ajustes.empleoAlerta;
   if (!alerta?.puestos) throw new Error('No hay alerta de empleo configurada.');
   const r = await buscarEnPortales(
-    { puestos: alerta.puestos, ubicacion: alerta.ubicacion, zonas: alerta.zonas ?? [], distancia: alerta.distancia ?? 0, modalidad: alerta.modalidad, dias: 2 },
+    { puestos: alerta.puestos, ubicacion: alerta.ubicacion, zonas: alerta.zonas ?? [], distancia: alerta.distancia ?? 0, modalidad: alerta.modalidad, dias: manual ? 7 : 2 },
     hacerFetch,
   );
   let ofertas = r.ofertas.map(normalizarOferta);
-  const vistas = await n.avisados(ofertas.map((o) => `oferta:${o.id}`));
-  ofertas = ofertas.filter((o) => !vistas.has(`oferta:${o.id}`)).slice(0, MAX_NUEVAS);
+  if (manual) {
+    // Fuera las que ya tienen candidatura (en la app, en cola o preparadas en el servidor).
+    const yaHechas = new Set([
+      ...(manual.excluir ?? []).map(String),
+      ...(ajustes.empleoCola ?? []).flatMap((o) => [o.id, o.url]),
+      ...(await leerPreparadas(n)).flatMap((p) => [p.oferta?.id, p.oferta?.url]),
+    ].filter(Boolean));
+    ofertas = ofertas.filter((o) => !yaHechas.has(o.id) && !yaHechas.has(o.url)).slice(0, MAX_NUEVAS);
+  } else {
+    const vistas = await n.avisados(ofertas.map((o) => `oferta:${o.id}`));
+    ofertas = ofertas.filter((o) => !vistas.has(`oferta:${o.id}`)).slice(0, MAX_NUEVAS);
+  }
   await n.marcar(ofertas.map((o) => `oferta:${o.id}`));
 
   let evaluadas = false;
@@ -113,8 +128,12 @@ export async function alertaEmpleo(n, { avisar = true, hacerFetch = fetch } = {}
   await n.anotarConsumo(usos).catch(() => {});
 
   // Las mejores se dejan en cola para preparar su candidatura, una por minuto (ver prepararSiguiente).
-  const cola = avisar && evaluadas && alerta.preparar ? buenas.filter((o) => o.puerta !== 'no').slice(0, alerta.preparar) : [];
-  if (cola.length) await n.poner('empleoCola', cola.map((o) => ({ ...o, descripcion: o.descripcion.slice(0, 9000) })));
+  const cuantas = manual ? Math.min(MAX_PREPARAR[normalizarModo(alerta.modo)], Math.max(1, Math.round(Number(manual.preparar)) || 2)) : alerta.preparar;
+  const cola = (avisar || manual) && evaluadas && cuantas ? buenas.filter((o) => o.puerta !== 'no').slice(0, cuantas) : [];
+  // Se añaden a lo que ya hubiera en cola (sin repetir), nunca lo pisan.
+  const nuevasIds = new Set(cola.map((o) => o.id));
+  const enCola = [...(ajustes.empleoCola ?? []).filter((o) => !nuevasIds.has(o.id)), ...cola.map((o) => ({ ...o, descripcion: o.descripcion.slice(0, 9000) }))];
+  if (cola.length) await n.poner('empleoCola', enCola);
 
   if (avisar && buenas.length) {
     const [primera, segunda] = buenas;
@@ -125,8 +144,13 @@ export async function alertaEmpleo(n, { avisar = true, hacerFetch = fetch } = {}
       etiqueta: 'empleo',
     });
   }
-  await n.registrar('automatizacion', `Alertas de empleo: ${ofertas.length} nuevas, ${buenas.length} ${evaluadas ? `con encaje de ${alerta.minEncaje} o más` : 'sin puntuar (sin IA en el servidor)'}.`);
-  return ultimas;
+  await n.registrar(
+    'automatizacion',
+    `${manual ? 'Búsqueda a mano' : 'Alertas de empleo'}: ${ofertas.length} ${manual ? 'ofertas' : 'nuevas'}, ${buenas.length} ${
+      evaluadas ? `con encaje de ${alerta.minEncaje} o más` : 'sin puntuar (sin IA en el servidor)'
+    }${cola.length ? `; ${cola.length} en cola para preparar` : ''}.`,
+  );
+  return manual ? { ...ultimas, enCola: cola.length ? enCola.length : (ajustes.empleoCola ?? []).length, preparando: cola.length } : ultimas;
 }
 
 // ---------- Candidaturas preparadas cada mañana ----------

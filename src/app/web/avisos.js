@@ -248,6 +248,7 @@ export function crearAvisos({ leerSecreto, guardarSecreto, borrarSecreto, obtene
       alerta: () => usar((c) => c.empleoAlerta()),
       guardarAlerta: (datos) => usar((c) => c.guardarEmpleoAlerta(datos)),
       probarAlerta: () => usar((c) => c.probarEmpleoAlerta()),
+      ahora: (datos) => usar((c) => c.empleoAhora(datos)),
       preparadas: () => usar((c) => c.empleoPreparadas()),
       recogerPreparadas: (ids) => usar((c) => c.recogerEmpleoPreparadas(ids)),
     },

@@ -68,6 +68,7 @@ export const servidor = {
     alerta: () => usar((c) => c.empleoAlerta()),
     guardarAlerta: (datos) => usar((c) => c.guardarEmpleoAlerta(datos)),
     probarAlerta: () => usar((c) => c.probarEmpleoAlerta()),
+    ahora: (datos) => usar((c) => c.empleoAhora({ preparar: Number(datos?.preparar) || 2, excluir: Array.isArray(datos?.excluir) ? datos.excluir.map(String) : [] })),
     preparadas: () => usar((c) => c.empleoPreparadas()),
     recogerPreparadas: (ids) => usar((c) => c.recogerEmpleoPreparadas(Array.isArray(ids) ? ids.map(String) : [])),
   },

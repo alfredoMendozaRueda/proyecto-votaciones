@@ -149,6 +149,11 @@ export class ClienteServidor {
     return this.pedir('/empleo/alerta/probar', { metodo: 'POST' });
   }
 
+  // Busca ya (también entre lo visto) y prepara las mejores: { ultimas, enCola, preparando, ia }.
+  empleoAhora(datos) {
+    return this.pedir('/empleo/alerta/ahora', { metodo: 'POST', cuerpo: datos });
+  }
+
   empleoDetalle(url) {
     return this.pedir('/empleo/detalle', { metodo: 'POST', cuerpo: { url } });
   }

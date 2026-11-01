@@ -434,6 +434,7 @@ async function atender(peticion, env) {
       groq: Boolean(groq || openai),
       claves: { groq: Boolean(groq), openai: Boolean(openai) },
       modo,
+      enCola: (a.empleoCola ?? []).length,
       gastado: a.consumoOpenAI?.[mesDe(n.ahora)]?.usd ?? 0,
     });
   }
@@ -452,6 +453,19 @@ async function atender(peticion, env) {
   }
   if (m === 'POST' && ruta === '/empleo/alerta/probar') {
     return json({ ultimas: await alertaEmpleo(n, { avisar: false }) });
+  }
+  // «Buscar y preparar ahora»: busca ya (también entre lo visto) y prepara las mejores en el minuto siguiente.
+  if (m === 'POST' && ruta === '/empleo/alerta/ahora') {
+    const { preparar, excluir } = await cuerpo(peticion);
+    try {
+      const { enCola, preparando, ...ultimas } = await alertaEmpleo(n, {
+        avisar: false,
+        manual: { preparar, excluir: Array.isArray(excluir) ? excluir.slice(0, 200).map((x) => String(x).slice(0, 500)) : [] },
+      });
+      return json({ ultimas, enCola, preparando, ia: Boolean(await n.iaServidor()) });
+    } catch (error) {
+      throw new ErrorHttp(400, error.message);
+    }
   }
   if (m === 'POST' && ruta === '/empleo/detalle') {
     const { url } = await cuerpo(peticion);

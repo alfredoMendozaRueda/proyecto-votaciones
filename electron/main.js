@@ -526,6 +526,7 @@ function registrarCanales() {
   manejar('servidor:empleoAlerta', () => servidor.empleo.alerta());
   manejar('servidor:guardarEmpleoAlerta', (datos) => servidor.empleo.guardarAlerta(datos));
   manejar('servidor:probarEmpleoAlerta', () => servidor.empleo.probarAlerta());
+  manejar('servidor:empleoAhora', (datos) => servidor.empleo.ahora(datos));
   manejar('servidor:empleoPreparadas', () => servidor.empleo.preparadas());
   manejar('servidor:recogerEmpleoPreparadas', (ids) => servidor.empleo.recogerPreparadas(ids));
   manejar('servidor:resumen', () => servidor.resumen());

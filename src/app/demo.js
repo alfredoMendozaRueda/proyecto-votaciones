@@ -687,9 +687,22 @@ export function crearDemo() {
             return { ofertas: OFERTAS_DEMO.map((o, i) => ({ ...o, id: `demo-${i}`, fuente: i === 1 ? 'freehire' : 'LinkedIn' })), errores: [] };
           },
           async alerta() {
-            return { alerta: alertaDemo, ultimas: ultimasDemo, groq: true, claves: { groq: true, openai: true }, modo: alertaDemo?.modo ?? ajustes.modoIA, gastado: 0.31 };
+            const enCola = preparadasDemo.filter((p) => p.fecha > Date.now()).length;
+            return { alerta: alertaDemo, ultimas: ultimasDemo, groq: true, claves: { groq: true, openai: true }, modo: alertaDemo?.modo ?? ajustes.modoIA, gastado: 0.31, enCola };
           },
-          preparadas: async () => ({ preparadas: preparadasDemo }),
+          preparadas: async () => ({ preparadas: preparadasDemo.filter((p) => p.fecha <= Date.now()) }),
+          // «Buscar y preparar»: encuentra dos ofertas y deja lista la mejor al cabo de unos segundos.
+          async ahora({ excluir = [] } = {}) {
+            await new Promise((r) => setTimeout(r, 900));
+            const ofertas = OFERTAS_DEMO.slice(0, 2).map((o, i) => ({ ...o, id: `ahora-${i}`, encaje: 82 - i * 9, veredicto: i ? 'encaje bueno' : 'encaje fuerte', puerta: 'pasa', motivos: ['React y TypeScript'], faltan: [] }));
+            const mejor = ofertas.find((o) => !excluir.includes(o.url));
+            if (mejor && !preparadasDemo.some((p) => p.oferta.url === mejor.url)) {
+              preparadasDemo.push({ ...PREPARADA_DEMO(mejor), fecha: Date.now() + 15_000 });
+            }
+            ultimasDemo = { fecha: Date.now(), evaluadas: true, errores: [], ofertas };
+            const enCola = preparadasDemo.filter((p) => p.fecha > Date.now()).length;
+            return { ultimas: ultimasDemo, enCola, preparando: enCola, ia: true };
+          },
           async recogerPreparadas(ids) {
             preparadasDemo = preparadasDemo.filter((p) => !ids.includes(p.id));
             return { ok: true };
@@ -845,6 +858,20 @@ const OFERTA_ALERTA_DEMO = {
   motivos: ['React y TypeScript como en tus dos últimos puestos'],
   faltan: [],
 };
+
+// Una candidatura hecha por el servidor para una oferta de ejemplo.
+const PREPARADA_DEMO = (oferta) => ({
+  id: `pdemo-${oferta.id}`,
+  oferta,
+  cv: { ...PERFIL_DEMO, titular: `${oferta.puesto} · React y TypeScript` },
+  carta: `Hola, equipo de ${oferta.empresa}:\n\nOs escribo por la oferta de ${oferta.puesto}. Llevo seis años con React y TypeScript y en Tranvía Software reduje un 38 % el tiempo de carga.\n\nUn saludo,\nElena Martín Rubio`,
+  palabrasClave: ['React', 'TypeScript'],
+  terminosOferta: oferta.requisitos ?? [],
+  notas: ['Resumen adaptado a la oferta.'],
+  encaje: oferta.encaje,
+  idioma: 'es',
+  empresa: '',
+});
 
 const OFERTAS_DEMO = [
   { puesto: 'Frontend Engineer sénior (React)', empresa: 'Brújula Labs', ubicacion: 'Madrid', modalidad: 'híbrido', salario: '48.000–55.000 €', publicada: 'hace 3 días', url: 'https://empleo.ejemplo.es/brujula/frontend-senior', fuente: 'ejemplo.es', resumen: 'Producto de rutas para logística. Equipo de 6 personas, React y TypeScript.', requisitos: ['5+ años con React', 'TypeScript', 'Testing'] },

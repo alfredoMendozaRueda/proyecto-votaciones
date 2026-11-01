@@ -317,7 +317,11 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
             </div>
           </div>
           <label class="empleo-campo"><span>Salario mínimo <small>(opcional)</small></span><input class="campo" name="salario" maxlength="60" value="${escapar(pref.salario)}" placeholder="30.000 € brutos/año"></label>
-          <button type="submit" class="boton boton--primario empleo-buscar" data-bloquear>${icono('buscar', 16)} Buscar ofertas</button>
+          <div class="empleo-buscar-acciones">
+            <button type="submit" class="boton boton--primario empleo-buscar" data-bloquear>${icono('buscar', 16)} Buscar ofertas</button>
+            <button type="button" class="boton empleo-buscar" id="empleo-preparar" data-bloquear>${icono('chispa', 16)} Buscar y preparar candidaturas</button>
+          </div>
+          <p class="ajuste__ayuda empleo-preparar__ayuda">«Buscar y preparar» mira la última semana (también lo que ya viste), elige las que mejor encajan y te deja hechos el CV y la carta de cada una. No envía nada.</p>
         </form>
 
         ${alertas ? '<section class="empleo-alerta" id="empleo-alerta" aria-label="Alerta diaria de ofertas" hidden></section>' : ''}
@@ -351,6 +355,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       datos.preferencias = preferenciasDelFormulario();
       tarea(buscar);
     });
+    contenedor.querySelector('#empleo-preparar').addEventListener('click', () => tarea(buscarYPreparar));
     contenedor.querySelector('#empleo-oferta').addEventListener('submit', (e) => {
       e.preventDefault();
       const entrada = e.target.oferta.value.trim();
@@ -539,8 +544,9 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     if (llegadas || listas) {
       await guardar();
       pintarOfertas();
-      pintarCandidaturas();
     }
+    pintarCandidaturas();
+    if (estadoAlerta.enCola > 0) vigilarCola();
     pintarAlerta();
   }
 
@@ -679,7 +685,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
             <p class="ajuste__ayuda">${escapar(busca)}Usa lo que tengas en «qué buscas»: al buscar con otros puestos, la alerta se actualiza.</p>
             ${opcionesPreparar(a)}
             ${estadoAlerta.groq ? '' : '<p class="ajuste__ayuda empleo-alerta__ojo">Sin IA en el servidor te llegan todas las ofertas nuevas, sin puntuar. Para que solo te avise de las que encajan, activa tu clave de OpenAI o de Groq en el servidor (Ajustes → Avisos).</p>'}
-            <div class="empleo-alerta__acciones"><button type="button" class="boton" id="alerta-probar" data-bloquear>${icono('actualizar', 15)} Probar ahora</button></div>`
+`
           : ''
       }
       ${
@@ -697,7 +703,6 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     caja.querySelector('#alerta-preparar')?.addEventListener('change', (e) => tarea(() => guardarAlerta({ preparar: Number(e.target.value) })));
     caja.querySelector('#alerta-presupuesto')?.addEventListener('change', (e) => tarea(() => guardarAlerta({ presupuesto: Number(e.target.value) })));
     caja.querySelector('#alerta-investigar')?.addEventListener('change', (e) => tarea(() => guardarAlerta({ investigar: e.target.checked })));
-    caja.querySelector('#alerta-probar')?.addEventListener('click', () => tarea(probarAlerta));
   }
 
   // Guarda la alerta con la búsqueda de arriba y el resumen del CV (para puntuar).
@@ -730,22 +735,86 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     pintarAlerta(cambios.activa === true ? `activada: te aviso cada día a las ${estadoAlerta.alerta.hora}` : cambios.activa === false ? 'alerta desactivada' : 'alerta guardada');
   }
 
-  async function probarAlerta() {
-    progreso('Buscando ofertas nuevas, como hará la alerta cada mañana…');
-    const { ultimas } = await alertas.probarAlerta();
-    estadoAlerta = { ...estadoAlerta, ultimas };
-    if (incorporarUltimas(ultimas)) {
+  // ---------- Buscar y preparar candidaturas, ya ----------
+  // Con el servidor (y su IA): busca la última semana, también entre lo ya visto,
+  // y deja en cola las mejores; el servidor prepara una por minuto aunque cierres
+  // la app y avisa al móvil. Sin servidor, se hace aquí mismo, una detrás de otra.
+  const cuantasPreparar = () => alertaActual().preparar || 2;
+  const servidorConIA = () => Boolean(estadoAlerta?.claves ? estadoAlerta.claves.groq || estadoAlerta.claves.openai : estadoAlerta?.groq);
+
+  async function buscarYPreparar() {
+    datos.preferencias = preferenciasDelFormulario();
+    if (!datos.preferencias.puestos) {
+      contenedor.querySelector('#empleo-busqueda [name="puestos"]')?.focus();
+      throw new Error('Escribe arriba qué puesto buscas.');
+    }
+    if (alertas && !estadoAlerta) await cargarAlerta();
+    if (alertas?.ahora && !estadoAlerta?.error && servidorConIA()) return prepararEnServidor();
+    return prepararAqui();
+  }
+
+  async function prepararEnServidor() {
+    progreso('Buscando ofertas de la última semana (también las que ya viste)…');
+    if (!(await guardarAlerta({}, { callada: true }))) throw new Error('No he podido guardar la búsqueda en el servidor. Prueba de nuevo.');
+    const excluir = [...new Set(datos.postulaciones.flatMap((p) => [p.oferta.url, p.oferta.id]).filter(Boolean))];
+    const r = await alertas.ahora({ preparar: cuantasPreparar(), excluir });
+    estadoAlerta = { ...estadoAlerta, ultimas: r.ultimas, enCola: r.enCola };
+    if (incorporarUltimas(r.ultimas)) {
       await guardar();
       pintarOfertas();
     }
+    const total = r.ultimas.ofertas.length;
+    pintarCandidaturas();
     pintarAlerta(
-      ultimas.ofertas.length
-        ? ultimas.ofertas.length === 1
-          ? `1 oferta nueva${ultimas.evaluadas ? ' que encaja' : ''}: está abajo, marcada como «nueva»`
-          : `${ultimas.ofertas.length} ofertas nuevas${ultimas.evaluadas ? ' que encajan' : ''}: están abajo, marcadas como «nueva»`
-        : 'nada nuevo que encaje desde la última vez; mañana vuelvo a mirar',
+      r.preparando
+        ? `${total} ${total === 1 ? 'oferta' : 'ofertas'} · preparando ${r.preparando === 1 ? 'la mejor' : `las ${r.preparando} mejores`} (≈ 1 min cada una); te aviso al móvil`
+        : total
+          ? `${total} ${total === 1 ? 'oferta' : 'ofertas'}, pero ninguna encaja lo bastante para preparar candidatura`
+          : 'no hay ofertas nuevas para ti esta semana; prueba con otros puestos o más zonas',
     );
-    if (ultimas.ofertas.length) contenedor.querySelector('#empleo-ofertas')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    if (r.enCola) vigilarCola();
+    contenedor.querySelector('#empleo-candidaturas')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+
+  // Mientras el servidor prepara, la app va recogiendo las que estén listas.
+  let vigilancia = null;
+  function vigilarCola(espera = 40_000) {
+    clearTimeout(vigilancia);
+    vigilancia = setTimeout(async () => {
+      if (!datos?.cv || !alertas) return;
+      try {
+        const listas = await importarPreparadas();
+        const estado = await alertas.alerta();
+        estadoAlerta = { ...estadoAlerta, ...estado };
+        if (listas) {
+          await guardar();
+          pintarCandidaturas();
+        }
+        if (estado.enCola > 0) vigilarCola();
+        else {
+          pintarCandidaturas();
+          pintarAlerta('candidaturas listas: están en «tus candidaturas»');
+        }
+      } catch {
+        vigilarCola(90_000);
+      }
+    }, espera);
+  }
+
+  async function prepararAqui() {
+    await buscar();
+    const cuantas = cuantasPreparar();
+    const elegidas = datos.ofertas
+      .filter((o) => o.puerta !== 'no' && !candidaturaDe(o))
+      .sort((a, b) => (b.encaje ?? -1) - (a.encaje ?? -1))
+      .slice(0, cuantas);
+    if (!elegidas.length) return mensaje('No hay ofertas nuevas que encajen para preparar.');
+    for (const [i, oferta] of elegidas.entries()) {
+      const prefijo = `Candidatura ${i + 1} de ${elegidas.length} · ${oferta.puesto}: `;
+      await crearCandidatura(oferta, { origen: 'automatica', alPaso: (texto) => progreso(prefijo + texto) });
+      pintarCandidaturas();
+    }
+    contenedor.querySelector('#empleo-candidaturas')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 
   async function buscar() {
@@ -838,13 +907,17 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
   function pintarCandidaturas() {
     const seccion = contenedor.querySelector('#empleo-candidaturas');
     if (!seccion) return;
+    const enCola = estadoAlerta?.enCola ?? 0;
+    const preparando = enCola
+      ? `<p class="empleo-mono empleo-preparando" role="status"><span class="empleo-progreso__punto"></span>preparando ${enCola === 1 ? '1 candidatura' : `${enCola} candidaturas`} en el servidor · aparecerán aquí</p>`
+      : '';
     if (!datos.postulaciones.length) {
-      seccion.innerHTML = '';
+      seccion.innerHTML = preparando;
       return;
     }
-    seccion.innerHTML = `
+    seccion.innerHTML = `${preparando}
       <p class="empleo-etiqueta">(tus candidaturas · ${datos.postulaciones.length}${
-        datos.postulaciones.some((p) => !p.revisada) ? ` · ${datos.postulaciones.filter((p) => !p.revisada).length} preparadas esta mañana` : ''
+        datos.postulaciones.some((p) => !p.revisada) ? ` · ${datos.postulaciones.filter((p) => !p.revisada).length} por revisar` : ''
       })</p>
       <ul class="filas">
         ${datos.postulaciones
@@ -880,9 +953,14 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
   async function candidatura(oferta, { yaLeida = false, rehacer = null } = {}) {
     const hecha = !rehacer && candidaturaDe(oferta);
     if (hecha) return detalle(hecha);
+    detalle(await crearCandidatura(oferta, { yaLeida, rehacer }));
+  }
+
+  // origen 'automatica': la dejó hecha «Buscar y preparar» y sale como «Lista para revisar».
+  async function crearCandidatura(oferta, { yaLeida = false, rehacer = null, origen = 'manual', alPaso = progreso } = {}) {
     let completa = oferta;
     if (!yaLeida && oferta.url && !oferta.descripcion) {
-      progreso('Leyendo la oferta completa…');
+      alPaso('Leyendo la oferta completa…');
       try {
         const leida = await leerOferta(ia, oferta.url, { detalle: detallePortal });
         completa = { ...oferta, descripcion: leida.descripcion, requisitos: leida.requisitos.length ? leida.requisitos : oferta.requisitos };
@@ -895,7 +973,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       investigar: 'El agente revisor investiga la empresa…',
       revisar: 'El agente revisor lo critica y lo pule…',
     };
-    const resultado = await adaptarCV(ia, datos.cv.perfil, completa, { alPaso: (p) => progreso(pasos[p]) });
+    const resultado = await adaptarCV(ia, datos.cv.perfil, completa, { alPaso: (p) => alPaso(pasos[p]) });
     const nueva = {
       id: rehacer?.id ?? `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       fecha: Date.now(),
@@ -904,10 +982,12 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       ...resultado,
       entrevista: null,
       envio: rehacer?.envio ?? null,
+      origen: rehacer ? rehacer.origen : origen,
+      revisada: origen !== 'automatica',
     };
     datos.postulaciones = [nueva, ...datos.postulaciones.filter((x) => x.id !== nueva.id)].slice(0, MAX_POSTULACIONES);
     await guardar();
-    detalle(nueva);
+    return nueva;
   }
 
   // ---------- Una candidatura: CV, carta y notas del revisor ----------
@@ -1063,7 +1143,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
             </select>
           </div>
           <p class="empleo-mono candidatura__envio" id="cand-enviada"${p.envio ? '' : ' hidden'}>${escapar(textoEnvio(p.envio))}</p>
-          ${p.origen === 'automatica' ? '<p class="ajuste__ayuda">La preparé esta mañana con la alerta. Repásala antes de enviarla.</p>' : ''}
+          ${p.origen === 'automatica' ? '<p class="ajuste__ayuda">La preparé yo sola, sin enviar nada. Repásala antes de enviarla.</p>' : ''}
         </header>
         <div class="segmentado candidatura__pestanas" role="tablist">
           <button type="button" role="tab" data-pestana="cv" aria-pressed="true">CV</button>

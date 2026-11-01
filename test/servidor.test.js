@@ -862,3 +862,59 @@ test('modos de IA en el servidor: Eficiente reparte entre Groq y GPT-6 Luna, Aho
     globalThis.fetch = base;
   }
 });
+
+test('buscar y preparar ahora: busca también entre lo ya visto, salta lo que ya tiene candidatura y prepara al minuto', async () => {
+  const env = entorno();
+  const { token } = await vincular(env);
+  internet();
+  await pedir(env, '/groq', { metodo: 'PUT', token, cuerpo: { clave: 'gsk_abcdefghijklmnopqrstuvwxyz0123' } });
+  const perfil = { nombre: 'Lucía Prieto', email: 'lucia@ejemplo.es', titular: 'Frontend', habilidades: ['React'], experiencia: [{ puesto: 'Frontend', empresa: 'Faro', logros: ['Migré a React'] }] };
+  await pedir(env, '/empleo/alerta', { metodo: 'PUT', token, cuerpo: { activa: false, puestos: 'frontend', zonas: ['Valencia'], preparar: 0, perfil } });
+  internet();
+  const base = globalThis.fetch;
+  const pasos = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.startsWith('https://www.linkedin.com/')) return new Response('');
+    if (u.startsWith('https://freehire.me/')) {
+      assert.match(u, /posted_within_days=30/);
+      return Response.json({ data: ['a', 'b', 'c'].map((x) => ({ public_slug: `h-${x}`, title: `Frontend ${x}`, company: `Empresa ${x}`, location: 'Valencia', url: `https://freehire.me/jobs/h-${x}`, description: 'React' })) });
+    }
+    if (u.startsWith('https://api.groq.com/')) {
+      const [sistema, usuario] = JSON.parse(init.body).messages.map((m) => m.content);
+      if (/evaluaciones/.test(sistema)) {
+        const ids = [...usuario.matchAll(/<oferta id="([^"]+)">/g)].map((m) => m[1]);
+        return Response.json({ choices: [{ message: { content: JSON.stringify({ evaluaciones: ids.map((id, i) => ({ id, puerta: 'pasa', tecnica: 90 - i * 10, experiencia: 80, cultura: 70, carrera: 80 })) }) } }] });
+      }
+      pasos.push(/revisor/.test(sistema) ? 'revisar' : /Investiga/.test(sistema) ? 'investigar' : 'redactar');
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ idioma: 'es', cv: { nombre: 'Lucía Prieto', experiencia: [{ puesto: 'Frontend', empresa: 'Faro', logros: ['Migré a React'] }] }, carta: 'Hola.', palabrasClave: ['React'], encaje: 80 }) } }] });
+    }
+    return base(url, init);
+  };
+  try {
+    // Ya se habían visto todas (la alerta de otro día): «Probar» no encuentra nada nuevo…
+    const probada = await (await pedir(env, '/empleo/alerta/probar', { metodo: 'POST', token })).json();
+    assert.equal(probada.ultimas.ofertas.length, 3);
+    const otra = await (await pedir(env, '/empleo/alerta/probar', { metodo: 'POST', token })).json();
+    assert.equal(otra.ultimas.ofertas.length, 0);
+    // …pero «Buscar y preparar» sí: menos la que ya tiene candidatura en la app.
+    const r = await (await pedir(env, '/empleo/alerta/ahora', { metodo: 'POST', token, cuerpo: { preparar: 2, excluir: ['https://freehire.me/jobs/h-a'] } })).json();
+    assert.deepEqual(r.ultimas.ofertas.map((o) => o.empresa).sort(), ['Empresa b', 'Empresa c']);
+    assert.equal(r.preparando, 2);
+    assert.equal(r.enCola, 2);
+    assert.equal((await (await pedir(env, '/empleo/alerta', { token })).json()).enCola, 2);
+    // Repetirlo no duplica la cola.
+    const otraVez = await (await pedir(env, '/empleo/alerta/ahora', { metodo: 'POST', token, cuerpo: { preparar: 2, excluir: ['https://freehire.me/jobs/h-a'] } })).json();
+    assert.equal(otraVez.enCola, 2);
+
+    const ahora = Date.now();
+    await revisar(env, ahora + 60_000);
+    await revisar(env, ahora + 120_000);
+    assert.deepEqual(pasos, ['redactar', 'investigar', 'revisar', 'redactar', 'investigar', 'revisar']);
+    const { preparadas } = await (await pedir(env, '/empleo/preparadas', { token })).json();
+    assert.equal(preparadas.length, 2);
+    assert.equal((await (await pedir(env, '/empleo/alerta', { token })).json()).enCola, 0);
+  } finally {
+    globalThis.fetch = base;
+  }
+});

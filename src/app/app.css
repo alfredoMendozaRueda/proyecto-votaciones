@@ -6097,3 +6097,23 @@ html {
   padding-left: 10px;
   border-left: 2px solid var(--kin-hondo);
 }
+
+/* ---------- Empleo: buscar y preparar candidaturas ---------- */
+
+.empleo-buscar-acciones {
+  display: grid;
+  gap: 8px;
+}
+
+.empleo-preparar__ayuda {
+  margin: 0;
+}
+
+.empleo-preparando {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--kin-vivo);
+}
