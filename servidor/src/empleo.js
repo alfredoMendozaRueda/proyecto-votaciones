@@ -123,8 +123,9 @@ export async function alertaEmpleo(n, { avisar = true, hacerFetch = fetch, manua
     ].filter(Boolean));
     ofertas = ofertas.filter((o) => !yaHechas.has(o.id) && !yaHechas.has(o.url)).slice(0, MAX_NUEVAS);
   } else {
-    const vistas = await n.avisados(ofertas.map((o) => `oferta:${o.id}`));
-    ofertas = ofertas.filter((o) => !vistas.has(`oferta:${o.id}`)).slice(0, MAX_NUEVAS);
+    // Antes el id se guardaba cortado a 40 letras: se miran las dos formas para no repetir avisos.
+    const vistas = await n.avisados(ofertas.flatMap((o) => [`oferta:${o.id}`, `oferta:${o.id.slice(0, 40)}`]));
+    ofertas = ofertas.filter((o) => !vistas.has(`oferta:${o.id}`) && !vistas.has(`oferta:${o.id.slice(0, 40)}`)).slice(0, MAX_NUEVAS);
   }
   await n.marcar(ofertas.map((o) => `oferta:${o.id}`));
 

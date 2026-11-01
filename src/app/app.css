@@ -6932,3 +6932,64 @@ html {
   height: 100%;
   max-height: none;
 }
+
+/* Ofertas: filtro por procedencia y enlace al sitio original. */
+.filtros.filtros--origen {
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 0 14px;
+  border-bottom: 0;
+}
+
+.filtros.filtros--origen button,
+:root.movil .filtros.filtros--origen button {
+  padding: 5px 12px;
+  border: 1px solid var(--linea);
+  border-radius: 999px;
+  color: var(--texto-2);
+  font-size: 12.5px;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+:root.movil .filtros.filtros--origen button {
+  padding: 7px 13px;
+}
+
+.filtros.filtros--origen button:hover {
+  border-color: var(--acento-hondo);
+  color: var(--texto);
+}
+
+.filtros.filtros--origen button[aria-pressed='true'] {
+  border-color: var(--acento);
+  background: var(--acento-velo);
+  color: var(--texto);
+}
+
+.filtros__n {
+  margin-left: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--texto-3);
+}
+
+.filtros button[aria-pressed='true'] .filtros__n {
+  color: var(--texto-2);
+}
+
+.oferta__otro {
+  align-self: center;
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  color: var(--texto-3);
+  font-size: 12.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.oferta__otro:hover,
+.oferta__otro:focus-visible {
+  color: var(--texto);
+}

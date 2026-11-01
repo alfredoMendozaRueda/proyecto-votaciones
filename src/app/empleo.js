@@ -13,6 +13,7 @@ import {
   comprobarATS,
   normalizarDatosEmpleo,
   normalizarOferta,
+  origenDe,
   normalizarPreferencias,
   MAX_POSTULACIONES,
   MAX_ZONAS,
@@ -905,7 +906,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
       <article class="oferta" data-id="${escapar(o.id)}">
         <div class="oferta__num" aria-hidden="true">${dosCifras(i + 1)}</div>
         <div class="oferta__cuerpo">
-          <p class="empleo-mono oferta__fuente">${escapar([o.fuente, o.publicada].filter(Boolean).join(' · '))}</p>
+          <p class="empleo-mono oferta__fuente">${escapar([procedencia(o), o.publicada].filter(Boolean).join(' · '))}</p>
           <h4 class="oferta__puesto">${escapar(o.puesto)}</h4>
           <p class="oferta__empresa">${escapar([o.empresa, o.ubicacion].filter(Boolean).join(' · '))}</p>
           <ul class="chips">
@@ -926,11 +927,30 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
                 ? `<button type="button" class="boton boton--primario" data-ver="${escapar(hecha.id)}">${icono('documento', 15)} Ver mi candidatura</button>`
                 : `<button type="button" class="boton boton--primario" data-adaptar="${escapar(o.id)}" data-bloquear>${icono('chispa', 15)} Adaptar CV</button>`
             }
-            ${o.url ? `<button type="button" class="boton" data-abrir="${escapar(o.url)}">${icono('enlace', 15)} Ver oferta</button>` : ''}
+            ${
+              o.url
+                ? o.enlace === 'busqueda'
+                  ? `<button type="button" class="boton" data-abrir="${escapar(o.url)}" title="La IA no dio un enlace comprobado: se busca la oferta">${icono('buscar', 15)} Buscar la oferta</button>`
+                  : `<button type="button" class="boton" data-abrir="${escapar(o.url)}">${icono('enlace', 15)} Ver oferta</button>`
+                : ''
+            }
+            ${o.urlOrigen ? `<button type="button" class="oferta__otro" data-abrir="${escapar(o.urlOrigen)}">en ${escapar(origenDeOferta(o))}</button>` : ''}
           </div>
         </div>
       </article>`;
   }
+
+  // «WhatJobs · vía freehire», «InfoJobs · búsqueda web», «LinkedIn»…
+  const origenDeOferta = (o) => o.origen || origenDe(o) || 'Otra';
+  function procedencia(o) {
+    const origen = origenDeOferta(o);
+    if (origen === 'Web') return 'búsqueda web';
+    const via = o.fuente === 'web' ? 'búsqueda web' : o.fuente && o.fuente.toLowerCase() !== origen.toLowerCase() ? `vía ${o.fuente}` : '';
+    return [origen, via].filter(Boolean).join(' · ');
+  }
+
+  // Filtro por procedencia (LinkedIn, InfoJobs…): se recuerda mientras la app esté abierta.
+  let filtroOrigen = '';
 
   function pintarOfertas() {
     const seccion = contenedor.querySelector('#empleo-ofertas');
@@ -939,12 +959,32 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
       seccion.innerHTML = '';
       return;
     }
+    const cuentas = new Map();
+    for (const o of datos.ofertas) {
+      const origen = origenDeOferta(o);
+      cuentas.set(origen, (cuentas.get(origen) ?? 0) + 1);
+    }
+    if (filtroOrigen && !cuentas.has(filtroOrigen)) filtroOrigen = '';
+    const origenes = [...cuentas].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es'));
+    const visibles = filtroOrigen ? datos.ofertas.filter((o) => origenDeOferta(o) === filtroOrigen) : datos.ofertas;
+    const boton = (valor, nombre, n) => `<button type="button" data-origen="${escapar(valor)}" aria-pressed="${filtroOrigen === valor}">${escapar(nombre)} <span class="filtros__n">${n}</span></button>`;
     seccion.innerHTML = `
       <p class="empleo-etiqueta">(ofertas · ${fechaCorta(datos.busqueda || Date.now())})</p>
-      ${datos.ofertas.map(tarjetaOferta).join('')}
+      ${
+        origenes.length > 1
+          ? `<div class="filtros filtros--origen" role="group" aria-label="Filtrar ofertas por procedencia">${boton('', 'Todas', datos.ofertas.length)}${origenes.map(([nombre, n]) => boton(nombre, nombre, n)).join('')}</div>`
+          : ''
+      }
+      ${visibles.map(tarjetaOferta).join('')}
       <p class="ajuste__ayuda apartado__nota">${
         datos.avisosBusqueda?.length ? `${escapar(datos.avisosBusqueda.join(' '))} ` : ''
-      }Ofertas de LinkedIn y freehire (los buscadores de ai-job-search) y de la búsqueda web de la IA, puntuadas con su marco de evaluación. Abre la oferta antes de enviar nada.</p>`;
+      }Ofertas de LinkedIn, freehire (que reúne InfoJobs, WhatJobs, Factorial…) y la búsqueda web de la IA. Las de la web solo llevan su enlace si la IA visitó esa página; si no, «Buscar la oferta» te la busca. Ábrela antes de enviar nada.</p>`;
+    seccion.querySelectorAll('[data-origen]').forEach((b) =>
+      b.addEventListener('click', () => {
+        filtroOrigen = b.dataset.origen;
+        pintarOfertas();
+      }),
+    );
     seccion.querySelectorAll('[data-adaptar]').forEach((b) =>
       b.addEventListener('click', () => {
         const oferta = datos.ofertas.find((o) => o.id === b.dataset.adaptar);

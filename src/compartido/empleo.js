@@ -168,6 +168,68 @@ const textoPreferencias = (pref, perfil) =>
 
 // ---------- Ofertas ----------
 
+// ---------- De dónde viene cada oferta ----------
+// «origen» es el sitio donde se publicó (LinkedIn, InfoJobs, Factorial…);
+// «fuente» es por dónde la encontramos (LinkedIn, freehire o la búsqueda web).
+const ORIGENES = [
+  [/linkedin/, 'LinkedIn'],
+  [/whatjobs/, 'WhatJobs'],
+  [/infojobs/, 'InfoJobs'],
+  [/indeed/, 'Indeed'],
+  [/tecnoempleo/, 'Tecnoempleo'],
+  [/glassdoor/, 'Glassdoor'],
+  [/welcometothejungle|wttj/, 'Welcome to the Jungle'],
+  [/getmanfred|manfred/, 'Manfred'],
+  [/talent\.com|^talent$/, 'Talent.com'],
+  [/factorial/, 'Factorial'],
+  [/greenhouse/, 'Greenhouse'],
+  [/lever\.co|^lever$/, 'Lever'],
+  [/ashby/, 'Ashby'],
+  [/workable/, 'Workable'],
+  [/teamtailor/, 'Teamtailor'],
+  [/smartrecruiters/, 'SmartRecruiters'],
+  [/personio/, 'Personio'],
+  [/recruitee/, 'Recruitee'],
+  [/manatal/, 'Manatal'],
+  [/spainjobs/, 'SpainJobs'],
+  [/jobfluent/, 'JobFluent'],
+  [/remoteok/, 'Remote OK'],
+  [/weworkremotely/, 'We Work Remotely'],
+  [/freehire/, 'freehire'],
+];
+const hostDe = (url) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return '';
+  }
+};
+export function nombreOrigen(texto) {
+  const t = String(texto ?? '').toLowerCase();
+  if (!t) return '';
+  return ORIGENES.find(([re]) => re.test(t))?.[1] ?? '';
+}
+// El nombre del sitio donde se publicó: el que diga la fuente o, si no, el del dominio.
+export function origenDe({ origen, url, urlOrigen, fuente } = {}) {
+  const conocido = nombreOrigen(origen) || (origen && cadena(origen, 40));
+  if (conocido) return conocido;
+  const host = hostDe(urlOrigen || url);
+  const corto = host && !/freehire|google\./.test(host) ? host.split('.').slice(-2).join('.') : '';
+  return nombreOrigen(host) || corto || nombreOrigen(fuente) || (fuente === 'web' ? 'Web' : cadena(fuente, 40));
+}
+
+// Sin parámetros de seguimiento (utm_*, refId, trackingId…): el mismo enlace, limpio.
+export function limpiarUrl(u) {
+  const valida = urlValida(u);
+  if (!valida) return '';
+  const url = new URL(valida);
+  for (const k of [...url.searchParams.keys()]) {
+    if (/^(utm_|ref|tracking|trk|position|pageNum|geoID|src$|source$|fbclid|gclid)/i.test(k)) url.searchParams.delete(k);
+  }
+  url.hash = '';
+  return url.href.replace(/\?$/, '');
+}
+
 function idDe(texto) {
   let h = 2166136261;
   for (const c of texto) h = Math.imul(h ^ c.codePointAt(0), 16777619);
@@ -175,11 +237,23 @@ function idDe(texto) {
 }
 
 export function normalizarOferta(o = {}) {
-  const url = urlValida(o.url);
+  let url = urlValida(o.url);
+  let urlOrigen = limpiarUrl(o.urlOrigen);
+  const id = cadena(o.id, 120);
+  // Ofertas de freehire guardadas antes: el enlace era el del agregador (WhatJobs…),
+  // que muchas veces no lleva a la oferta. Ahora se enlaza su página en freehire.
+  // (Antes el id se cortaba a 40 letras: si está cortado, no se puede rehacer y se deja el original, limpio.)
+  if (id.startsWith('fh-') && url && !/^https:\/\/(?:[a-z0-9-]+\.)?freehire\.me\/jobs\//i.test(url)) {
+    urlOrigen ||= limpiarUrl(url);
+    url = id.length < 40 ? `https://freehire.me/jobs/${encodeURIComponent(id.slice(3))}` : urlOrigen;
+  }
+  // LinkedIn: siempre el enlace estándar de la oferta.
+  const li = url.match(/linkedin\.com\/jobs\/view\/(?:[^/?#]*-)?(\d{6,})/i)?.[1];
+  if (li) url = `https://www.linkedin.com/jobs/view/${li}`;
   const puesto = cadena(o.puesto, 160);
   const empresa = cadena(o.empresa, 120);
   return {
-    id: cadena(o.id, 40) || idDe(url || `${puesto}|${empresa}|${cadena(o.descripcion, 200)}`),
+    id: id || idDe(url || `${puesto}|${empresa}|${cadena(o.descripcion, 200)}`),
     puesto,
     empresa,
     ubicacion: cadena(o.ubicacion, 120),
@@ -188,6 +262,10 @@ export function normalizarOferta(o = {}) {
     publicada: cadena(o.publicada, 40),
     url,
     fuente: cadena(o.fuente, 60) || (url ? new URL(url).hostname.replace(/^www\./, '') : ''),
+    origen: origenDe({ origen: o.origen, url, urlOrigen, fuente: o.fuente }),
+    urlOrigen: urlOrigen && urlOrigen !== url ? urlOrigen : '',
+    // «busqueda»: la IA no dio un enlace comprobable y se ofrece buscar la oferta.
+    enlace: o.enlace === 'busqueda' ? 'busqueda' : '',
     resumen: cadena(o.resumen, 600),
     requisitos: lista(o.requisitos, 15, 200),
     descripcion: typeof o.descripcion === 'string' ? o.descripcion.trim().slice(0, 12000) : '',
@@ -230,7 +308,28 @@ async function buscarConIA(ia, perfil, pref, enfoque) {
     max: 6000,
   });
   const datos = extraerJson(r.texto);
-  return (Array.isArray(datos) ? datos : datos.ofertas ?? []).map((o) => normalizarOferta({ ...o, fuente: o.fuente || 'web' }));
+  return (Array.isArray(datos) ? datos : datos.ofertas ?? []).map((o) => ofertaDeLaWeb(o, r.fuentes ?? []));
+}
+
+// Una oferta de la búsqueda web solo conserva su enlace si está entre las páginas
+// que la IA visitó de verdad (sus fuentes): si no, podría ser inventado, y se
+// cambia por una búsqueda de la oferta. El origen (InfoJobs, Indeed…) se respeta.
+export function ofertaDeLaWeb(o, fuentes = []) {
+  const citadas = fuentes.map((f) => limpiarUrl(f.url)).filter(Boolean);
+  const url = limpiarUrl(o.url);
+  // Sin ningún enlace no es una oferta concreta: se descarta (buscarOfertas solo toma las que tienen).
+  if (!url) return normalizarOferta({ ...o, url: '', fuente: 'web' });
+  const comprobada = Boolean(url) && citadas.some((c) => c === url || c.startsWith(`${url}/`) || url.startsWith(`${c}/`) || c.split('?')[0] === url.split('?')[0]);
+  const origen = nombreOrigen(o.origen) || nombreOrigen(hostDe(url)) || nombreOrigen(o.fuente) || (comprobada ? '' : 'Web');
+  if (comprobada) return normalizarOferta({ ...o, url, fuente: 'web', origen });
+  const consulta = [o.puesto, o.empresa, origen !== 'Web' ? origen : '', 'oferta de empleo'].filter(Boolean).join(' ');
+  return normalizarOferta({
+    ...o,
+    url: `https://www.google.com/search?q=${encodeURIComponent(consulta)}`,
+    enlace: 'busqueda',
+    fuente: 'web',
+    origen,
+  });
 }
 
 export async function buscarOfertas(ia, perfil, preferencias, { portales = null, alPaso = () => {} } = {}) {

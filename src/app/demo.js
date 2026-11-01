@@ -699,7 +699,13 @@ export function crearDemo() {
         empleo: {
           async buscar() {
             await new Promise((r) => setTimeout(r, 600));
-            return { ofertas: OFERTAS_DEMO.map((o, i) => ({ ...o, id: `demo-${i}`, fuente: i === 1 ? 'freehire' : 'LinkedIn' })), errores: [] };
+            // Procedencias variadas para ver el filtro: LinkedIn, y WhatJobs e InfoJobs a través de freehire.
+            const vias = [
+              { fuente: 'LinkedIn', origen: 'LinkedIn' },
+              { fuente: 'freehire', origen: 'whatjobs-es', urlOrigen: 'https://es.whatjobs.com/ejemplo/hojaroja?utm_source=freehire' },
+              { fuente: 'freehire', origen: 'infojobs', urlOrigen: 'https://www.infojobs.net/ejemplo/nubeclara' },
+            ];
+            return { ofertas: OFERTAS_DEMO.map((o, i) => ({ ...o, id: `demo-${i}`, ...vias[i % vias.length] })), errores: [] };
           },
           async alerta() {
             const enCola = preparadasDemo.filter((p) => p.fecha > Date.now()).length;
@@ -878,6 +884,7 @@ const OFERTA_ALERTA_DEMO = {
   publicada: 'hoy',
   url: 'https://empleo.ejemplo.es/senda/frontend',
   fuente: 'LinkedIn',
+  origen: 'LinkedIn',
   resumen: 'Planificador de rutas para repartidores. Equipo pequeño y producto propio.',
   requisitos: ['React', 'TypeScript', 'Accesibilidad'],
   encaje: 81,

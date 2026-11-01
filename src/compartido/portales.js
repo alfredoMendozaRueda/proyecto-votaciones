@@ -161,7 +161,6 @@ export function leerTarjetasLinkedIn(html) {
   for (const trozo of String(html).split(/data-entity-urn="urn:li:jobPosting:/).slice(1)) {
     const id = trozo.match(/^(\d+)/)?.[1];
     if (!id) continue;
-    const enlace = trozo.match(/class="base-card__full-link[^"]*"[^>]*href="([^"]+)"/i);
     let puesto = limpio(trozo.match(/class="base-search-card__title"[^>]*>([\s\S]*?)<\/h3>/i)?.[1] ?? '');
     if (!puesto) puesto = limpio(trozo.match(/class="sr-only"[^>]*>([\s\S]*?)<\/span>/i)?.[1] ?? '');
     if (!puesto) continue;
@@ -175,8 +174,10 @@ export function leerTarjetasLinkedIn(html) {
         empresa,
         ubicacion: lugar,
         publicada: fecha,
-        url: enlace ? decodificarEntidades(enlace[1]).split('?')[0] : `https://www.linkedin.com/jobs/view/${id}`,
+        // El enlace estándar (el de la tarjeta lleva el subdominio del país y parámetros de seguimiento).
+        url: `https://www.linkedin.com/jobs/view/${id}`,
         fuente: 'LinkedIn',
+        origen: 'LinkedIn',
       }),
     );
   }
@@ -271,8 +272,12 @@ export async function buscarFreehire({ palabras, ubicacion, pais = null, dias = 
       modalidad: { remote: 'remoto', hybrid: 'híbrido', onsite: 'presencial' }[j.work_mode] ?? '',
       salario,
       publicada: String(j.posted_at ?? '').slice(0, 10),
-      url: j.url,
+      // Su página en freehire siempre lleva a la oferta; el enlace original (j.url) suele ser
+      // una redirección de un agregador (WhatJobs…) y se guarda aparte, limpio.
+      url: `${URL_FREEHIRE}/jobs/${encodeURIComponent(j.public_slug)}`,
+      urlOrigen: j.url ?? '',
       fuente: 'freehire',
+      origen: j.source ?? '',
       requisitos: (j.skills ?? []).slice(0, 12),
       descripcion: textoDeHtml(j.description ?? '').slice(0, 12000),
     });
@@ -284,7 +289,16 @@ export async function detalleFreehire(slug, hacerFetch = fetch) {
   if (r.status === 404) return null;
   if (!r.ok) throw new Error(`freehire respondió ${r.status}`);
   const j = (await r.json()).data ?? {};
-  return quitarInvisibles({ puesto: decodificarEntidades(j.title ?? ''), empresa: j.company ?? '', ubicacion: j.location ?? '', url: j.url, fuente: 'freehire', descripcion: textoDeHtml(j.description ?? '') });
+  return quitarInvisibles({
+    puesto: decodificarEntidades(j.title ?? ''),
+    empresa: j.company ?? '',
+    ubicacion: j.location ?? '',
+    url: `${URL_FREEHIRE}/jobs/${encodeURIComponent(slug)}`,
+    urlOrigen: j.url ?? '',
+    fuente: 'freehire',
+    origen: j.source ?? '',
+    descripcion: textoDeHtml(j.description ?? ''),
+  });
 }
 export const slugFreehire = (url) => String(url ?? '').match(/^https:\/\/(?:[a-z0-9-]+\.)?freehire\.me\/jobs\/([a-z0-9-]+)/i)?.[1] ?? null;
 
