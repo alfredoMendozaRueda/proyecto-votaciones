@@ -50,10 +50,21 @@ export function prepararIndicador(barra) {
       (b) => b.offsetParent && (b.classList.contains('activo') || b.getAttribute('aria-selected') === 'true'),
     );
     if (!activo || !barra.offsetWidth) return;
-    const ancho = Math.max(18, activo.offsetWidth * 0.42);
     const primera = !raya.classList.contains('lista');
-    raya.style.width = `${ancho}px`;
-    raya.style.transform = `translateX(${activo.offsetLeft + (activo.offsetWidth - ancho) / 2}px)`;
+    // En escritorio la barra es un riel vertical: la raya va a su izquierda y baja.
+    const vertical = getComputedStyle(barra).flexDirection === 'column';
+    raya.classList.toggle('vertical', vertical);
+    if (vertical) {
+      const alto = Math.max(18, activo.offsetHeight * 0.5);
+      raya.style.width = '';
+      raya.style.height = `${alto}px`;
+      raya.style.transform = `translateY(${activo.offsetTop + (activo.offsetHeight - alto) / 2}px)`;
+    } else {
+      const ancho = Math.max(18, activo.offsetWidth * 0.42);
+      raya.style.height = '';
+      raya.style.width = `${ancho}px`;
+      raya.style.transform = `translateX(${activo.offsetLeft + (activo.offsetWidth - ancho) / 2}px)`;
+    }
     // La primera vez se coloca sin deslizarse desde la izquierda.
     if (primera) {
       void raya.offsetWidth;

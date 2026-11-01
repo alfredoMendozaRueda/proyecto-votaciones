@@ -132,7 +132,7 @@ async function entregarPdf(bytes, nombre) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-export function crearEmpleo({ contenedor, api, abrirAjustes }) {
+export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {} }) {
   let datos = null;
   let ocupado = false;
   let pintado = false;
@@ -157,6 +157,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
   }
 
   async function guardar() {
+    alCambiar(datos);
     try {
       await api.empleo.guardar(datos);
     } catch (error) {

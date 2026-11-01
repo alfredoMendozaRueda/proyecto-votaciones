@@ -43,7 +43,7 @@ const URL_DESARROLLO = process.env.KITSUNE_DEV_URL;
 
 // Medidas del zorro según el tamaño elegido y del diálogo que aparece encima.
 const ZORRO = { pequeno: [210, 240], mediano: [260, 300], grande: [330, 380] };
-const DIALOGO = [430, 480];
+const DIALOGO = [480, 520];
 
 let ventana = null;
 let bandeja = null;

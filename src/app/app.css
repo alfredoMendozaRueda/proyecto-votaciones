@@ -2610,11 +2610,6 @@ html {
   overflow: visible;
 }
 
-:root.movil .apartados [data-vista='memoria'],
-:root.movil .apartados [data-vista='historial'],
-:root.movil .apartados [data-vista='empleo'] {
-  display: none;
-}
 
 :root.movil .apartados button {
   flex: 1 1 0;
@@ -6229,4 +6224,289 @@ html {
 .encaje-comparado span {
   font-size: 12px;
   color: var(--texto-3);
+}
+
+
+/* ---------- Navegación: cinco apartados ---------- */
+
+/* Escritorio (Windows y navegador ancho): la barra pasa a un riel a la izquierda
+   y la altura entera queda para el contenido. */
+:root:not(.movil) .dialogo {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    'cab cab'
+    'riel sub'
+    'riel cuerpo';
+  width: 480px;
+  height: 520px;
+}
+
+:root:not(.movil) .dialogo__cabecera {
+  grid-area: cab;
+}
+
+:root:not(.movil) .subapartados {
+  grid-area: sub;
+}
+
+:root:not(.movil) .dialogo__cuerpo {
+  grid-area: cuerpo;
+}
+
+:root:not(.movil) .apartados {
+  grid-area: riel;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 8px 6px;
+  border-bottom: 0;
+  border-right: 1px solid var(--linea-suave);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+:root:not(.movil) .apartados button {
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  height: auto;
+  min-height: 52px;
+  padding: 7px 0 6px;
+  border-radius: 12px;
+}
+
+:root:not(.movil) .apartados button[aria-selected='true'] {
+  background: var(--rojo-velo);
+  color: var(--texto);
+}
+
+:root:not(.movil) .apartados button[aria-selected='true'] .apartado__icono {
+  color: var(--rojo-vivo);
+}
+
+:root:not(.movil) .apartado__nombre,
+:root:not(.movil) .apartados button[aria-selected='true'] .apartado__nombre {
+  max-width: none;
+  margin: 0;
+  opacity: 1;
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+
+:root:not(.movil) .apartados button[aria-selected='true'] .apartado__nombre {
+  font-weight: 700;
+}
+
+:root:not(.movil) .apartados .insignia,
+:root:not(.movil) .apartados button[aria-selected='true'] .insignia {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  margin: 0;
+}
+
+.apartados__indicador.vertical {
+  top: 0;
+  bottom: auto;
+  left: 0;
+  width: 3px;
+}
+
+/* Agenda: Calendario y Recordatorios. */
+.subapartados {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 3px;
+  margin: 8px 12px 0;
+  padding: 3px;
+  border-radius: 12px;
+  border: 1px solid var(--linea-suave);
+  background: var(--negro);
+}
+
+.subapartados button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--texto-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.subapartados button[aria-selected='true'] {
+  background: var(--carbon-3);
+  color: var(--texto);
+  box-shadow: inset 0 0 0 1px var(--rojo-hondo);
+}
+
+.subapartados .insignia {
+  min-width: 16px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+:root.movil .subapartados {
+  order: 1;
+}
+
+/* Botones del Chat en la cabecera (conversaciones, memoria, nueva). */
+.dialogo__cabecera .icono-boton[aria-pressed='true'] {
+  background: var(--rojo-velo);
+  color: var(--rojo-vivo);
+}
+
+/* ---------- Hoy ---------- */
+
+.hoy {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.hoy__saludo {
+  display: grid;
+  gap: 2px;
+  padding: 2px 2px 4px;
+}
+
+.hoy__saludo h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.hoy__saludo p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.hoy-dos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.hoy-tarjeta {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid var(--linea-suave);
+  border-radius: 15px;
+  background: var(--carbon);
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.12s ease, background-color 0.2s ease;
+}
+
+.hoy-tarjeta:hover {
+  border-color: var(--linea);
+}
+
+.hoy-tarjeta:active {
+  transform: scale(0.985);
+}
+
+.hoy-tarjeta:focus-visible {
+  outline: 2px solid var(--rojo);
+  outline-offset: 2px;
+}
+
+.hoy-tarjeta--destacada {
+  border-color: var(--rojo-hondo);
+  background: linear-gradient(160deg, rgba(210, 58, 44, 0.16), var(--carbon) 62%);
+}
+
+.hoy-tarjeta__etiqueta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--texto-3);
+}
+
+.hoy-tarjeta__etiqueta .icono {
+  color: var(--kin);
+}
+
+.hoy-tarjeta__valor {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.hoy-tarjeta__detalle {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--texto-2);
+  overflow-wrap: anywhere;
+}
+
+.hoy-tarjeta--cargando {
+  min-height: 74px;
+  cursor: default;
+  background: linear-gradient(100deg, var(--carbon) 30%, var(--carbon-3) 50%, var(--carbon) 70%) 0 0 / 300% 100%;
+  animation: hoy-cargando 1.4s ease-in-out infinite;
+}
+
+@keyframes hoy-cargando {
+  to {
+    background-position: -150% 0;
+  }
+}
+
+.hoy__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.hoy__acciones .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  cursor: pointer;
+}
+
+.chip--acento {
+  border-color: var(--rojo-hondo);
+  background: var(--rojo-velo);
+  color: var(--rojo-vivo);
+}
+
+.hoy__ayuda {
+  margin: 0;
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hoy-tarjeta--cargando {
+    animation: none;
+  }
 }

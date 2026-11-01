@@ -5,6 +5,7 @@ import { crearChat } from './chat.js';
 import { crearCorreo } from './correo.js';
 import { crearAjustes } from './ajustes.js';
 import { crearEmpleo } from './empleo.js';
+import { crearHoy } from './hoy.js';
 import { crearAgenda, crearRecordatorios, crearMemoria, crearHistorial } from './vistas.js';
 import { icono } from './iconos.js';
 import { trozosDeVoz, limpiarParaVoz } from '../compartido/voz.js';
@@ -29,14 +30,23 @@ const escena = document.getElementById('escena');
 const dialogo = document.getElementById('dialogo');
 const insignia = document.getElementById('insignia-correo');
 const insigniaRecordatorios = document.getElementById('insignia-recordatorios');
+const insigniaAgenda = document.getElementById('insignia-agenda');
+const insigniaEmpleo = document.getElementById('insignia-empleo');
 const vistas = Object.fromEntries(
-  ['chat', 'correo', 'agenda', 'recordatorios', 'memoria', 'historial', 'empleo', 'ajustes'].map((v) => [v, document.getElementById(`vista-${v}`)]),
+  ['hoy', 'chat', 'correo', 'agenda', 'recordatorios', 'memoria', 'historial', 'empleo', 'ajustes'].map((v) => [v, document.getElementById(`vista-${v}`)]),
 );
+// Los cinco apartados de la barra. Recordatorios vive dentro de Agenda; las
+// conversaciones y la memoria, dentro del Chat (botones de la cabecera).
 const pestanas = Object.fromEntries([...document.querySelectorAll('.apartados [data-vista]')].map((b) => [b.dataset.vista, b]));
+const PADRE = { recordatorios: 'agenda', historial: 'chat', memoria: 'chat' };
+const subAgenda = document.getElementById('sub-agenda');
+const botonesChat = [...document.querySelectorAll('.solo-chat')];
 for (const span of document.querySelectorAll('.apartado__icono')) span.innerHTML = icono(span.dataset.icono, 18);
 document.getElementById('boton-ajustes').innerHTML = icono('ajustes');
 document.getElementById('boton-cerrar').innerHTML = icono('cerrar');
 document.getElementById('boton-nueva').innerHTML = icono('conversacion');
+document.getElementById('boton-historial').innerHTML = icono('historial');
+document.getElementById('boton-memoria').innerHTML = icono('memoria');
 
 let ajustes;
 let kitsune;
@@ -47,7 +57,10 @@ let panelAjustes;
 let movil = null;
 // Apartados que se vuelven a pintar cada vez que se abren.
 const apartados = {};
-let vistaActual = 'chat';
+// Al abrir, Hoy: lo que tienes de un vistazo.
+let vistaActual = 'hoy';
+// Adónde vuelve la flecha de Ajustes.
+let vistaAntesDeAjustes = 'hoy';
 let noLeidos = 0;
 let ultimaActividad = Date.now();
 let ratonDentro = false;
@@ -68,19 +81,29 @@ function aplicarAjustes(a) {
 }
 
 // Orden de los apartados: la vista nueva entra desde el lado hacia el que se va.
-const ORDEN_VISTAS = ['chat', 'correo', 'agenda', 'recordatorios', 'memoria', 'historial', 'empleo', 'ajustes'];
+const ORDEN_VISTAS = ['hoy', 'chat', 'historial', 'memoria', 'correo', 'agenda', 'recordatorios', 'empleo', 'ajustes'];
 let moverIndicador = null;
 
 function mostrarVista(nombre, seccionAjustes = null) {
+  if (!vistas[nombre]) nombre = 'hoy';
   const anterior = vistaActual;
+  if (nombre === 'ajustes' && anterior !== 'ajustes') vistaAntesDeAjustes = anterior;
   vistaActual = nombre;
+  const destino = PADRE[nombre] ?? nombre;
   for (const [clave, vista] of Object.entries(vistas)) vista.hidden = clave !== nombre;
   for (const [clave, pestana] of Object.entries(pestanas)) {
-    pestana.setAttribute('aria-selected', String(clave === nombre));
-    pestana.tabIndex = clave === nombre ? 0 : -1;
+    pestana.setAttribute('aria-selected', String(clave === destino));
+    pestana.tabIndex = clave === destino ? 0 : -1;
   }
+  // Agenda: sus dos pestañas. Chat: sus botones de la cabecera.
+  subAgenda.hidden = destino !== 'agenda';
+  for (const b of subAgenda.querySelectorAll('[data-vista]')) b.setAttribute('aria-selected', String(b.dataset.vista === nombre));
+  for (const b of botonesChat) b.hidden = destino !== 'chat';
+  document.getElementById('boton-historial').setAttribute('aria-pressed', String(nombre === 'historial'));
+  document.getElementById('boton-memoria').setAttribute('aria-pressed', String(nombre === 'memoria'));
+  dialogo.dataset.apartado = destino;
   // El apartado activo, a la vista si la barra se ha desplazado (pantallas estrechas).
-  pestanas[nombre]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  pestanas[destino]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   document.getElementById('boton-ajustes').setAttribute('aria-pressed', String(nombre === 'ajustes'));
   movil?.alCambiarVista(nombre);
   moverIndicador?.();
@@ -96,14 +119,43 @@ async function contarRecordatoriosDeHoy() {
   const fin = new Date();
   fin.setHours(23, 59, 59, 999);
   const hoy = (pendientes ?? []).filter((r) => r.cuando <= fin.getTime()).length;
-  insigniaRecordatorios.hidden = hoy === 0;
-  if (insigniaRecordatorios.textContent !== String(hoy) && hoy) saltar(insigniaRecordatorios);
-  insigniaRecordatorios.textContent = String(hoy);
+  for (const el of [insigniaRecordatorios, insigniaAgenda]) {
+    el.hidden = hoy === 0;
+    if (el.textContent !== String(hoy) && hoy && el.offsetParent) saltar(el);
+    el.textContent = String(hoy);
+  }
   recordatoriosHoy = hoy;
   ponerInsigniaApp();
 }
 
+// Insignia de Empleo: candidaturas preparadas que aún no has abierto.
+function ponerInsigniaEmpleo(n) {
+  const cuantas = typeof n === 'number' ? n : (n?.postulaciones ?? []).filter((p) => !p.revisada).length;
+  if (insigniaEmpleo.textContent !== String(cuantas) && cuantas && insigniaEmpleo.offsetParent) saltar(insigniaEmpleo);
+  insigniaEmpleo.hidden = cuantas === 0;
+  insigniaEmpleo.textContent = String(cuantas);
+}
+
+// Ir a un apartado y, si se pide, hacer algo nada más llegar (desde las tarjetas de Hoy).
+function pulsarCuandoExista(contenedor, selector, plazo = 4000) {
+  const inicio = Date.now();
+  const mirar = () => {
+    const el = contenedor.querySelector(selector);
+    if (el && !el.disabled) return el.click();
+    if (Date.now() - inicio < plazo) setTimeout(mirar, 80);
+  };
+  mirar();
+}
+function ir(nombre, { buscarYPreparar = false, nuevo = false } = {}) {
+  if (nombre === 'correo' || nombre === 'agenda') api.correo.renovar?.();
+  mostrarVista(nombre);
+  if (buscarYPreparar) pulsarCuandoExista(vistas.empleo, '#empleo-preparar');
+  if (nuevo) pulsarCuandoExista(vistas.recordatorios, '#rec-nuevo');
+}
+
 function abrirDialogo() {
+  // Hoy se pone al día cada vez que vuelves.
+  if (vistaActual === 'hoy') apartados.hoy?.mostrar();
   // En el móvil se abre con la transición: el zorro se encoge y el diálogo le sale de la boca.
   if (movil?.activo()) return movil.abrir();
   dialogo.classList.remove('cerrandose');
@@ -381,7 +433,7 @@ async function iniciar() {
       if (fallo) throw new Error(`${fallo} He usado la voz del dispositivo.`);
     },
     vocesVoiceStudio: api.voicestudio ? () => api.voicestudio.voces() : null,
-    alCerrar: () => mostrarVista('chat'),
+    alCerrar: () => mostrarVista(vistaAntesDeAjustes === 'ajustes' ? 'hoy' : vistaAntesDeAjustes),
     alCambiar: (nuevos, cambios) => {
       ajustes = nuevos;
       aplicarAjustes(nuevos);
@@ -421,7 +473,21 @@ async function iniciar() {
     contenedor: vistas.empleo,
     api,
     abrirAjustes: (seccion) => mostrarVista('ajustes', seccion),
+    alCambiar: ponerInsigniaEmpleo,
   });
+  apartados.hoy = crearHoy({
+    contenedor: vistas.hoy,
+    api,
+    ir,
+    preguntar: (texto) => {
+      mostrarVista('chat');
+      chat.preguntar(texto);
+    },
+    abrirAjustes: (seccion) => mostrarVista('ajustes', seccion),
+    instalacion: { puedeInstalar: () => movil?.puedeInstalar() ?? null, instalar: () => movil?.instalar() ?? false },
+    alEmpleo: ponerInsigniaEmpleo,
+  });
+  apartados.hoy.mostrar();
   apartados.historial = crearHistorial({
     contenedor: vistas.historial,
     api,
@@ -435,6 +501,10 @@ async function iniciar() {
     },
   });
 
+  // Pestañas de Agenda y botones del Chat.
+  for (const b of subAgenda.querySelectorAll('[data-vista]')) b.addEventListener('click', () => mostrarVista(b.dataset.vista));
+  document.getElementById('boton-historial').addEventListener('click', () => mostrarVista(vistaActual === 'historial' ? 'chat' : 'historial'));
+  document.getElementById('boton-memoria').addEventListener('click', () => mostrarVista(vistaActual === 'memoria' ? 'chat' : 'memoria'));
   for (const [nombre, pestana] of Object.entries(pestanas)) {
     pestana.addEventListener('click', () => {
       // En la web, la sesión de Google dura una hora: se renueva con este mismo toque.
@@ -489,7 +559,7 @@ async function iniciar() {
   };
   api.claude.alEvento((e) => GESTOS[e.tipo] && gesto(GESTOS[e.tipo]));
   document.getElementById('boton-ajustes').addEventListener('click', () =>
-    mostrarVista(vistaActual === 'ajustes' ? 'chat' : 'ajustes'),
+    mostrarVista(vistaActual === 'ajustes' ? vistaAntesDeAjustes : 'ajustes'),
   );
   document.getElementById('boton-cerrar').addEventListener('click', cerrarDialogo);
   const nuevaConversacion = async () => {
@@ -640,7 +710,7 @@ async function iniciar() {
 // manda la disposición a pantalla completa del CSS.
 function ajustarEscala(barra = 0) {
   const escalar = () => {
-    const escala = Math.min(1, window.innerWidth / 460, (window.innerHeight - barra) / 735);
+    const escala = Math.min(1, window.innerWidth / 510, (window.innerHeight - barra) / 775);
     escena.style.transform = window.innerWidth > 600 && escala < 1 ? `scale(${escala})` : '';
   };
   escalar();
@@ -683,7 +753,8 @@ function prepararWeb() {
 function atenderParametros() {
   const parametros = new URLSearchParams(location.search);
   const compartido = ['titulo', 'texto', 'enlace'].map((c) => parametros.get(c)?.trim()).filter(Boolean);
-  if (parametros.has('correo')) mostrarVista('correo');
+  if (parametros.has('chat')) mostrarVista('chat');
+  else if (parametros.has('correo')) mostrarVista('correo');
   else if (parametros.has('agenda')) mostrarVista('agenda');
   else if (parametros.has('recordatorios')) mostrarVista('recordatorios');
   else if (parametros.has('ajustes')) mostrarVista('ajustes');
