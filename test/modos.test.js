@@ -131,3 +131,34 @@ test('Eficiente: en Empleo, el borrador va con Groq y la revisión final con GPT
     ['api.groq.com', 'api.openai.com'],
   );
 });
+
+test('registro de la IA desde la app: cada intento queda apuntado con lo que recibió y devolvió', async () => {
+  const apuntadas = [];
+  const peticiones = [];
+  const c = new ConversacionClaude({
+    obtenerClave: async (p) => ({ openai: 'sk-prueba', groq: 'gsk_prueba' })[p] ?? null,
+    obtenerAjustes: () => ({ proveedor: 'openai', modoIA: 'eficiente', modeloOpenAI: 'gpt-6-luna', modeloGroq: 'openai/gpt-oss-120b', busquedaWeb: true, personalidad: '' }),
+    gmail: { estado: async () => ({ conectado: false }) },
+    emitir: () => {},
+    alRegistroIA: (e) => apuntadas.push(e),
+    opcionesCliente: {
+      fetch: async (url) => {
+        peticiones.push(String(url));
+        if (String(url).includes('groq')) return Response.json({ error: { message: 'Groq está caído' } }, { status: 503 });
+        return Response.json({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: '{"ok":1}', annotations: [] }] }] });
+      },
+    },
+  });
+  await c.tarea({ sistema: 'Evalúa. Devuelve JSON.', usuario: 'oferta x', etiqueta: 'puntuar ofertas', sobre: 'of-1 of-2' });
+  assert.deepEqual(
+    apuntadas.map((e) => [e.etiqueta, e.sobre, e.proveedor, e.ok]),
+    [
+      ['puntuar ofertas', 'of-1 of-2', 'groq', false],
+      ['puntuar ofertas', 'of-1 of-2', 'openai', true],
+    ],
+  );
+  assert.ok(apuntadas[0].error);
+  assert.equal(apuntadas[1].respuesta, '{"ok":1}');
+  assert.equal(apuntadas[1].usuario, 'oferta x');
+  assert.equal(apuntadas[1].modelo, 'gpt-6-luna');
+});

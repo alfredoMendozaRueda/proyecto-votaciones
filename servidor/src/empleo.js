@@ -3,7 +3,7 @@
 // su marco de evaluación (si hay clave de Groq en el servidor) y avisa al
 // móvil solo de las que encajan. Las ya vistas no se repiten.
 import { buscarEnPortales, detalleOferta } from '../../src/compartido/portales.js';
-import { evaluarEncaje, normalizarOferta, normalizarPerfil, normalizarPreferencias, adaptarCV } from '../../src/compartido/empleo.js';
+import { evaluarEncaje, normalizarOferta, normalizarPerfil, normalizarPreferencias, adaptarCV, ofertaDeCandidatura } from '../../src/compartido/empleo.js';
 import { mesDe } from '../../src/compartido/consumo.js';
 import { rutaIA, conRespaldo, normalizarModo, MAX_PREPARAR } from '../../src/compartido/modos.js';
 import { tareaGroq } from '../../src/compartido/groq.js';
@@ -73,10 +73,24 @@ async function iaModo(n, { hacerFetch, usos, sinLuna = false }) {
   const m = await n.motoresIA();
   const hay = { groq: Boolean(m.groq), openai: Boolean(m.openai) && !sinLuna };
   if (!hay.groq && !hay.openai) return null;
-  const llamar = (ia, p) =>
-    ia === 'openai'
-      ? tareaOpenAI({ apiKey: m.openai, modelo: 'gpt-6-luna', fetch: hacerFetch, alUso: (modelo, u) => usos.push([modelo, u]), ...p })
-      : tareaGroq({ apiKey: m.groq, modelo: 'openai/gpt-oss-20b', fetch: hacerFetch, ...p });
+  // Cada llamada queda en el registro de la IA: qué recibió, qué devolvió y cuánto tardó.
+  const llamar = async (ia, { etiqueta, sobre, ...p }) => {
+    const modelo = ia === 'openai' ? 'gpt-6-luna' : p.web ? 'openai/gpt-oss-120b' : 'openai/gpt-oss-20b';
+    const inicio = Date.now();
+    const apuntar = (extra) =>
+      n.registrarIA([{ origen: 'servidor', etiqueta, sobre, proveedor: ia, modelo, ms: Date.now() - inicio, sistema: p.sistema, usuario: p.usuario, ...extra }]).catch(() => {});
+    try {
+      const r =
+        ia === 'openai'
+          ? await tareaOpenAI({ apiKey: m.openai, modelo, fetch: hacerFetch, alUso: (mod, u) => usos.push([mod, u]), ...p })
+          : await tareaGroq({ apiKey: m.groq, modelo: 'openai/gpt-oss-20b', fetch: hacerFetch, ...p });
+      await apuntar({ respuesta: r.texto });
+      return r;
+    } catch (error) {
+      await apuntar({ ok: false, error: error.message });
+      throw error;
+    }
+  };
   return ({ nivel, ...p }) => conRespaldo(rutaIA(m.modo, p.web ? 'web' : nivel === 'final' ? 'final' : 'fondo', hay), (ia) => llamar(ia, p));
 }
 
@@ -211,7 +225,7 @@ export async function prepararSiguiente(n, { hacerFetch = fetch } = {}) {
     const preparada = {
       id: `p${n.ahora.toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       fecha: n.ahora,
-      oferta: { ...completa, encaje: resultado.encaje ?? completa.encaje },
+      oferta: ofertaDeCandidatura(completa, resultado),
       ...resultado,
     };
     await guardarPreparadas(n, [preparada, ...(await leerPreparadas(n)).filter((p) => p.oferta?.id !== completa.id)]);

@@ -5,6 +5,7 @@ import { VOCES } from '../compartido/voz.js';
 import { leerBloqueo, bloqueoDisponible, activarBloqueo, desactivarBloqueo, cambiarTras, comprobarIdentidad, OPCIONES_TRAS, nombreBiometria } from './web/bloqueo.js';
 import { COLECCIONES_SINCRO, codigoDe } from '../compartido/sincro.js';
 import { MODOS_IA, INFO_MODOS, normalizarModo } from '../compartido/modos.js';
+import { htmlRegistroIA } from './registro-ia.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -285,6 +286,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
         ${estadoAvisos ? seccionAvisos(estadoAvisos) : ''}
 
         ${api.sincro && estadoAvisos ? '<section class="grupo sincro" id="seccion-sincro" aria-label="Sincronizar con tus dispositivos"></section>' : ''}
+        ${api.servidor?.empleo?.registroIA && estadoAvisos?.vinculado ? '<section class="grupo" id="seccion-registro-ia" aria-label="Registro de la IA"></section>' : ''}
 
         <section class="grupo" id="seccion-permisos" aria-label="Permisos">
           <h3>Permisos</h3>
@@ -421,8 +423,53 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
     conectar();
     if (estadoAvisos) conectarAvisos(estadoAvisos);
     if (api.sincro && estadoAvisos) pintarSincro(estadoAvisos.vinculado);
+    if (contenedor.querySelector('#seccion-registro-ia')) pintarRegistroIA();
     if (api.consumo) pintarGasto();
     if (seccion) contenedor.querySelector(`#seccion-${seccion}`)?.scrollIntoView({ block: 'start' });
+  }
+
+  // ---------- Registro de la IA ----------
+  // Qué recibe y qué devuelve cada llamada a la IA (del servidor y de tus dispositivos).
+
+  async function pintarRegistroIA(nota = '') {
+    const caja = contenedor.querySelector('#seccion-registro-ia');
+    if (!caja) return;
+    const r = await api.servidor.empleo.registroIA({ limite: 30 }).catch((error) => ({ error: error.message }));
+    if (!caja.isConnected) return;
+    if (r.error) {
+      caja.innerHTML = `<h3>Registro de la IA</h3><p class="ajuste__ayuda">No se ha podido cargar: ${escapar(r.error)}</p>`;
+      return;
+    }
+    caja.innerHTML = `
+      <h3>Registro de la IA</h3>
+      <div class="ajuste ajuste--fila">
+        <div>
+          <div class="ajuste__etiqueta" id="et-registro-ia">Apuntar lo que piensa la IA</div>
+          <p class="ajuste__ayuda">Cada tarea (puntuar ofertas, redactar y revisar el CV, investigar empresas…) con lo que recibe y lo que contesta. Se guarda cifrado en tu servidor y se borra solo a los 14 días.</p>
+        </div>
+        <button type="button" class="interruptor" role="switch" aria-labelledby="et-registro-ia" id="registro-ia-activo" aria-checked="${r.activo}"></button>
+      </div>
+      ${r.activo ? htmlRegistroIA(r.entradas) : ''}
+      <div class="registro-ia__acciones">
+        ${r.activo ? '<button type="button" class="boton" id="registro-ia-actualizar">Actualizar</button>' : ''}
+        ${r.entradas.length ? '<button type="button" class="boton" id="registro-ia-borrar">Borrar el registro</button>' : ''}
+      </div>
+      <p class="mensaje-ajuste" role="status">${escapar(nota)}</p>`;
+    caja.querySelector('#registro-ia-activo').addEventListener('click', async () => {
+      await api.servidor.empleo.activarRegistroIA(!r.activo).catch(() => {});
+      pintarRegistroIA(r.activo ? 'Registro desactivado y borrado.' : 'Registro activado.');
+    });
+    caja.querySelector('#registro-ia-actualizar')?.addEventListener('click', () => pintarRegistroIA());
+    const borrar = caja.querySelector('#registro-ia-borrar');
+    borrar?.addEventListener('click', async () => {
+      if (borrar.dataset.confirmar !== 'si') {
+        borrar.dataset.confirmar = 'si';
+        borrar.textContent = '¿Seguro? Pulsa otra vez';
+        return;
+      }
+      await api.servidor.empleo.borrarRegistroIA().catch(() => {});
+      pintarRegistroIA('Registro borrado.');
+    });
   }
 
   // ---------- Gasto de OpenAI ----------

@@ -41,3 +41,18 @@ CREATE TABLE IF NOT EXISTS sincro_solicitudes (
   sobre TEXT,
   creado INTEGER NOT NULL
 );
+-- Registro de la IA: qué recibe y qué devuelve cada llamada (para entender sus
+-- decisiones). Lo legible va cifrado en «datos»; se borra solo a los 14 días.
+CREATE TABLE IF NOT EXISTS registro_ia (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cuando INTEGER NOT NULL,
+  origen TEXT NOT NULL,
+  etiqueta TEXT NOT NULL,
+  sobre TEXT NOT NULL DEFAULT '',
+  proveedor TEXT NOT NULL DEFAULT '',
+  modelo TEXT NOT NULL DEFAULT '',
+  ms INTEGER NOT NULL DEFAULT 0,
+  ok INTEGER NOT NULL DEFAULT 1,
+  datos TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS registro_ia_cuando ON registro_ia (cuando);

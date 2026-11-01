@@ -918,3 +918,34 @@ test('buscar y preparar ahora: busca también entre lo ya visto, salta lo que ya
     globalThis.fetch = base;
   }
 });
+
+test('registro de la IA: guarda cifrado qué recibe y devuelve cada llamada, del servidor y de los dispositivos', async () => {
+  const env = entorno();
+  const { token } = await vincular(env, { nombre: 'iPhone' });
+  internet();
+  const n = (await import('../servidor/src/nucleo.js')).Nucleo;
+  const nucleo = new n(env, Date.now());
+  await nucleo.registrarIA([{ origen: 'servidor', etiqueta: 'revisar CV y carta', sobre: 'of-1', proveedor: 'openai', modelo: 'gpt-6-luna', ms: 1234, sistema: 'Eres un revisor', usuario: 'CV de Lucía Prieto', respuesta: '{"encaje":45}' }]);
+  // Un dispositivo manda lo suyo: el origen lo pone el servidor (el nombre del dispositivo).
+  await pedir(env, '/ia/registro', { metodo: 'POST', token, cuerpo: { entradas: [{ origen: 'falso', etiqueta: 'puntuar ofertas', sobre: 'of-1 of-2', proveedor: 'groq', modelo: 'openai/gpt-oss-120b', ms: 900, sistema: 'Evalúa', usuario: 'perfil de Lucía', respuesta: '{"evaluaciones":[]}' }] } });
+  await pedir(env, '/ia/registro', { metodo: 'POST', token, cuerpo: { entradas: [{ etiqueta: 'leer el CV', sobre: 'otra', ok: false, error: 'Groq al límite', sistema: 's', usuario: 'u' }] } });
+
+  const filas = (await env.DB.prepare('SELECT datos FROM registro_ia').all()).results;
+  assert.equal(filas.length, 3);
+  assert.ok(filas.every((f) => !f.datos.includes('Lucía')), 'el contenido va cifrado');
+
+  const deOferta = await (await pedir(env, '/ia/registro?sobre=of-1', { token })).json();
+  assert.equal(deOferta.activo, true);
+  assert.deepEqual(deOferta.entradas.map((e) => [e.etiqueta, e.origen]), [['puntuar ofertas', 'iPhone'], ['revisar CV y carta', 'servidor']]);
+  assert.equal(deOferta.entradas[1].usuario, 'CV de Lucía Prieto');
+  assert.equal(deOferta.entradas[1].respuesta, '{"encaje":45}');
+  const todo = await (await pedir(env, '/ia/registro', { token })).json();
+  assert.equal(todo.entradas[0].ok, false);
+  assert.equal(todo.entradas[0].error, 'Groq al límite');
+
+  // Desactivarlo lo borra y deja de apuntar.
+  await pedir(env, '/ia/registro', { metodo: 'PUT', token, cuerpo: { activo: false } });
+  await new n(env, Date.now()).registrarIA([{ etiqueta: 'x', sistema: 's', usuario: 'u' }]);
+  const apagado = await (await pedir(env, '/ia/registro', { token })).json();
+  assert.deepEqual([apagado.activo, apagado.entradas.length], [false, 0]);
+});

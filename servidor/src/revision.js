@@ -62,6 +62,8 @@ export async function revisar(env, ahora = Date.now()) {
       n.db.prepare('DELETE FROM recordatorios WHERE avisado = 1 AND cuando < ?').bind(ahora - 2 * 86_400_000),
       n.db.prepare('DELETE FROM pendientes WHERE caduca < ?').bind(ahora),
       n.db.prepare('DELETE FROM registro WHERE id <= (SELECT id FROM registro ORDER BY id DESC LIMIT 1 OFFSET 200)'),
+      n.db.prepare('DELETE FROM registro_ia WHERE cuando < ?').bind(ahora - 14 * 86_400_000),
+      n.db.prepare('DELETE FROM registro_ia WHERE id <= (SELECT id FROM registro_ia ORDER BY id DESC LIMIT 1 OFFSET 500)'),
     ]);
   }
 }

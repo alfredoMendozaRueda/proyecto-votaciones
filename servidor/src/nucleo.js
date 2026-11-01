@@ -81,6 +81,54 @@ export class Nucleo {
     await this.db.prepare('INSERT INTO registro (cuando, tipo, texto) VALUES (?, ?, ?)').bind(this.ahora, tipo, String(texto).slice(0, 500)).run();
   }
 
+  // ---------- Registro de la IA ----------
+  // entradas: [{ origen, etiqueta, sobre, proveedor, modelo, ms, ok, sistema, usuario, respuesta, error }].
+  // Lo legible (instrucciones, entrada, respuesta) se guarda cifrado.
+  async registrarIA(entradas) {
+    if (!entradas?.length || (await this.ajustes()).registroIA === false) return;
+    const corto = (t, max) => String(t ?? '').slice(0, max);
+    const filas = await Promise.all(
+      entradas.slice(0, 20).map(async (e) => [
+        this.ahora,
+        corto(e.origen || 'servidor', 60),
+        corto(e.etiqueta || 'tarea', 60),
+        corto(e.sobre, 500),
+        corto(e.proveedor, 20),
+        corto(e.modelo, 60),
+        Math.max(0, Math.round(Number(e.ms) || 0)),
+        e.ok === false ? 0 : 1,
+        await cifrarTexto(
+          JSON.stringify({ sistema: corto(e.sistema, 15000), usuario: corto(e.usuario, 40000), respuesta: corto(e.respuesta, 30000), error: corto(e.error, 1000) }),
+          this.env.CLAVE_CIFRADO,
+        ),
+      ]),
+    );
+    await this.db.batch(
+      filas.map((f) =>
+        this.db.prepare('INSERT INTO registro_ia (cuando, origen, etiqueta, sobre, proveedor, modelo, ms, ok, datos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(...f),
+      ),
+    );
+  }
+
+  async leerRegistroIA({ sobre = '', limite = 40 } = {}) {
+    const max = Math.min(100, Math.max(1, Number(limite) || 40));
+    const consulta = sobre
+      ? this.db.prepare("SELECT * FROM registro_ia WHERE (' ' || sobre || ' ') LIKE ? ORDER BY id DESC LIMIT ?").bind(`% ${String(sobre).replace(/[%_]/g, '')} %`, max)
+      : this.db.prepare('SELECT * FROM registro_ia ORDER BY id DESC LIMIT ?').bind(max);
+    const { results } = await consulta.all();
+    return Promise.all(
+      results.map(async ({ datos, ok, ...fila }) => {
+        let contenido = {};
+        try {
+          contenido = JSON.parse(await descifrarTexto(datos, this.env.CLAVE_CIFRADO));
+        } catch {
+          contenido = { error: 'No se ha podido descifrar.' };
+        }
+        return { ...fila, ok: Boolean(ok), ...contenido };
+      }),
+    );
+  }
+
   // ---------- Avisos ya dados (para no repetirlos) ----------
 
   async avisados(claves) {

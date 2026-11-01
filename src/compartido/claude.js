@@ -653,6 +653,7 @@ export class ConversacionClaude {
     opcionesCliente = {},
     // Lo que se gasta con OpenAI (modelo, uso): ver consumo.js.
     anotarUso = () => {},
+    alRegistroIA = () => {},
   }) {
     this.obtenerClave = obtenerClave;
     this.obtenerAjustes = obtenerAjustes;
@@ -664,6 +665,14 @@ export class ConversacionClaude {
     this.emitir = emitir;
     this.alCambiarHistorial = alCambiarHistorial;
     this.opcionesCliente = opcionesCliente;
+    // Cada tarea de IA (Empleo, borradores…) con lo que recibió y devolvió: para el registro de la IA.
+    this.alRegistroIA = (entrada) => {
+      try {
+        alRegistroIA(entrada);
+      } catch {
+        // El registro nunca rompe la tarea.
+      }
+    };
     this.anotarUso = (modelo, uso) => {
       if (uso) Promise.resolve(anotarUso(modelo, uso)).catch(() => {});
     };
@@ -1237,10 +1246,24 @@ export class ConversacionClaude {
   // Una tarea suelta fuera del chat (Empleo). Con web puede buscar en internet.
   // Devuelve { texto, fuentes }.
   // nivel: 'final' para lo que sale con tu nombre (la revisión del CV, la entrevista).
-  async tarea({ sistema, usuario, web = false, max = 8000, nivel = 'fondo' }) {
+  // etiqueta y sobre (ids de oferta…): para encontrarla luego en el registro de la IA.
+  async tarea({ sistema, usuario, web = false, max = 8000, nivel = 'fondo', etiqueta = 'tarea', sobre = '' }) {
     const ruta = await this.#ruta(web ? 'web' : nivel === 'final' ? 'final' : 'fondo');
-    if (ruta[0] !== 'claude') return conRespaldo(ruta, (ia) => this.#tarea(ia, { sistema, usuario, web, max }));
-    return this.#tarea('claude', { sistema, usuario, web, max });
+    const ajustes = this.obtenerAjustes();
+    const hacer = async (ia) => {
+      const modelo = ia === 'openai' ? ajustes.modeloOpenAI : ia === 'groq' ? (web ? 'openai/gpt-oss-120b' : ajustes.modeloGroq) : ajustes.modelo;
+      const inicio = Date.now();
+      const apuntar = (extra) => this.alRegistroIA({ etiqueta, sobre, proveedor: ia, modelo, ms: Date.now() - inicio, sistema, usuario, ...extra });
+      try {
+        const r = await this.#tarea(ia, { sistema, usuario, web, max });
+        apuntar({ ok: true, respuesta: r.texto });
+        return r;
+      } catch (error) {
+        apuntar({ ok: false, error: error.message });
+        throw error;
+      }
+    };
+    return ruta[0] !== 'claude' ? conRespaldo(ruta, hacer) : hacer('claude');
   }
 
   async #tarea(proveedor, { sistema, usuario, web, max }) {

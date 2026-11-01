@@ -149,6 +149,23 @@ export class ClienteServidor {
     return this.pedir('/empleo/alerta/probar', { metodo: 'POST' });
   }
 
+  // Registro de la IA: qué recibe y devuelve cada llamada.
+  registrarIA(entradas) {
+    return this.pedir('/ia/registro', { metodo: 'POST', cuerpo: { entradas } });
+  }
+
+  registroIA({ sobre = '', limite = 40 } = {}) {
+    return this.pedir(`/ia/registro?limite=${encodeURIComponent(limite)}${sobre ? `&sobre=${encodeURIComponent(sobre)}` : ''}`);
+  }
+
+  borrarRegistroIA() {
+    return this.pedir('/ia/registro', { metodo: 'DELETE' });
+  }
+
+  activarRegistroIA(activo) {
+    return this.pedir('/ia/registro', { metodo: 'PUT', cuerpo: { activo: Boolean(activo) } });
+  }
+
   // Busca ya (también entre lo visto) y prepara las mejores: { ultimas, enCola, preparando, ia }.
   empleoAhora(datos) {
     return this.pedir('/empleo/alerta/ahora', { metodo: 'POST', cuerpo: datos });

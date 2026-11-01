@@ -396,6 +396,26 @@ async function atender(peticion, env) {
       return json({ ok: true });
     }
   }
+  // Registro de la IA: lo que recibe y devuelve cada llamada (del servidor y de los dispositivos).
+  if (m === 'GET' && ruta === '/ia/registro') {
+    const entradas = await n.leerRegistroIA({ sobre: url.searchParams.get('sobre') ?? '', limite: url.searchParams.get('limite') });
+    return json({ activo: (await n.ajustes()).registroIA !== false, entradas });
+  }
+  if (m === 'POST' && ruta === '/ia/registro') {
+    const { entradas } = await cuerpo(peticion);
+    await n.registrarIA((Array.isArray(entradas) ? entradas : []).map((e) => ({ ...e, origen: d.nombre })));
+    return json({ ok: true });
+  }
+  if (m === 'DELETE' && ruta === '/ia/registro') {
+    await n.db.prepare('DELETE FROM registro_ia').run();
+    return json({ ok: true });
+  }
+  if (m === 'PUT' && ruta === '/ia/registro') {
+    const { activo } = await cuerpo(peticion);
+    await n.poner('registroIA', activo !== false);
+    if (activo === false) await n.db.prepare('DELETE FROM registro_ia').run();
+    return json({ ok: true });
+  }
   if (m === 'GET' && ruta === '/registro') {
     const { results } = await n.db.prepare('SELECT cuando, tipo, texto FROM registro ORDER BY id DESC LIMIT 60').all();
     return json(results);

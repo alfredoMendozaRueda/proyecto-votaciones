@@ -105,6 +105,7 @@ export async function analizarCV(ia, textoCV) {
   const texto = String(textoCV ?? '').trim();
   if (texto.length < 80) throw new Error('El CV está casi vacío. Si es un PDF escaneado (una imagen), pega el texto a mano.');
   const { texto: respuesta } = await ia({
+    etiqueta: 'leer el CV',
     sistema:
       'Analizas currículums. Devuelve SOLO un objeto JSON con este esquema, en el idioma del CV:\n' +
       `${ESQUEMA_PERFIL}\n` +
@@ -216,6 +217,7 @@ const ENFOQUES_WEB = [
 
 async function buscarConIA(ia, perfil, pref, enfoque) {
   const r = await ia({
+    etiqueta: 'buscar ofertas en la web',
     sistema:
       `Hoy es ${hoy()}. Eres un buscador de empleo. Busca en internet ofertas de trabajo REALES y vigentes ` +
       `(publicadas en las últimas semanas) que encajen con el perfil y las preferencias, sobre todo en ${enfoque}. ` +
@@ -323,6 +325,8 @@ export async function evaluarEncaje(ia, perfil, ofertas, { preferencias = {} } =
   for (let i = 0; i < ofertas.length; i += 6) {
     const grupo = ofertas.slice(i, i + 6);
     const { texto } = await ia({
+      etiqueta: 'puntuar ofertas',
+      sobre: grupo.map((o) => o.id).join(' '),
       sistema: SISTEMA_EVALUACION,
       usuario:
         `<perfil>\n${perfilBreve(perfil)}\n</perfil>\n<busca>\n${textoPreferencias(pref, perfil)}\n</busca>\n` +
@@ -366,6 +370,7 @@ export async function leerOferta(ia, entrada, { detalle = null } = {}) {
     }
   }
   const { texto: respuesta } = await ia({
+    etiqueta: 'leer la oferta',
     sistema:
       (url ? 'Abre la página de esta oferta de empleo y lee la oferta completa. ' : '') +
       'Extrae los datos de la oferta. Devuelve SOLO JSON con este esquema, y en "descripcion" la oferta entera ' +
@@ -440,6 +445,8 @@ const REGLAS_CARTA =
 export async function investigarEmpresa(ia, oferta) {
   if (!oferta.empresa) return '';
   const { texto } = await ia({
+    etiqueta: 'investigar la empresa',
+    sobre: oferta.id,
     sistema:
       `Hoy es ${hoy()}. Investiga en internet esta empresa para una candidatura: a qué se dedica, productos o clientes, tamaño, ` +
       'valores y cultura, noticias recientes y tecnología o métodos que usa. En español, menos de 130 palabras, solo datos que encuentres ' +
@@ -451,10 +458,31 @@ export async function investigarEmpresa(ia, oferta) {
   return cadena(texto.replace(/```[\s\S]*?```/g, ''), 1500);
 }
 
+// La oferta que se guarda con la candidatura: conserva la nota de la búsqueda
+// (método de 5 dimensiones); la del revisor va aparte, en p.encaje. Solo si la
+// oferta no se había puntuado (una pegada a mano) se usa la del revisor.
+export const ofertaDeCandidatura = (oferta, resultado) =>
+  oferta.encaje != null || resultado.encaje == null ? oferta : { ...oferta, encaje: resultado.encaje, veredicto: veredicto(resultado.encaje, oferta.puerta) };
+
+// Lo que dijo la evaluación de la búsqueda, para que el revisor puntúe con el mismo criterio.
+function evaluacionPrevia(o) {
+  if (o.encaje == null) return '';
+  const d = o.dimensiones ?? {};
+  const dims = ['tecnica', 'experiencia', 'cultura', 'carrera'].filter((k) => d[k] != null).map((k) => `${k} ${d[k]}`).join(', ');
+  return (
+    `<evaluacion_previa>\nencaje ${o.encaje}${o.veredicto ? ` (${o.veredicto})` : ''}${dims ? `; ${dims}` : ''}\n` +
+    (o.motivos?.length ? `a favor: ${o.motivos.join(' | ')}\n` : '') +
+    (o.faltan?.length ? `en contra: ${o.faltan.join(' | ')}\n` : '') +
+    '</evaluacion_previa>\n'
+  );
+}
+
 // Redactor (paso 1); el revisor investiga la empresa y lo critica y pule (paso 2), como /apply.
 export async function adaptarCV(ia, perfil, oferta, { alPaso = () => {}, idioma = '', investigar = true } = {}) {
   alPaso('redactar');
   const borrador = await ia({
+    etiqueta: 'redactar CV y carta',
+    sobre: oferta.id,
     sistema:
       'Eres experto en selección de personal y en CV que pasan los filtros ATS. Adapta el CV del candidato a la oferta. ' +
       REGLAS_CV +
@@ -478,18 +506,24 @@ export async function adaptarCV(ia, perfil, oferta, { alPaso = () => {}, idioma 
 
   alPaso('revisar');
   const revision = await ia({
+    etiqueta: 'revisar CV y carta',
+    sobre: oferta.id,
     sistema:
       'Eres un revisor exigente de candidaturas, con la cabeza fresca: no has escrito tú el borrador. Compáralo con la oferta, con lo que se sabe ' +
       'de la empresa y con el CV ORIGINAL. 1) Cualquier dato que no esté en el original (inventado o exagerado) se corrige o se quita. ' +
       '2) Comprueba que cumple estas reglas y arréglalo si no: ' + REGLAS_CV + REGLAS_CARTA +
       '3) La carta debe mencionar algo concreto y cierto de la empresa (de <empresa>), no generalidades. ' +
-      'Devuelve SOLO JSON con el mismo esquema y además: "notas" (cambios hechos y consejos, frases cortas), "encaje" (0-100) y ' +
+      'Devuelve SOLO JSON con el mismo esquema y además: "notas" (cambios hechos y consejos, frases cortas), ' +
+      '"encaje" (0-100: cuánto encaja la persona REAL —su CV original, no lo bien escrito que esté el texto— con la oferta, con el mismo ' +
+      'criterio que la evaluación previa: técnica 30 %, experiencia 25 %, cultura 15 %, carrera 30 %; si hay <evaluacion_previa> y tu nota ' +
+      'se aleja más de 15 puntos, la PRIMERA nota explica por qué) y ' +
       '"terminosOferta" (10-25 términos clave de la oferta, cortos y tal cual aparecen: herramientas, habilidades, titulaciones):\n' +
       `${ESQUEMA_ADAPTADO.replace(/}\s*$/, ',\n  "notas": [""], "encaje": 0, "terminosOferta": [""]\n}')}\n` +
       NO_INSTRUCCIONES,
     usuario:
       `<cv_original>\n${textoCompleto(perfil)}\n</cv_original>\n<oferta>\n${textoOferta(oferta).slice(0, 8000)}\n</oferta>\n` +
       (empresa ? `<empresa>\n${empresa}\n</empresa>\n` : '') +
+      evaluacionPrevia(oferta) +
       `<propuesta>\n${JSON.stringify({ cv: primero.cv, carta: primero.carta, palabrasClave: primero.palabrasClave })}\n</propuesta>`,
     max: 8000,
     // La revisión es lo que llega a la empresa: en el modo Eficiente, con GPT-6 Luna.
@@ -560,6 +594,8 @@ export function normalizarEntrevista(e = {}) {
 
 export async function prepararEntrevista(ia, perfil, oferta, { empresa = '' } = {}) {
   const { texto } = await ia({
+    etiqueta: 'preparar la entrevista',
+    sobre: oferta.id,
     sistema:
       'Preparas entrevistas de trabajo con el método de ai-job-search. Con el CV REAL del candidato (no inventes nada) y la oferta: ' +
       '1) "star": 4-6 ejemplos STAR sacados de su experiencia real (Situación, Tarea, Acción, Resultado; respuestas de 1-2 minutos), ' +
@@ -645,6 +681,14 @@ export function correoCandidatura(p, { idioma = p.idioma } = {}) {
 }
 
 export function normalizarDatosEmpleo(d = {}) {
+  // Candidaturas de antes: la nota del revisor (p.encaje) había pisado la de la
+  // búsqueda (p.oferta.encaje). Si la oferta sigue en la lista, se recupera la suya.
+  const ofertasGuardadas = Array.isArray(d.ofertas) ? d.ofertas : [];
+  for (const p of Array.isArray(d.postulaciones) ? d.postulaciones : []) {
+    if (!p?.oferta || p.encaje == null || p.oferta.encaje !== p.encaje) continue;
+    const igual = ofertasGuardadas.find((o) => o && ((o.url && o.url === p.oferta.url) || (o.id && o.id === p.oferta.id)));
+    if (igual?.encaje != null && igual.encaje !== p.encaje) p.oferta = { ...p.oferta, encaje: igual.encaje, veredicto: igual.veredicto, dimensiones: igual.dimensiones };
+  }
   return {
     foto: fotoValida(d.foto),
     estiloCV: normalizarEstiloCV(d.estiloCV),

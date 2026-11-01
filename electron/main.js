@@ -20,6 +20,7 @@ import { ConversacionClaude, mensajeDeError } from '../src/compartido/claude.js'
 import { Recordatorios } from '../src/compartido/recordatorios.js';
 import { Memoria } from '../src/compartido/memoria.js';
 import { Conversaciones, ID_CONVERSACION } from '../src/compartido/conversaciones.js';
+import { crearEnvioRegistroIA } from '../src/compartido/registro-ia.js';
 import { servidor, sincronizarRecordatorios, automatizacionesChat, clienteServidor } from './avisos.js';
 import { aviso } from '../src/compartido/notificaciones.js';
 import { normalizarDatosEmpleo } from '../src/compartido/empleo.js';
@@ -143,8 +144,10 @@ const estadoIA = () => {
   };
 };
 
+const registroIA = crearEnvioRegistroIA(async () => clienteServidor());
 const claude = new ConversacionClaude({
   anotarUso: (modelo, uso) => consumo.anotar(modelo, uso),
+  alRegistroIA: (entrada) => registroIA(entrada),
   obtenerClave: async (proveedor) => leerSecreto(SECRETO_CLAVE[proveedorValido(proveedor)]),
   obtenerAjustes,
   gmail,
@@ -458,6 +461,8 @@ function registrarCanales() {
       web: p?.web === true,
       max: Math.min(16000, Math.max(500, Number(p?.max) || 4000)),
       nivel: p?.nivel === 'final' ? 'final' : 'fondo',
+      etiqueta: String(p?.etiqueta ?? 'tarea').slice(0, 60),
+      sobre: String(p?.sobre ?? '').slice(0, 500),
     }),
   );
   manejar('ia:transcribir', async (audio, tipo) => {
@@ -527,6 +532,9 @@ function registrarCanales() {
   manejar('servidor:guardarEmpleoAlerta', (datos) => servidor.empleo.guardarAlerta(datos));
   manejar('servidor:probarEmpleoAlerta', () => servidor.empleo.probarAlerta());
   manejar('servidor:empleoAhora', (datos) => servidor.empleo.ahora(datos));
+  manejar('servidor:registroIA', (o) => servidor.empleo.registroIA(o));
+  manejar('servidor:borrarRegistroIA', () => servidor.empleo.borrarRegistroIA());
+  manejar('servidor:activarRegistroIA', (activo) => servidor.empleo.activarRegistroIA(activo));
   manejar('servidor:empleoPreparadas', () => servidor.empleo.preparadas());
   manejar('servidor:recogerEmpleoPreparadas', (ids) => servidor.empleo.recogerPreparadas(ids));
   manejar('servidor:resumen', () => servidor.resumen());

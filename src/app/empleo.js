@@ -19,8 +19,11 @@ import {
   normalizarEstiloCV,
   correoDeOferta,
   correoCandidatura,
+  ofertaDeCandidatura,
+  veredicto,
 } from '../compartido/empleo.js';
 import { datosParaFormulario } from '../compartido/rellenar.js';
+import { htmlRegistroIA } from './registro-ia.js';
 import { costeMensualAlerta, normalizarModo, INFO_MODOS, MAX_PREPARAR } from '../compartido/modos.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -139,6 +142,8 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
   const detallePortal = api.servidor?.empleo ? (url) => api.servidor.empleo.detalle(url) : null;
   // Alerta diaria: la hace el servidor de avisos cada mañana.
   const alertas = api.servidor?.empleo?.alerta ? api.servidor.empleo : null;
+  // Registro de la IA (en el servidor de avisos).
+  const registroIA = api.servidor?.empleo?.registroIA ? (o) => api.servidor.empleo.registroIA(o) : null;
   let estadoAlerta = null;
   let alertaCargada = 0;
   // Al cerrar la ventana del formulario de una empresa (Windows), ¿se envió?
@@ -855,7 +860,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
           <ul class="chips">
             ${nuevas.has(o.id) ? '<li class="chip chip--nueva">Nueva</li>' : ''}
             ${hecha ? `<li class="chip chip--si">CV adaptado · ${fechaCorta(hecha.fecha)}</li>` : ''}
-            ${o.encaje != null ? `<li class="chip chip--encaje" data-nivel="${o.puerta === 'no' ? 'bajo' : nivel}">${o.encaje} · ${escapar(o.veredicto || 'encaje')}</li>` : ''}
+            ${o.encaje != null ? `<li class="chip chip--encaje" data-nivel="${o.puerta === 'no' ? 'bajo' : nivel}">${o.encaje} · ${escapar(veredicto(o.encaje, o.puerta))}</li>` : ''}
             ${o.modalidad ? `<li class="chip">${escapar(o.modalidad)}</li>` : ''}
             ${o.salario ? `<li class="chip">${escapar(o.salario)}</li>` : ''}
           </ul>
@@ -978,7 +983,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       id: rehacer?.id ?? `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       fecha: Date.now(),
       estado: rehacer?.estado ?? 'preparada',
-      oferta: { ...completa, encaje: resultado.encaje ?? completa.encaje },
+      oferta: ofertaDeCandidatura(completa, resultado),
       ...resultado,
       entrevista: null,
       envio: rehacer?.envio ?? null,
@@ -1137,7 +1142,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
           <p class="empleo-mono">${escapar([o.empresa, o.ubicacion, o.modalidad].filter(Boolean).join(' · '))}</p>
           <h3 class="candidatura__puesto">${escapar(o.puesto)}</h3>
           <div class="candidatura__estado">
-            ${o.encaje != null ? `<span class="chip chip--encaje" data-nivel="${nivelEncaje(o.encaje)}">${o.encaje} · ${escapar(o.veredicto || 'encaje')}</span>` : ''}
+            ${o.encaje != null ? `<span class="chip chip--encaje" data-nivel="${o.puerta === 'no' ? 'bajo' : nivelEncaje(o.encaje)}" title="Nota de la búsqueda (técnica, experiencia, cultura y carrera)">${o.encaje} · ${escapar(veredicto(o.encaje, o.puerta))}</span>` : ''}
             <select class="campo" id="cand-estado" aria-label="Estado de la candidatura">
               ${ESTADOS.map(([v, n]) => `<option value="${v}" ${p.estado === v ? 'selected' : ''}>${n}</option>`).join('')}
             </select>
@@ -1207,6 +1212,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       if (nombre === 'notas') {
         contenido.innerHTML = `
           <section class="empleo-notas">
+            ${notasDeEncaje()}
             <p class="empleo-etiqueta">(comprobación ATS del PDF)</p>
             <div id="cand-ats" class="empleo-ats"><p class="apartado__cargando">Leyendo el PDF como lo haría un ATS…</p></div>
             ${p.empresa ? `<p class="empleo-etiqueta">(lo que el revisor sabe de ${escapar(o.empresa)})</p><p class="empleo-texto">${escapar(p.empresa)}</p>` : ''}
@@ -1214,11 +1220,50 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
             ${p.palabrasClave.length ? `<p class="empleo-etiqueta">(palabras clave de la oferta en tu CV)</p><ul class="chips">${p.palabrasClave.map((k) => `<li class="chip">${escapar(k)}</li>`).join('')}</ul>` : ''}
             ${o.motivos.length ? `<p class="empleo-etiqueta">(por qué encajas)</p><ul class="oferta__lista oferta__lista--si">${o.motivos.map((m) => `<li>${escapar(m)}</li>`).join('')}</ul>` : ''}
             ${o.faltan.length ? `<p class="empleo-etiqueta">(qué te falta)</p><ul class="oferta__lista oferta__lista--no">${o.faltan.map((m) => `<li>${escapar(m)}</li>`).join('')}</ul>` : ''}
+            ${
+              registroIA
+                ? `<p class="empleo-etiqueta">(qué recibió y qué contestó la IA)</p>
+            <div id="cand-registro"><button type="button" class="boton" id="cand-ver-registro">Ver el registro de esta candidatura</button></div>`
+                : ''
+            }
           </section>`;
         pintarATS();
+        contenido.querySelector('#cand-ver-registro')?.addEventListener('click', verRegistro);
       }
       if (nombre === 'entrevista') pintarEntrevista();
     };
+
+    // La nota de la búsqueda (5 dimensiones) y la del revisor tras adaptar el CV, por separado.
+    function notasDeEncaje() {
+      if (o.encaje == null && p.encaje == null) return '';
+      const distintas = o.encaje != null && p.encaje != null && Math.abs(o.encaje - p.encaje) > 15;
+      return `<p class="empleo-etiqueta">(encaje)</p>
+        <div class="encaje-comparado">
+          <div><strong>${o.encaje ?? '—'}</strong><span>búsqueda · técnica, experiencia, cultura y carrera</span></div>
+          <div><strong>${p.encaje ?? '—'}</strong><span>revisor · tras adaptar el CV</span></div>
+        </div>
+        ${
+          distintas
+            ? `<p class="ajuste__ayuda">No coinciden. ${p.notas[0] ? `El revisor dice: «${escapar(p.notas[0])}». ` : ''}${registroIA ? 'Abajo ves qué recibió y qué contestó cada una.' : ''}</p>`
+            : ''
+        }`;
+    }
+
+    async function verRegistro() {
+      const caja = contenido.querySelector('#cand-registro');
+      if (!caja) return;
+      caja.innerHTML = '<p class="apartado__cargando">Cargando el registro…</p>';
+      try {
+        // La puntuación de la búsqueda va por lotes: se busca por el id de la oferta.
+        const { entradas } = await registroIA({ sobre: o.id, limite: 30 });
+        if (!caja.isConnected) return;
+        caja.innerHTML = htmlRegistroIA(entradas, {
+          vacio: 'No hay nada de esta candidatura en el registro: se guarda desde ahora (y 14 días). Las candidaturas anteriores no se apuntaron.',
+        });
+      } catch (error) {
+        caja.innerHTML = `<p class="ajuste__ayuda">No se ha podido cargar: ${escapar(error.message)}</p>`;
+      }
+    }
 
     // Cambiar el diseño o la foto: se guarda, se repinta y se rehacen los PDF.
     async function cambiarEstilo(cambios) {

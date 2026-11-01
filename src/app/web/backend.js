@@ -6,6 +6,7 @@ import { ClienteCalendario, PERMISO_CALENDARIO } from '../../compartido/calendar
 import { Conversaciones, nuevoIdConversacion } from '../../compartido/conversaciones.js';
 import { GOOGLE } from '../../compartido/google.js';
 import { leerSecreto, guardarSecreto, borrarSecreto } from './secretos.js';
+import { crearEnvioRegistroIA } from '../../compartido/registro-ia.js';
 import { crearAvisos, nombreDispositivo } from './avisos.js';
 import { Consumo } from '../../compartido/consumo.js';
 import { aviso } from '../../compartido/notificaciones.js';
@@ -99,6 +100,8 @@ export function crearBackendWeb() {
     obtenerAjustes: () => ajustes,
     leerRecordatorios: () => leerLocal(CLAVE_RECORDATORIOS) ?? [],
   });
+  // Registro de la IA: cada tarea se manda al servidor (si está vinculado).
+  const registroIA = crearEnvioRegistroIA(() => avisos.cliente());
   const escuchar = (lista, f) => {
     oyentes[lista].push(f);
     return () => (oyentes[lista] = oyentes[lista].filter((x) => x !== f));
@@ -371,6 +374,7 @@ export function crearBackendWeb() {
       const inicial = await conversacionInicial();
       conversacion = new ConversacionClaude({
         anotarUso: (modelo, uso) => consumo.anotar(modelo, uso),
+        alRegistroIA: (entrada) => registroIA(entrada),
         recordatorios,
         memoria,
         calendario: {

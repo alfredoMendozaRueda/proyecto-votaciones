@@ -630,6 +630,21 @@ export function crearDemo() {
     servidor: (() => {
       let alertaDemo = null;
       let ultimasDemo = null;
+      let registroActivo = true;
+      let registroDemo = [
+        {
+          id: 2, cuando: Date.now() - 2 * HORA + 40_000, origen: 'servidor', etiqueta: 'revisar CV y carta', sobre: 'alerta-preparada', proveedor: 'openai', modelo: 'gpt-6-luna', ms: 8400, ok: true,
+          sistema: 'Eres un revisor exigente de candidaturas, con la cabeza fresca… "encaje" (0-100: cuánto encaja la persona REAL con la oferta, con el mismo criterio que la evaluación previa…)',
+          usuario: '<cv_original>\nElena Martín Rubio · Frontend Engineer…\n</cv_original>\n<oferta>\nPlanificador de rutas para repartidores. Se valora experiencia con mapas (Mapbox o Leaflet)…\n</oferta>\n<evaluacion_previa>\nencaje 81 (Encaje fuerte); tecnica 86, experiencia 78, cultura 74, carrera 82\n</evaluacion_previa>',
+          respuesta: '{"encaje": 62, "notas": ["Le doy 62 y no 81: la oferta pide experiencia con mapas (Mapbox o Leaflet) y tu CV no la menciona."], "carta": "Hola, equipo de Senda Rutas: …"}',
+        },
+        {
+          id: 1, cuando: Date.now() - 2 * HORA, origen: 'servidor', etiqueta: 'puntuar ofertas', sobre: 'alerta-preparada demo-1 demo-2', proveedor: 'groq', modelo: 'openai/gpt-oss-20b', ms: 2100, ok: true,
+          sistema: 'Eres técnico de selección y evalúas ofertas con el marco de ai-job-search…',
+          usuario: '<perfil>Frontend Engineer · React, TypeScript…</perfil>\n<oferta id="alerta-preparada">Frontend (React) · Senda Rutas · Madrid…</oferta>',
+          respuesta: '{"evaluaciones":[{"id":"alerta-preparada","puerta":"pasa","tecnica":86,"experiencia":78,"cultura":74,"carrera":82,"motivos":["React y TypeScript como en tus dos últimos puestos"]}]}',
+        },
+      ];
       // Una candidatura «preparada esta mañana» por el servidor, para ver cómo llega.
       let preparadasDemo = [
         {
@@ -648,8 +663,8 @@ export function crearDemo() {
             'Un planificador de rutas se usa en la calle y con prisa: justo donde la accesibilidad y el rendimiento en móvil marcan la diferencia.\n\nUn saludo,\nElena Martín Rubio',
           palabrasClave: ['React', 'TypeScript', 'Accesibilidad'],
           terminosOferta: ['React', 'TypeScript', 'Accesibilidad'],
-          notas: ['Carta centrada en el uso en movilidad.', 'Añadida la referencia FE-24 que pide la oferta.'],
-          encaje: 84,
+          notas: ['Le doy 62 y no 81: la oferta pide experiencia con mapas (Mapbox o Leaflet) y tu CV no la menciona.', 'Carta centrada en el uso en movilidad.', 'Añadida la referencia FE-24 que pide la oferta.'],
+          encaje: 62,
           idioma: 'es',
           empresa: 'Senda Rutas (ejemplo): software de rutas para repartos de última milla, equipo pequeño en Madrid.',
         },
@@ -691,6 +706,20 @@ export function crearDemo() {
             return { alerta: alertaDemo, ultimas: ultimasDemo, groq: true, claves: { groq: true, openai: true }, modo: alertaDemo?.modo ?? ajustes.modoIA, gastado: 0.31, enCola };
           },
           preparadas: async () => ({ preparadas: preparadasDemo.filter((p) => p.fecha <= Date.now()) }),
+          // Registro de la IA de ejemplo: la puntuación de la búsqueda y la revisión de la candidatura.
+          async registroIA({ sobre = '' } = {}) {
+            const todas = registroDemo.filter((e) => !sobre || ` ${e.sobre} `.includes(` ${sobre} `));
+            return { activo: registroActivo, entradas: registroActivo ? todas : [] };
+          },
+          async borrarRegistroIA() {
+            registroDemo = [];
+            return { ok: true };
+          },
+          async activarRegistroIA(activo) {
+            registroActivo = Boolean(activo);
+            if (!activo) registroDemo = [];
+            return { ok: true };
+          },
           // «Buscar y preparar»: encuentra dos ofertas y deja lista la mejor al cabo de unos segundos.
           async ahora({ excluir = [] } = {}) {
             await new Promise((r) => setTimeout(r, 900));

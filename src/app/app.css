@@ -6117,3 +6117,116 @@ html {
   font-size: 12px;
   color: var(--kin-vivo);
 }
+
+/* ---------- Registro de la IA ---------- */
+
+.registro-ia {
+  display: grid;
+  gap: 6px;
+}
+
+.registro-ia__fila {
+  border: 1px solid var(--linea-suave);
+  border-radius: 12px;
+  background: var(--carbon);
+}
+
+.registro-ia__fila summary {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.registro-ia__fila summary::-webkit-details-marker {
+  display: none;
+}
+
+.registro-ia__fila[open] summary {
+  border-bottom: 1px solid var(--linea-suave);
+}
+
+.registro-ia__que {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.registro-ia__fallo,
+.registro-ia__error {
+  color: var(--acento-vivo);
+}
+
+.registro-ia__meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--texto-3);
+  overflow-wrap: anywhere;
+}
+
+.registro-ia__cuerpo {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px 12px;
+  min-width: 0;
+}
+
+.registro-ia__titulo {
+  margin: 6px 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--kin-vivo);
+}
+
+.registro-ia__texto {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--yoru);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--texto-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.registro-ia__error {
+  margin: 0;
+  font-size: 13px;
+}
+
+.registro-ia__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.encaje-comparado {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 6px;
+}
+
+.encaje-comparado > div {
+  padding: 10px 12px;
+  border: 1px solid var(--linea-suave);
+  border-radius: 12px;
+  background: var(--carbon);
+}
+
+.encaje-comparado strong {
+  display: block;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto);
+}
+
+.encaje-comparado span {
+  font-size: 12px;
+  color: var(--texto-3);
+}
