@@ -546,7 +546,8 @@ test('sincronización: iPhone y Windows comparten todo cifrado y solo con el có
   const filas = (await env.DB.prepare('SELECT id, datos FROM sincro').all()).results;
   assert.ok(filas.some((f) => f.id === 'claves/groq'));
   const todo = filas.map((f) => f.datos ?? '').join(' ');
-  for (const secreto of ['gsk_secreta', 'Ana', 'Lisboa', 'Lucía', 'Tutéame']) assert.ok(!todo.includes(secreto), secreto);
+  // Frases enteras (con espacios o tildes, que no existen en base64: un trozo corto podría salir por casualidad en el cifrado).
+  for (const secreto of ['gsk_secreta_de_prueba', 'hermana se llama Ana', 'Viaje a Lisboa', 'CV de Lucía', 'Tutéame']) assert.ok(!todo.includes(secreto), secreto);
 
   // El PC pide unirse; el código coincide en las dos pantallas; el móvil lo aprueba.
   pc.ajustes = aplicarCambios(pc.ajustes, { estilo: 'tinta', tamano: 'pequeno' });
