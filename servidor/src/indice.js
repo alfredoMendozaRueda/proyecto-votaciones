@@ -416,6 +416,8 @@ async function atender(peticion, env) {
       await buscarEnPortales({
         puestos: String(d.puestos ?? '').slice(0, 300),
         ubicacion: String(d.ubicacion ?? '').slice(0, 150),
+        zonas: Array.isArray(d.zonas) ? d.zonas.filter((z) => typeof z === 'string').map((z) => z.slice(0, 80)).slice(0, 5) : [],
+        distancia: [0, 10, 25, 50, 100].includes(Number(d.distancia)) ? Number(d.distancia) : 0,
         modalidad: ['remoto', 'híbrido', 'presencial'].includes(d.modalidad) ? d.modalidad : '',
         dias: Math.min(60, Math.max(1, Number(d.dias) || 14)),
       }),

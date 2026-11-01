@@ -428,7 +428,7 @@ test('alerta de empleo: a su hora busca, puntúa con Groq y avisa solo de lo nue
   const guardada = await (
     await pedir(env, '/empleo/alerta', { metodo: 'PUT', token, cuerpo: { activa: true, puestos: 'frontend react', ubicacion: 'Madrid', hora: '09:00', minEncaje: 60, perfil } })
   ).json();
-  assert.deepEqual({ ...guardada.alerta }, { activa: true, puestos: 'frontend react', ubicacion: 'Madrid', modalidad: '', hora: '09:00', minEncaje: 60, conPerfil: true });
+  assert.deepEqual({ ...guardada.alerta }, { activa: true, puestos: 'frontend react', ubicacion: 'Madrid', zonas: ['Madrid'], distancia: 0, modalidad: '', hora: '09:00', minEncaje: 60, conPerfil: true });
   const fila = await env.DB.prepare("SELECT valor FROM ajustes WHERE clave = 'empleoAlerta'").first();
   assert.doesNotMatch(fila.valor, /Lucía/, 'el perfil se guarda cifrado');
 

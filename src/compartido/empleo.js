@@ -136,10 +136,18 @@ export function perfilBreve(p) {
 
 export const MODALIDADES = ['', 'remoto', 'híbrido', 'presencial'];
 
+export const MAX_ZONAS = 5;
+const DISTANCIAS_KM = [0, 10, 25, 50, 100];
+
 export function normalizarPreferencias(p = {}) {
+  // Zonas elegidas en el selector; las preferencias antiguas solo tenían «ubicacion» escrita a mano.
+  let zonas = [...new Set(lista(p.zonas, MAX_ZONAS, 80))];
+  if (!zonas.length && cadena(p.ubicacion, 150)) zonas = [cadena(p.ubicacion, 80)];
   return {
     puestos: cadena(p.puestos, 300),
-    ubicacion: cadena(p.ubicacion, 150),
+    zonas,
+    ubicacion: zonas.join(', ').slice(0, 300),
+    distancia: DISTANCIAS_KM.includes(Number(p.distancia)) ? Number(p.distancia) : 0,
     modalidad: MODALIDADES.includes(p.modalidad) ? p.modalidad : '',
     salario: cadena(p.salario, 60),
     extra: cadena(p.extra, 500),
@@ -245,6 +253,8 @@ export async function buscarOfertas(ia, perfil, preferencias, { portales = null,
       const r = await portales({
         puestos: pref.puestos || perfil.puestosObjetivo.slice(0, 3).join(', ') || perfil.titular,
         ubicacion: pref.ubicacion || perfil.ubicacion || 'España',
+        zonas: pref.zonas.length ? pref.zonas : [perfil.ubicacion || 'España'],
+        distancia: pref.distancia,
         modalidad: pref.modalidad,
         dias: 14,
       });
@@ -567,8 +577,23 @@ export async function prepararEntrevista(ia, perfil, oferta, { empresa = '' } = 
 
 export const MAX_POSTULACIONES = 40;
 
+// Diseño del CV (plantilla, color, foto) y la foto, recortada y pequeña (JPEG).
+export const PLANTILLAS_CV = ['clasica', 'moderna', 'lateral', 'elegante'];
+export const COLORES_CV_NOMBRES = ['granate', 'azul', 'verde', 'grafito', 'violeta', 'teja'];
+export function normalizarEstiloCV(e = {}) {
+  return {
+    plantilla: PLANTILLAS_CV.includes(e?.plantilla) ? e.plantilla : 'clasica',
+    color: COLORES_CV_NOMBRES.includes(e?.color) ? e.color : 'granate',
+    conFoto: e?.conFoto !== false,
+    forma: e?.forma === 'cuadrado' ? 'cuadrado' : 'circulo',
+  };
+}
+const fotoValida = (f) => (typeof f === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(f) && f.length < 600_000 ? f : '');
+
 export function normalizarDatosEmpleo(d = {}) {
   return {
+    foto: fotoValida(d.foto),
+    estiloCV: normalizarEstiloCV(d.estiloCV),
     cv: d.cv && typeof d.cv === 'object'
       ? { archivo: cadena(d.cv.archivo, 120), texto: typeof d.cv.texto === 'string' ? d.cv.texto.slice(0, 40000) : '', perfil: normalizarPerfil(d.cv.perfil), fecha: Number(d.cv.fecha) || Date.now() }
       : null,

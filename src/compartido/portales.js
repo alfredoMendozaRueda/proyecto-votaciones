@@ -10,6 +10,8 @@
 // Las ofertas son texto de terceros: se quita lo que no se ve (caracteres
 // invisibles, HTML oculto) para que no cuelen instrucciones a la IA.
 
+import { resolverZona, millasDe } from './zonas.js';
+
 export const URL_LINKEDIN_BUSCAR = 'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search';
 export const URL_LINKEDIN_OFERTA = 'https://www.linkedin.com/jobs-guest/jobs/api/jobPosting';
 export const URL_FREEHIRE = 'https://freehire.me';
@@ -145,9 +147,10 @@ async function pedirConEspera(url, opciones, hacerFetch, intentos = 3) {
 
 const MODALIDAD_LINKEDIN = { presencial: '1', remoto: '2', híbrido: '3' };
 
-export function urlBusquedaLinkedIn({ palabras, ubicacion, dias = 14, modalidad = '', inicio = 0 }) {
+export function urlBusquedaLinkedIn({ palabras, ubicacion, dias = 14, modalidad = '', inicio = 0, millas = 0 }) {
   const p = new URLSearchParams({ keywords: palabras, location: ubicacion || 'España', start: String(inicio) });
   if (dias > 0) p.set('f_TPR', `r${dias * 86400}`);
+  if (millas > 0) p.set('distance', String(millas));
   if (MODALIDAD_LINKEDIN[modalidad]) p.set('f_WT', MODALIDAD_LINKEDIN[modalidad]);
   return `${URL_LINKEDIN_BUSCAR}?${p}`;
 }
@@ -248,12 +251,12 @@ const PAISES = [
 ];
 export const paisDe = (texto) => PAISES.find(([re]) => re.test(texto ?? ''))?.[1] ?? '';
 
-export async function buscarFreehire({ palabras, ubicacion, dias = 30, modalidad = '', limite = 12 }, hacerFetch = fetch) {
+export async function buscarFreehire({ palabras, ubicacion, pais = null, dias = 30, modalidad = '', limite = 12 }, hacerFetch = fetch) {
   const p = new URLSearchParams({ q: palabras, limit: String(limite), offset: '0', description_format: 'text' });
   if (dias > 0) p.set('posted_within_days', String(dias));
   if (MODALIDAD_FREEHIRE[modalidad]) p.set('work_mode', MODALIDAD_FREEHIRE[modalidad]);
-  const pais = paisDe(ubicacion);
-  if (pais) p.append('countries', pais);
+  const codigo = pais ?? paisDe(ubicacion);
+  if (codigo) p.append('countries', codigo);
   const r = await pedirConEspera(`${URL_FREEHIRE}/api/v1/agent/jobs/search?${p}`, { headers: { 'User-Agent': UA, Accept: 'application/json' } }, hacerFetch);
   if (!r.ok) throw new Error(`freehire respondió ${r.status}`);
   const datos = await r.json();
@@ -287,19 +290,32 @@ export const slugFreehire = (url) => String(url ?? '').match(/^https:\/\/(?:[a-z
 
 // ---------- Búsqueda combinada ----------
 
-// Busca cada puesto (hasta 3) en los dos portales a la vez; los fallos de un
-// portal no tumban la búsqueda. Devuelve ofertas sin repetir y los errores.
-export async function buscarEnPortales({ puestos, ubicacion, modalidad = '', dias = 14 }, hacerFetch = fetch) {
+// Busca cada puesto (hasta 3) en cada zona (hasta 5) en los dos portales a la
+// vez, hasta 8 combinaciones; los fallos de un portal no tumban la búsqueda.
+// Devuelve ofertas sin repetir y los errores.
+const MAX_COMBINACIONES = 8;
+export async function buscarEnPortales({ puestos, ubicacion, zonas = [], distancia = 0, modalidad = '', dias = 14 }, hacerFetch = fetch) {
   const lista = String(puestos ?? '')
     .split(/[,;\n]+/)
     .map((p) => p.trim())
     .filter(Boolean)
     .slice(0, 3);
   if (!lista.length) throw new Error('Di qué puesto buscar.');
-  const tareas = lista.flatMap((palabras) => [
-    buscarLinkedIn({ palabras, ubicacion, modalidad, dias }, hacerFetch).then((o) => ({ portal: 'LinkedIn', ofertas: o })),
-    buscarFreehire({ palabras, ubicacion, modalidad, dias: Math.max(dias, 30) }, hacerFetch).then((o) => ({ portal: 'freehire', ofertas: o })),
-  ]);
+  const donde = (zonas.length ? zonas : [ubicacion || 'España']).slice(0, 5).map(resolverZona);
+  const combinaciones = [];
+  for (const zona of donde) for (const palabras of lista) combinaciones.push({ zona, palabras });
+  const tareas = combinaciones.slice(0, MAX_COMBINACIONES).flatMap(({ zona, palabras }) => {
+    // Una zona «en remoto» manda sobre la modalidad elegida.
+    const mod = zona.modalidad ?? modalidad;
+    const millas = zona.tipo === 'ciudad' || zona.tipo === 'provincia' || zona.tipo === 'libre' ? millasDe(distancia) : 0;
+    return [
+      buscarLinkedIn({ palabras, ubicacion: zona.busqueda, modalidad: mod, dias, millas }, hacerFetch).then((o) => ({ portal: 'LinkedIn', ofertas: o })),
+      buscarFreehire({ palabras, ubicacion: zona.busqueda, pais: zona.pais || null, modalidad: mod, dias: Math.max(dias, 30) }, hacerFetch).then((o) => ({
+        portal: 'freehire',
+        ofertas: o,
+      })),
+    ];
+  });
   const resultados = await Promise.allSettled(tareas);
   const vistas = new Set();
   const ofertas = [];

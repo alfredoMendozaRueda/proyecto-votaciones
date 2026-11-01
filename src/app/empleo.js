@@ -2,6 +2,7 @@
 // las puntúa y, para la que elijas, redacta un CV y una carta a medida que
 // después repasa un agente revisor. Todo se guarda cifrado en el dispositivo.
 import { icono } from './iconos.js';
+import { buscarZonas, resolverZona, DISTANCIAS } from '../compartido/zonas.js';
 import {
   analizarCV,
   buscarOfertas,
@@ -14,6 +15,8 @@ import {
   normalizarOferta,
   normalizarPreferencias,
   MAX_POSTULACIONES,
+  MAX_ZONAS,
+  normalizarEstiloCV,
 } from '../compartido/empleo.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -37,6 +40,38 @@ const NIVELES_ALERTA = [
   [45, 'Encaje medio (45+)'],
   [0, 'Todas las nuevas'],
 ];
+// Diseños y colores del CV (los mismos que el PDF, ver empleo-pdf.js).
+const PLANTILLAS = [
+  ['clasica', 'Clásico'],
+  ['moderna', 'Moderno'],
+  ['lateral', 'Lateral'],
+  ['elegante', 'Elegante'],
+];
+const COLORES = { granate: '#99261c', azul: '#1c4580', verde: '#1a664f', grafito: '#383b42', violeta: '#61388f', teja: '#bd5924' };
+const NOMBRE_COLOR = { granate: 'Granate', azul: 'Azul marino', verde: 'Verde', grafito: 'Grafito', violeta: 'Violeta', teja: 'Teja' };
+
+// La foto: cuadrada, centrada y pequeña (JPEG de 480 px), para guardarla cifrada y sincronizarla.
+async function prepararFoto(archivo) {
+  if (!archivo || !/^image\//.test(archivo.type)) throw new Error('Elige una imagen (JPG, PNG o HEIC).');
+  if (archivo.size > 25 * 1024 * 1024) throw new Error('La imagen es demasiado grande.');
+  const url = URL.createObjectURL(archivo);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const lado = 480;
+    const lienzo = document.createElement('canvas');
+    lienzo.width = lienzo.height = lado;
+    const m = Math.min(img.naturalWidth, img.naturalHeight);
+    // Centrada en horizontal y un poco hacia arriba: en un retrato la cara suele estar arriba.
+    const sy = Math.max(0, Math.min(img.naturalHeight - m, (img.naturalHeight - m) * 0.3));
+    lienzo.getContext('2d').drawImage(img, (img.naturalWidth - m) / 2, sy, m, m, 0, 0, lado, lado);
+    return lienzo.toDataURL('image/jpeg', 0.86);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 const TITULOS_HTML = {
   es: ['Perfil', 'Experiencia', 'Formación', 'Habilidades', 'Idiomas', 'Certificaciones'],
   en: ['Profile', 'Experience', 'Education', 'Skills', 'Languages', 'Certifications'],
@@ -220,7 +255,11 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       <div class="apartado desplazable empleo">
         <div class="apartado__cabecera"><h2>Empleo</h2></div>
         <section class="empleo-perfil">
-          <span class="avatar empleo-perfil__avatar" aria-hidden="true">${escapar((perfil.nombre || '?').charAt(0).toUpperCase())}</span>
+          ${
+            datos.foto
+              ? `<img class="avatar empleo-perfil__avatar empleo-perfil__foto" src="${datos.foto}" alt="">`
+              : `<span class="avatar empleo-perfil__avatar" aria-hidden="true">${escapar((perfil.nombre || '?').charAt(0).toUpperCase())}</span>`
+          }
           <div class="empleo-perfil__datos">
             <strong>${escapar(perfil.nombre || 'Tu perfil')}</strong>
             <span>${escapar(perfil.titular)}</span>
@@ -235,7 +274,17 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
         <form class="empleo-busqueda" id="empleo-busqueda">
           <p class="empleo-etiqueta">(qué buscas)</p>
           <label class="empleo-campo"><span>Puestos</span><input class="campo" name="puestos" maxlength="300" value="${escapar(pref.puestos)}" placeholder="Desarrolladora frontend, React…"></label>
-          <label class="empleo-campo"><span>Dónde</span><input class="campo" name="ubicacion" maxlength="150" value="${escapar(pref.ubicacion)}" placeholder="Madrid, Valencia, España…"></label>
+          <div class="empleo-campo"><span id="et-zonas">Dónde <small>(hasta ${MAX_ZONAS})</small></span>
+            <div class="zonas" id="zonas">
+              <ul class="zonas__elegidas" aria-label="Zonas elegidas"></ul>
+              <div class="zonas__buscar">
+                <input class="campo" id="zonas-texto" role="combobox" aria-expanded="false" aria-controls="zonas-lista" aria-autocomplete="list" aria-labelledby="et-zonas" autocomplete="off" spellcheck="false">
+                <ul class="zonas__lista" id="zonas-lista" role="listbox" aria-labelledby="et-zonas" hidden></ul>
+              </div>
+            </div>
+          </div>
+          <label class="empleo-campo" id="zonas-distancia"><span>Alrededor de la ciudad</span>
+            <select class="campo" name="distancia">${DISTANCIAS.map(([v, n]) => `<option value="${v}" ${pref.distancia === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
           <div class="empleo-campo"><span>Modalidad</span>
             <div class="segmentado" role="group" aria-label="Modalidad">
               ${MODALIDADES.map(([v, n]) => `<button type="button" data-modalidad="${v}" aria-pressed="${pref.modalidad === v}">${n}</button>`).join('')}
@@ -264,6 +313,8 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       </div>`;
 
     const formulario = contenedor.querySelector('#empleo-busqueda');
+    zonasElegidas = [...pref.zonas];
+    prepararZonas(formulario);
     formulario.querySelectorAll('[data-modalidad]').forEach((b) =>
       b.addEventListener('click', () => {
         formulario.querySelectorAll('[data-modalidad]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
@@ -311,10 +362,127 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     if (!formulario) return datos.preferencias;
     return normalizarPreferencias({
       puestos: formulario.puestos.value,
-      ubicacion: formulario.ubicacion.value,
+      zonas: zonasElegidas,
+      distancia: Number(formulario.distancia.value),
       salario: formulario.salario.value,
       modalidad: formulario.querySelector('[data-modalidad][aria-pressed="true"]')?.dataset.modalidad ?? '',
     });
+  }
+
+  // ---------- Selector de zonas ----------
+
+  let zonasElegidas = [];
+  const ICONO_ZONA = { ciudad: 'Ciudad', provincia: 'Provincia', comunidad: 'Comunidad', pais: 'País', remoto: 'Remoto', libre: 'Texto' };
+
+  function prepararZonas(formulario) {
+    const caja = formulario.querySelector('#zonas');
+    const elegidas = caja.querySelector('.zonas__elegidas');
+    const entrada = caja.querySelector('#zonas-texto');
+    const listaEl = caja.querySelector('#zonas-lista');
+    const distancia = formulario.querySelector('#zonas-distancia');
+    let opciones = [];
+    let activa = -1;
+
+    const pintarElegidas = () => {
+      elegidas.innerHTML = zonasElegidas
+        .map((nombre, i) => {
+          const z = resolverZona(nombre);
+          return `<li class="zona-chip" data-tipo="${z.tipo}"><span>${escapar(z.nombre)}</span><button type="button" data-quitar="${i}" aria-label="Quitar ${escapar(z.nombre)}">${icono('cerrar', 12)}</button></li>`;
+        })
+        .join('');
+      const lleno = zonasElegidas.length >= MAX_ZONAS;
+      entrada.disabled = lleno;
+      entrada.placeholder = lleno ? `Máximo ${MAX_ZONAS} zonas` : zonasElegidas.length ? 'Añadir otra zona…' : 'Ciudad, provincia, comunidad, país o «remoto»';
+      // La distancia solo tiene sentido alrededor de una ciudad o provincia.
+      distancia.hidden = !zonasElegidas.some((n) => ['ciudad', 'provincia', 'libre'].includes(resolverZona(n).tipo));
+    };
+
+    const cerrar = () => {
+      listaEl.hidden = true;
+      entrada.setAttribute('aria-expanded', 'false');
+      entrada.removeAttribute('aria-activedescendant');
+      activa = -1;
+    };
+
+    const marcar = (i) => {
+      activa = i;
+      listaEl.querySelectorAll('[role="option"]').forEach((o, j) => o.setAttribute('aria-selected', String(j === i)));
+      const o = listaEl.querySelector(`#zona-op-${i}`);
+      if (o) {
+        entrada.setAttribute('aria-activedescendant', o.id);
+        o.scrollIntoView({ block: 'nearest' });
+      }
+    };
+
+    const abrir = () => {
+      const texto = entrada.value.trim();
+      opciones = buscarZonas(texto, { excluir: zonasElegidas }).map((z) => ({ nombre: z.nombre, detalle: z.detalle, tipo: z.tipo }));
+      if (texto && !opciones.some((o) => o.nombre.toLowerCase() === texto.toLowerCase())) {
+        opciones.push({ nombre: texto, detalle: 'buscar este lugar tal cual', tipo: 'libre' });
+      }
+      if (!opciones.length) return cerrar();
+      listaEl.innerHTML = opciones
+        .map(
+          (o, i) => `<li role="option" id="zona-op-${i}" data-i="${i}" aria-selected="false" data-tipo="${o.tipo}">
+            <span class="zonas__tipo">${ICONO_ZONA[o.tipo] ?? ''}</span><span class="zonas__nombre">${escapar(o.nombre)}</span><span class="zonas__detalle">${escapar(o.detalle)}</span></li>`,
+        )
+        .join('');
+      listaEl.hidden = false;
+      entrada.setAttribute('aria-expanded', 'true');
+      marcar(texto ? 0 : -1);
+    };
+
+    const elegir = (i) => {
+      const o = opciones[i];
+      if (!o || zonasElegidas.length >= MAX_ZONAS) return;
+      if (!zonasElegidas.includes(o.nombre)) zonasElegidas.push(o.nombre);
+      entrada.value = '';
+      pintarElegidas();
+      cerrar();
+      if (!entrada.disabled) entrada.focus();
+    };
+
+    entrada.addEventListener('focus', abrir);
+    entrada.addEventListener('input', abrir);
+    entrada.addEventListener('blur', () => setTimeout(cerrar, 120));
+    entrada.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (listaEl.hidden) abrir();
+        const n = opciones.length;
+        if (n) marcar(e.key === 'ArrowDown' ? (activa + 1) % n : (activa - 1 + n) % n);
+      } else if (e.key === 'Enter') {
+        // Enter elige la zona marcada; no envía el formulario.
+        if (!listaEl.hidden && activa >= 0) {
+          e.preventDefault();
+          elegir(activa);
+        } else if (entrada.value.trim()) {
+          e.preventDefault();
+          abrir();
+          elegir(0);
+        }
+      } else if (e.key === 'Escape') {
+        cerrar();
+      } else if (e.key === 'Backspace' && !entrada.value && zonasElegidas.length) {
+        zonasElegidas.pop();
+        pintarElegidas();
+      }
+    });
+    // Con pointerdown la entrada no pierde el foco antes de elegir.
+    listaEl.addEventListener('pointerdown', (e) => {
+      const o = e.target.closest('[role="option"]');
+      if (!o) return;
+      e.preventDefault();
+      elegir(Number(o.dataset.i));
+    });
+    elegidas.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-quitar]');
+      if (!b) return;
+      zonasElegidas.splice(Number(b.dataset.quitar), 1);
+      pintarElegidas();
+      entrada.focus();
+    });
+    pintarElegidas();
   }
 
   // ---------- Alerta diaria de ofertas ----------
@@ -598,12 +766,17 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
 
   function htmlCV(cv, idioma) {
     const [tPerfil, tExp, tForm, tHab, tIdi, tCert] = TITULOS_HTML[idioma] ?? TITULOS_HTML.es;
+    const tContacto = { es: 'Contacto', en: 'Contact', fr: 'Contact', pt: 'Contacto', de: 'Kontakt', it: 'Contatti' }[idioma] ?? 'Contacto';
+    const estilo = normalizarEstiloCV(datos.estiloCV);
+    const foto = estilo.conFoto && datos.foto ? `<img class="papel__foto" data-forma="${estilo.forma}" src="${datos.foto}" alt="">` : '';
     const fechas = (a, b) => [a, b].filter(Boolean).join(' - ');
-    return `
-      <article class="papel" lang="${escapar(idioma)}">
-        <h3 class="papel__nombre">${escapar(cv.nombre)}</h3>
-        ${cv.titular ? `<p class="papel__titular">${escapar(cv.titular)}</p>` : ''}
-        <p class="papel__contacto">${escapar([cv.ubicacion, cv.email, cv.telefono, ...cv.enlaces].filter(Boolean).join('  ·  '))}</p>
+    const contacto = [cv.ubicacion, cv.email, cv.telefono, ...cv.enlaces].filter(Boolean);
+    const quien = `<div class="papel__quien">
+          <h3 class="papel__nombre">${escapar(cv.nombre)}</h3>
+          ${cv.titular ? `<p class="papel__titular">${escapar(cv.titular)}</p>` : ''}
+          ${estilo.plantilla === 'lateral' ? '' : `<p class="papel__contacto">${escapar(contacto.join(estilo.plantilla === 'elegante' ? '   |   ' : '  ·  '))}</p>`}
+        </div>`;
+    const cuerpo = `
         ${cv.resumen ? `<h4>${tPerfil}</h4><p>${escapar(cv.resumen)}</p>` : ''}
         ${cv.experiencia.length ? `<h4>${tExp}</h4>${cv.experiencia
           .map(
@@ -614,11 +787,66 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
           .join('')}` : ''}
         ${cv.formacion.length ? `<h4>${tForm}</h4>${cv.formacion
           .map((f) => `<div class="papel__bloque"><div class="papel__fila"><strong>${escapar(f.titulo)}</strong><span>${escapar(fechas(f.inicio, f.fin))}</span></div>${f.centro ? `<p class="papel__gris">${escapar(f.centro)}</p>` : ''}</div>`)
-          .join('')}` : ''}
+          .join('')}` : ''}`;
+    const listasHtml = `
         ${cv.habilidades.length ? `<h4>${tHab}</h4><p>${escapar(cv.habilidades.join('  ·  '))}</p>` : ''}
         ${cv.idiomas.length ? `<h4>${tIdi}</h4><p>${escapar(cv.idiomas.join('  ·  '))}</p>` : ''}
-        ${cv.certificaciones.length ? `<h4>${tCert}</h4>${cv.certificaciones.map((c) => `<p>${escapar(c)}</p>`).join('')}` : ''}
+        ${cv.certificaciones.length ? `<h4>${tCert}</h4>${cv.certificaciones.map((c) => `<p>${escapar(c)}</p>`).join('')}` : ''}`;
+    const atributos = `class="papel" data-plantilla="${estilo.plantilla}" style="--cv:${COLORES[estilo.color]}" lang="${escapar(idioma)}"`;
+    if (estilo.plantilla === 'lateral') {
+      const lista = (titulo, items) => (items.length ? `<h5>${titulo}</h5><ul>${items.map((x) => `<li>${escapar(x)}</li>`).join('')}</ul>` : '');
+      return `
+      <article ${atributos}>
+        <aside class="papel__lateral">${foto}${lista(tContacto, contacto)}${lista(tHab, cv.habilidades.slice(0, 16))}${lista(tIdi, cv.idiomas.slice(0, 6))}${lista(tCert, cv.certificaciones.slice(0, 5))}</aside>
+        <div class="papel__principal">${quien}${cuerpo}</div>
       </article>`;
+    }
+    return `
+      <article ${atributos}>
+        <header class="papel__cabecera">${foto}${quien}</header>
+        ${cuerpo}${listasHtml}
+      </article>`;
+  }
+
+  // Barra de diseño del CV: plantilla, color y foto. Vale para todas las candidaturas.
+  function barraEstilo() {
+    const e = normalizarEstiloCV(datos.estiloCV);
+    return `
+      <section class="cv-estilo" aria-label="Diseño del CV">
+        <div class="segmentado cv-estilo__plantillas" role="group" aria-label="Diseño">
+          ${PLANTILLAS.map(([v, n]) => `<button type="button" data-plantilla="${v}" aria-pressed="${e.plantilla === v}">${n}</button>`).join('')}
+        </div>
+        <div class="cv-estilo__fila">
+          <div class="cv-estilo__colores" role="radiogroup" aria-label="Color">
+            ${Object.entries(COLORES)
+              .map(([v, c]) => `<button type="button" role="radio" data-color="${v}" aria-checked="${e.color === v}" aria-label="${NOMBRE_COLOR[v]}" title="${NOMBRE_COLOR[v]}" style="--muestra:${c}"></button>`)
+              .join('')}
+          </div>
+          <div class="cv-estilo__foto">
+            ${datos.foto ? `<img src="${datos.foto}" alt="Tu foto" data-forma="${e.forma}">` : `<span class="cv-estilo__sinfoto" aria-hidden="true">${icono('imagen', 18)}</span>`}
+            <label class="boton boton--texto cv-estilo__subir">${datos.foto ? 'Cambiar foto' : 'Añadir foto'}<input type="file" accept="image/*" id="cv-foto" hidden></label>
+          </div>
+        </div>
+        ${
+          datos.foto
+            ? `<div class="cv-estilo__fila">
+          <label class="cv-estilo__casilla"><input type="checkbox" id="cv-con-foto" ${e.conFoto ? 'checked' : ''}> Poner la foto en el CV</label>
+          <div class="segmentado cv-estilo__forma" role="group" aria-label="Forma de la foto">
+            <button type="button" data-forma="circulo" aria-pressed="${e.forma === 'circulo'}">Redonda</button>
+            <button type="button" data-forma="cuadrado" aria-pressed="${e.forma === 'cuadrado'}">Cuadrada</button>
+          </div>
+          <button type="button" class="boton boton--texto" id="cv-quitar-foto">Quitar foto</button>
+        </div>`
+            : ''
+        }
+        <p class="ajuste__ayuda">${
+          e.plantilla === 'clasica'
+            ? 'El clásico es el que mejor leen los filtros automáticos (ATS) de las empresas grandes.'
+            : e.plantilla === 'lateral'
+            ? 'Vistoso, pero algunos filtros automáticos (ATS) leen peor dos columnas: para portales grandes, mejor el Clásico.'
+            : 'El diseño se aplica a todas tus candidaturas, al PDF del CV y al de la carta.'
+        }</p>
+      </section>`;
   }
 
   function textoPlano(p) {
@@ -649,8 +877,8 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     let pdfs = null;
     const prepararPdfs = () =>
       (pdfs = import('./empleo-pdf.js').then(async ({ pdfCV, pdfCarta }) => ({
-        cv: await pdfCV(p.cv, { idioma: p.idioma }),
-        carta: await pdfCarta(p.carta, p.cv, { idioma: p.idioma }),
+        cv: await pdfCV(p.cv, { idioma: p.idioma, estilo: datos.estiloCV, foto: datos.foto }),
+        carta: await pdfCarta(p.carta, p.cv, { idioma: p.idioma, estilo: datos.estiloCV, foto: datos.foto }),
       })));
     prepararPdfs().catch(() => {});
     // Comprobación ATS sobre la capa de texto del PDF (copia: pdf.js se queda los bytes).
@@ -702,7 +930,10 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     const contenido = contenedor.querySelector('#cand-contenido');
     const pestana = (nombre) => {
       contenedor.querySelectorAll('[data-pestana]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pestana === nombre)));
-      if (nombre === 'cv') contenido.innerHTML = htmlCV(p.cv, p.idioma);
+      if (nombre === 'cv') {
+        contenido.innerHTML = `${barraEstilo()}<div id="cv-vista">${htmlCV(p.cv, p.idioma)}</div>`;
+        conectarEstilo();
+      }
       if (nombre === 'carta') {
         contenido.innerHTML = `<div class="papel papel--carta"><textarea class="papel__carta" id="cand-carta" aria-label="Carta de presentación">${escapar(p.carta)}</textarea></div>
           <p class="ajuste__ayuda">Puedes retocarla aquí; el PDF sale con tus cambios.</p>`;
@@ -735,6 +966,34 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
       }
       if (nombre === 'entrevista') pintarEntrevista();
     };
+
+    // Cambiar el diseño o la foto: se guarda, se repinta y se rehacen los PDF.
+    async function cambiarEstilo(cambios) {
+      datos.estiloCV = normalizarEstiloCV({ ...datos.estiloCV, ...cambios });
+      await guardar();
+      pestana('cv');
+      prepararPdfs().catch(() => {});
+      comprobar().catch(() => {});
+    }
+
+    function conectarEstilo() {
+      contenido.querySelectorAll('.cv-estilo [data-plantilla]').forEach((b) => b.addEventListener('click', () => cambiarEstilo({ plantilla: b.dataset.plantilla })));
+      contenido.querySelectorAll('.cv-estilo [data-color]').forEach((b) => b.addEventListener('click', () => cambiarEstilo({ color: b.dataset.color })));
+      contenido.querySelectorAll('.cv-estilo__forma [data-forma]').forEach((b) => b.addEventListener('click', () => cambiarEstilo({ forma: b.dataset.forma })));
+      contenido.querySelector('#cv-con-foto')?.addEventListener('change', (e) => cambiarEstilo({ conFoto: e.target.checked }));
+      contenido.querySelector('#cv-quitar-foto')?.addEventListener('click', async () => {
+        datos.foto = '';
+        await cambiarEstilo({});
+      });
+      contenido.querySelector('#cv-foto')?.addEventListener('change', async (e) => {
+        try {
+          datos.foto = await prepararFoto(e.target.files?.[0]);
+          await cambiarEstilo({ conFoto: true });
+        } catch (error) {
+          mensaje(error.message);
+        }
+      });
+    }
 
     async function pintarATS() {
       const caja = contenido.querySelector('#cand-ats');

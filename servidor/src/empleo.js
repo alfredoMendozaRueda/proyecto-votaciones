@@ -19,6 +19,8 @@ export function validarAlerta(d = {}) {
     activa: d.activa === true,
     puestos: pref.puestos,
     ubicacion: pref.ubicacion,
+    zonas: pref.zonas,
+    distancia: pref.distancia,
     modalidad: pref.modalidad,
     hora: HORA.test(d.hora ?? '') ? d.hora : '08:30',
     minEncaje: Math.min(100, Math.max(0, Math.round(Number(d.minEncaje ?? 60)) || 0)),
@@ -55,7 +57,10 @@ export async function tocaAlerta(n, local) {
 export async function alertaEmpleo(n, { avisar = true, hacerFetch = fetch } = {}) {
   const alerta = (await n.ajustes()).empleoAlerta;
   if (!alerta?.puestos) throw new Error('No hay alerta de empleo configurada.');
-  const r = await buscarEnPortales({ puestos: alerta.puestos, ubicacion: alerta.ubicacion, modalidad: alerta.modalidad, dias: 2 }, hacerFetch);
+  const r = await buscarEnPortales(
+    { puestos: alerta.puestos, ubicacion: alerta.ubicacion, zonas: alerta.zonas ?? [], distancia: alerta.distancia ?? 0, modalidad: alerta.modalidad, dias: 2 },
+    hacerFetch,
+  );
   let ofertas = r.ofertas.map(normalizarOferta);
   const vistas = await n.avisados(ofertas.map((o) => `oferta:${o.id}`));
   ofertas = ofertas.filter((o) => !vistas.has(`oferta:${o.id}`)).slice(0, MAX_NUEVAS);

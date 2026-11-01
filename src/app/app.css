@@ -5562,3 +5562,370 @@ html {
 .gasto__historial {
   text-transform: none;
 }
+
+/* ---------- Empleo: selector de zonas ---------- */
+
+.zonas {
+  display: grid;
+  gap: 8px;
+}
+
+.zonas__elegidas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zonas__elegidas:empty {
+  display: none;
+}
+
+.zona-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 4px 4px 11px;
+  border: 1px solid var(--acento-hondo);
+  border-radius: 999px;
+  background: var(--acento-velo);
+  color: var(--texto);
+  font-size: 13px;
+}
+
+.zona-chip[data-tipo='remoto'] {
+  border-style: dashed;
+}
+
+.zona-chip button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--texto-2);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.zona-chip button:hover,
+.zona-chip button:focus-visible {
+  background: var(--acento-hondo);
+  color: var(--texto);
+}
+
+.zonas__buscar {
+  position: relative;
+}
+
+.zonas__lista {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 264px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--linea);
+  border-radius: 12px;
+  background: var(--carbon-2);
+  box-shadow: 0 14px 34px rgba(8, 3, 2, 0.55);
+}
+
+.zonas__lista [role='option'] {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  grid-template-areas: 'tipo nombre' 'tipo detalle';
+  align-items: center;
+  column-gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.zonas__lista [role='option'][aria-selected='true'],
+.zonas__lista [role='option']:hover {
+  background: var(--acento-velo);
+}
+
+.zonas__tipo {
+  grid-area: tipo;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--texto-3);
+}
+
+.zonas__nombre {
+  grid-area: nombre;
+  color: var(--texto);
+  font-size: 14px;
+}
+
+.zonas__detalle {
+  grid-area: detalle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--texto-3);
+  font-size: 12px;
+}
+
+/* ---------- Empleo: diseño del CV ---------- */
+
+.cv-estilo {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--linea-suave);
+  border-radius: var(--radio);
+  background: var(--carbon-2);
+}
+
+.cv-estilo .ajuste__ayuda {
+  margin: 0;
+}
+
+.cv-estilo__fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cv-estilo__colores {
+  display: flex;
+  gap: 8px;
+}
+
+.cv-estilo__colores button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--muestra);
+  box-shadow: inset 0 0 0 2px var(--carbon-2);
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.cv-estilo__colores button:hover {
+  transform: scale(1.08);
+}
+
+.cv-estilo__colores button[aria-checked='true'] {
+  border-color: var(--texto);
+}
+
+.cv-estilo__foto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cv-estilo__foto img,
+.cv-estilo__sinfoto {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.cv-estilo__foto img[data-forma='cuadrado'] {
+  border-radius: 8px;
+}
+
+.cv-estilo__sinfoto {
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--linea);
+  color: var(--texto-3);
+}
+
+.cv-estilo__subir {
+  cursor: pointer;
+}
+
+.cv-estilo__casilla {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.cv-estilo__casilla input {
+  accent-color: var(--acento);
+}
+
+.empleo-perfil__foto {
+  object-fit: cover;
+}
+
+/* Vista previa: los cuatro diseños, con el color elegido en --cv. */
+.papel {
+  --cv: #99261c;
+}
+
+.papel h4,
+.papel__titular,
+.papel li::marker {
+  color: var(--cv);
+}
+
+.papel h4 {
+  border-bottom-color: color-mix(in srgb, var(--cv) 22%, #fff);
+}
+
+.papel__cabecera {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.papel__quien {
+  flex: 1;
+  min-width: 0;
+}
+
+.papel__foto {
+  flex: none;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.papel__foto[data-forma='cuadrado'] {
+  border-radius: 8px;
+}
+
+.papel[data-plantilla='clasica'] .papel__foto {
+  order: 2;
+}
+
+/* Moderno: cabecera de color a sangre y marcas en las secciones. */
+.papel[data-plantilla='moderna'] {
+  padding-top: 0;
+  overflow: hidden;
+}
+
+.papel[data-plantilla='moderna'] .papel__cabecera {
+  margin: 0 -20px 6px;
+  padding: 20px;
+  background: var(--cv);
+  color: #fff;
+}
+
+.papel[data-plantilla='moderna'] .papel__foto {
+  order: 2;
+  width: 74px;
+  height: 74px;
+  border: 3px solid #fff;
+}
+
+.papel[data-plantilla='moderna'] .papel__titular {
+  color: #fff;
+}
+
+.papel[data-plantilla='moderna'] .papel__contacto {
+  color: color-mix(in srgb, var(--cv) 25%, #fff);
+}
+
+.papel[data-plantilla='moderna'] h4 {
+  padding: 0 0 0 9px;
+  border-bottom: 0;
+  border-left: 3.5px solid var(--cv);
+  color: #1f1a17;
+}
+
+/* Lateral: columna de color con foto, contacto y listas. */
+.papel[data-plantilla='lateral'] {
+  display: grid;
+  grid-template-columns: minmax(0, 34%) minmax(0, 1fr);
+  padding: 0;
+  overflow: hidden;
+}
+
+.papel__lateral {
+  padding: 18px 12px;
+  background: color-mix(in srgb, var(--cv) 10%, #fff);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.papel__lateral .papel__foto {
+  display: block;
+  width: 84%;
+  height: auto;
+  aspect-ratio: 1;
+  margin: 0 auto 6px;
+}
+
+.papel__lateral h5 {
+  margin: 12px 0 4px;
+  color: var(--cv);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.papel__lateral ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.papel__lateral li {
+  margin-bottom: 3px;
+}
+
+.papel__principal {
+  padding: 18px 16px;
+}
+
+/* Elegante: serifa, centrado y líneas finas. */
+.papel[data-plantilla='elegante'] {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Times New Roman', serif;
+}
+
+.papel[data-plantilla='elegante'] .papel__cabecera {
+  flex-direction: column;
+  padding-bottom: 8px;
+  border-bottom: 3px double var(--cv);
+  text-align: center;
+}
+
+.papel[data-plantilla='elegante'] .papel__nombre {
+  font-size: 24px;
+  letter-spacing: 0.01em;
+}
+
+.papel[data-plantilla='elegante'] .papel__titular {
+  font-style: italic;
+}
+
+.papel[data-plantilla='elegante'] h4 {
+  border-bottom: 0;
+  text-align: center;
+}
+
+.papel[data-plantilla='elegante'] h4::after {
+  content: '';
+  display: block;
+  width: 44px;
+  margin: 4px auto 0;
+  border-bottom: 1px solid var(--cv);
+}

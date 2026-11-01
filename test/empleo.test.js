@@ -50,7 +50,7 @@ test('empleo: portales primero (LinkedIn/freehire), web para completar, y el mar
     ] },
   ]);
   const r = await buscarOfertas(ia, PERFIL, { puestos: 'Frontend', modalidad: 'remoto' }, { portales: async (d) => ((pedidoPortales = d), { ofertas: deLosPortales, errores: ['LinkedIn respondió 429'] }) });
-  assert.deepEqual(pedidoPortales, { puestos: 'Frontend', ubicacion: 'Madrid', modalidad: 'remoto', dias: 14 });
+  assert.deepEqual(pedidoPortales, { puestos: 'Frontend', ubicacion: 'Madrid', zonas: ['Madrid'], distancia: 0, modalidad: 'remoto', dias: 14 });
   // Pocas ofertas de los portales: una búsqueda web para completar (sin repetir Beta).
   assert.equal(pedidas.length, 1);
   assert.equal(pedidas[0].web, true);
@@ -173,4 +173,35 @@ test('empleo: datos guardados se limpian', () => {
   assert.equal(d.postulaciones[0].estado, 'enviada');
   assert.equal(d.postulaciones[0].carta, 'Hola');
   assert.equal(normalizarDatosEmpleo({}).cv, null);
+});
+
+import { buscarZonas, resolverZona, ZONAS } from '../src/compartido/zonas.js';
+
+test('zonas: catálogo sin repetidos, sugerencias con y sin tildes, alias y texto libre', () => {
+  const nombres = ZONAS.map((z) => z.nombre);
+  assert.equal(new Set(nombres).size, nombres.length);
+  assert.equal(buscarZonas('cadiz')[0].nombre, 'Cádiz');
+  assert.equal(buscarZonas('vizcaya')[0].nombre, 'Bizkaia');
+  assert.ok(buscarZonas('val').some((z) => z.nombre === 'Comunidad Valenciana'));
+  assert.ok(!buscarZonas('val', { excluir: ['Valencia'] }).some((z) => z.nombre === 'Valencia'));
+  assert.equal(resolverZona('Berlín').busqueda, 'Berlin, Germany');
+  assert.equal(resolverZona('En remoto · España').modalidad, 'remoto');
+  assert.equal(resolverZona('Villanueva del Pardillo').tipo, 'libre');
+});
+
+test('zonas: cada zona se busca en los dos portales, con distancia y país; remoto manda', async () => {
+  const pedidas = [];
+  const hacerFetch = async (url) => {
+    pedidas.push(new URL(String(url)));
+    return String(url).includes('freehire') ? Response.json({ data: [] }) : new Response('');
+  };
+  await buscarEnPortales({ puestos: 'React', zonas: ['Valencia', 'Berlín', 'En remoto · Europa'], distancia: 25, modalidad: 'presencial' }, hacerFetch);
+  const linkedin = pedidas.filter((u) => u.hostname.includes('linkedin')).map((u) => Object.fromEntries(u.searchParams));
+  const freehire = pedidas.filter((u) => u.hostname.includes('freehire')).map((u) => u.searchParams);
+  assert.deepEqual(linkedin.map((p) => p.location), ['Valencia, Spain', 'Berlin, Germany', 'European Union']);
+  assert.equal(linkedin[0].distance, '15');
+  assert.equal(linkedin[0].f_WT, '1');
+  assert.equal(linkedin[2].f_WT, '2', 'en remoto aunque la modalidad diga presencial');
+  assert.equal(linkedin[2].distance, undefined);
+  assert.deepEqual(freehire.map((p) => p.get('countries')), ['es', 'de', null]);
 });
