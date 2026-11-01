@@ -6,6 +6,7 @@ import { crearCorreo } from './correo.js';
 import { crearAjustes } from './ajustes.js';
 import { crearEmpleo } from './empleo.js';
 import { crearHoy } from './hoy.js';
+import { crearBuscador } from './buscador.js';
 import { crearAgenda, crearRecordatorios, crearMemoria, crearHistorial } from './vistas.js';
 import { icono } from './iconos.js';
 import { trozosDeVoz, limpiarParaVoz } from '../compartido/voz.js';
@@ -47,6 +48,7 @@ document.getElementById('boton-cerrar').innerHTML = icono('cerrar');
 document.getElementById('boton-nueva').innerHTML = icono('conversacion');
 document.getElementById('boton-historial').innerHTML = icono('historial');
 document.getElementById('boton-memoria').innerHTML = icono('memoria');
+document.getElementById('boton-buscar').innerHTML = icono('buscar');
 
 let ajustes;
 let kitsune;
@@ -149,7 +151,7 @@ function pulsarCuandoExista(contenedor, selector, plazo = 4000) {
 function ir(nombre, { buscarYPreparar = false, nuevo = false } = {}) {
   if (nombre === 'correo' || nombre === 'agenda') api.correo.renovar?.();
   mostrarVista(nombre);
-  if (buscarYPreparar) pulsarCuandoExista(vistas.empleo, '#empleo-preparar');
+  if (buscarYPreparar) pulsarCuandoExista(vistas.empleo, '#empleo-preparar-cand');
   if (nuevo) pulsarCuandoExista(vistas.recordatorios, '#rec-nuevo');
 }
 
@@ -488,6 +490,43 @@ async function iniciar() {
     alEmpleo: ponerInsigniaEmpleo,
   });
   apartados.hoy.mostrar();
+
+  // El buscador (lupa de arriba o Ctrl+K): lleva directo a lo que eliges.
+  const buscador = crearBuscador({
+    dialogo,
+    api,
+    ir,
+    abrirAjustes: (seccion) => mostrarVista('ajustes', seccion),
+    abrirConversacion: async (id) => {
+      chat.cargar(await api.conversaciones.abrir(id));
+      mostrarVista('chat');
+    },
+    abrirCorreo: (id) => {
+      mostrarVista('correo');
+      correo.leer(id);
+    },
+    abrirCandidatura: (id) => {
+      mostrarVista('empleo');
+      apartados.empleo.abrirCandidatura(id);
+    },
+    abrirPestanaEmpleo: (nombre) => {
+      mostrarVista('empleo');
+      apartados.empleo.abrirPestana(nombre);
+    },
+    nuevaConversacion: async () => {
+      await chat.nueva();
+      mostrarVista('chat');
+    },
+  });
+  document.getElementById('boton-buscar').addEventListener('click', () => buscador.abrir());
+  document.addEventListener('keydown', (e) => {
+    if (dialogo.hidden) return;
+    const escribiendo = e.target.closest?.('input, textarea, select, [contenteditable="true"]');
+    if (((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') || (e.key === '/' && !escribiendo)) {
+      e.preventDefault();
+      buscador.abrir();
+    }
+  });
   apartados.historial = crearHistorial({
     contenedor: vistas.historial,
     api,

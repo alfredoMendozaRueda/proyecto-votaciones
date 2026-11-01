@@ -95,6 +95,8 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
   let mesVisible = { anio: new Date().getFullYear(), mes: new Date().getMonth() };
   let eventos = [];
   let cargado = null; // clave del mes cuyos eventos hay en memoria
+  // Los recordatorios pendientes también salen en su día, junto a las citas.
+  let recordatorios = [];
 
   async function mostrar() {
     contenedor.innerHTML = `
@@ -193,6 +195,7 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
     const fin = diaSiguiente(dia);
     return eventos.filter((e) => e.inicio < fin && e.fin > dia);
   };
+  const recordatoriosDel = (dia) => recordatorios.filter((r) => r.cuando >= dia && r.cuando < diaSiguiente(dia));
 
   // Elegir un día (si es de otro mes, el calendario pasa a ese mes).
   function irA(dia, { enfocar = false } = {}) {
@@ -267,6 +270,7 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
         lista.querySelector('.calendario')?.classList.remove('cargando');
       }
     }
+    recordatorios = (await api.recordatorios?.listar().catch(() => null)) ?? recordatorios;
     pintarCalendario({ enfocar, direccion: cargado === clave ? 0 : direccion });
   }
 
@@ -284,10 +288,13 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
         const suyos = delDia(dia);
         const fuera = d.getMonth() !== mes;
         const nombre = `${NOMBRES_SEMANA[(d.getDay() + 6) % 7]}, ${d.getDate()} de ${d.toLocaleDateString('es-ES', { month: 'long' })}`;
-        const cuantos = suyos.length ? `, ${suyos.length} ${suyos.length === 1 ? 'evento' : 'eventos'}` : '';
-        const puntos = suyos
+        const avisos = recordatoriosDel(dia);
+        const cuantos =
+          (suyos.length ? `, ${suyos.length} ${suyos.length === 1 ? 'evento' : 'eventos'}` : '') +
+          (avisos.length ? `, ${avisos.length} ${avisos.length === 1 ? 'recordatorio' : 'recordatorios'}` : '');
+        const puntos = [...suyos.map((e) => (e.todoElDia ? 'todo-el-dia' : '')), ...avisos.map(() => 'aviso')]
           .slice(0, 3)
-          .map((e) => `<i class="${e.todoElDia ? 'todo-el-dia' : ''}"></i>`)
+          .map((clase) => `<i class="${clase}"></i>`)
           .join('');
         return `<button type="button" class="calendario__celda${fuera ? ' fuera' : ''}${mismoDia(dia, Date.now()) ? ' hoy' : ''}"
           data-dia="${dia}" style="--i: ${(i % 7) + Math.floor(i / 7)}" aria-label="${nombre}${cuantos}" aria-pressed="${dia === seleccionado}"
@@ -316,7 +323,10 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
   function pintarDia() {
     const caja = contenedor.querySelector('.calendario__dia');
     if (!caja) return;
-    const suyos = delDia(seleccionado).sort((a, b) => Number(b.todoElDia) - Number(a.todoElDia) || a.inicio - b.inicio);
+    // Citas y recordatorios del día en una sola línea de tiempo.
+    const suyos = [...delDia(seleccionado), ...recordatoriosDel(seleccionado).map((r) => ({ ...r, recordatorio: true, inicio: r.cuando, titulo: r.texto }))].sort(
+      (a, b) => Number(Boolean(b.todoElDia)) - Number(Boolean(a.todoElDia)) || a.inicio - b.inicio,
+    );
     const d = new Date(seleccionado);
     const titulo = mismoDia(seleccionado, Date.now())
       ? 'Hoy'
@@ -326,6 +336,14 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
     }`;
     const ul = caja.querySelector('ul');
     for (const e of suyos) {
+      if (e.recordatorio) {
+        const li = document.createElement('li');
+        li.className = 'fila fila--evento fila--recordatorio';
+        li.innerHTML = `<span class="fila__hora">${horaCorta(e.inicio)}</span><div class="fila__cuerpo"><span class="fila__titulo"></span><span class="fila__detalle">${icono('campana', 12)} recordatorio</span></div>`;
+        li.querySelector('.fila__titulo').textContent = e.titulo;
+        ul.append(li);
+        continue;
+      }
       const li = document.createElement('li');
       li.className = `fila fila--evento${e.todoElDia ? ' fila--todo-el-dia' : ''}`;
       const hora = e.todoElDia ? 'Todo el día' : `${horaCorta(e.inicio)}<small>${horaCorta(e.fin)}</small>`;

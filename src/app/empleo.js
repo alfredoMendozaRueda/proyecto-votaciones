@@ -165,17 +165,35 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
     }
   }
 
-  async function mostrar() {
+  // Promesa de la primera pintura (para abrir una candidatura nada más llegar).
+  let listo = null;
+  function mostrar() {
     if (pintado) {
       // Al volver al apartado, por si la alerta de esta mañana ha traído ofertas.
       if (datos?.cv && Date.now() - alertaCargada > 5 * 60_000) cargarAlerta();
-      return;
+      return listo;
     }
     pintado = true;
     contenedor.innerHTML = '<div class="apartado"><div class="esqueleto" style="height:160px;margin:16px"></div></div>';
-    await cargar();
-    if (datos.cv) panel();
-    else inicio();
+    listo = (async () => {
+      await cargar();
+      if (datos.cv) panel();
+      else inicio();
+    })();
+    return listo;
+  }
+
+  // Desde el buscador: abrir una candidatura concreta, o Empleo en una pestaña.
+  async function abrirCandidatura(id) {
+    await mostrar();
+    const p = datos?.postulaciones.find((x) => x.id === id);
+    if (p) detalle(p);
+  }
+  async function abrirPestana(nombre) {
+    await mostrar();
+    if (!contenedor.querySelector('.empleo-pestanas')) panel();
+    pestanaElegida = true;
+    verPestana(nombre);
   }
 
   function mensaje(texto, { ajustes = false } = {}) {
@@ -283,9 +301,29 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
   function panel() {
     const { perfil } = datos.cv;
     const pref = datos.preferencias;
+    const porRevisar = datos.postulaciones.filter((p) => !p.revisada).length;
     contenedor.innerHTML = `
       <div class="apartado desplazable empleo">
         <div class="apartado__cabecera"><h2>Empleo</h2></div>
+        <div class="subapartados empleo-pestanas" role="tablist" aria-label="Empleo">
+          <button type="button" role="tab" data-pestana-empleo="ofertas">Ofertas</button>
+          <button type="button" role="tab" data-pestana-empleo="candidaturas">Candidaturas<span class="insignia" id="empleo-insignia"${porRevisar ? '' : ' hidden'}>${porRevisar}</span></button>
+          <button type="button" role="tab" data-pestana-empleo="cv">Mi CV</button>
+          ${alertas ? '<button type="button" role="tab" data-pestana-empleo="alerta">Alerta</button>' : ''}
+        </div>
+
+        <div class="empleo-progreso" id="empleo-progreso" role="status" hidden></div>
+        <p class="apartado__mensaje" role="alert" hidden></p>
+
+        <div class="empleo-panel" data-panel-empleo="candidaturas" role="tabpanel">
+          <section class="empleo-seccion" id="empleo-candidaturas"></section>
+          <div class="empleo-buscar-acciones empleo-buscar-acciones--fila">
+            <button type="button" class="boton boton--primario" id="empleo-preparar-cand" data-bloquear>${icono('chispa', 16)} Buscar y preparar</button>
+            <button type="button" class="boton" id="empleo-ir-pegar">Pegar una oferta</button>
+          </div>
+        </div>
+
+        <div class="empleo-panel" data-panel-empleo="cv" role="tabpanel">
         <section class="empleo-perfil">
           ${
             datos.foto
@@ -301,7 +339,11 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
           ${perfil.habilidades.length ? `<ul class="chips empleo-perfil__chips">${perfil.habilidades.slice(0, 10).map((h) => `<li class="chip">${escapar(h)}</li>`).join('')}</ul>` : ''}
         </section>
 
-        <section class="empleo-seccion" id="empleo-candidaturas"></section>
+          <div id="empleo-estilo"></div>
+          <div class="apartado__pie"><button type="button" class="boton" id="empleo-borrar-todo">Borrar mis datos de empleo</button></div>
+        </div>
+
+        <div class="empleo-panel" data-panel-empleo="ofertas" role="tabpanel">
 
         <form class="empleo-busqueda" id="empleo-busqueda">
           <p class="empleo-etiqueta">(qué buscas)</p>
@@ -330,8 +372,6 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
           <p class="ajuste__ayuda empleo-preparar__ayuda">«Buscar y preparar» mira la última semana (también lo que ya viste), elige las que mejor encajan y te deja hechos el CV y la carta de cada una. No envía nada.</p>
         </form>
 
-        ${alertas ? '<section class="empleo-alerta" id="empleo-alerta" aria-label="Alerta diaria de ofertas" hidden></section>' : ''}
-
         <details class="empleo-pegar" id="empleo-oferta-propia">
           <summary>¿Tienes una oferta concreta?</summary>
           <form id="empleo-oferta">
@@ -340,13 +380,13 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
           </form>
         </details>
 
-        <div class="empleo-progreso" id="empleo-progreso" role="status" hidden></div>
-        <p class="apartado__mensaje" role="alert" hidden></p>
-
         <section class="empleo-seccion" id="empleo-ofertas"></section>
+        </div>
 
-        <div class="apartado__pie"><button type="button" class="boton" id="empleo-borrar-todo">Borrar mis datos de empleo</button></div>
+        ${alertas ? '<div class="empleo-panel" data-panel-empleo="alerta" role="tabpanel"><section class="empleo-alerta" id="empleo-alerta" aria-label="Alerta diaria de ofertas" hidden></section></div>' : ''}
       </div>`;
+    conectarPestanas();
+    pintarEstiloCV();
 
     const formulario = contenedor.querySelector('#empleo-busqueda');
     zonasElegidas = [...pref.zonas];
@@ -362,6 +402,14 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
       tarea(buscar);
     });
     contenedor.querySelector('#empleo-preparar').addEventListener('click', () => tarea(buscarYPreparar));
+    contenedor.querySelector('#empleo-preparar-cand').addEventListener('click', () => tarea(buscarYPreparar));
+    contenedor.querySelector('#empleo-ir-pegar').addEventListener('click', () => {
+      verPestana('ofertas');
+      const pegar = contenedor.querySelector('#empleo-oferta-propia');
+      pegar.open = true;
+      pegar.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      pegar.querySelector('textarea')?.focus({ preventScroll: true });
+    });
     contenedor.querySelector('#empleo-oferta').addEventListener('submit', (e) => {
       e.preventDefault();
       const entrada = e.target.oferta.value.trim();
@@ -552,6 +600,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
       pintarOfertas();
     }
     pintarCandidaturas();
+    if (listas && !pestanaElegida) verPestana('candidaturas');
     if (estadoAlerta.enCola > 0) vigilarCola();
     pintarAlerta();
   }
@@ -779,7 +828,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
           : 'no hay ofertas nuevas para ti esta semana; prueba con otros puestos o más zonas',
     );
     if (r.enCola) vigilarCola();
-    contenedor.querySelector('#empleo-candidaturas')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    verPestana('candidaturas');
   }
 
   // Mientras el servidor prepara, la app va recogiendo las que estén listas.
@@ -820,7 +869,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
       await crearCandidatura(oferta, { origen: 'automatica', alPaso: (texto) => progreso(prefijo + texto) });
       pintarCandidaturas();
     }
-    contenedor.querySelector('#empleo-candidaturas')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    verPestana('candidaturas');
   }
 
   async function buscar() {
@@ -840,6 +889,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
     }
     await guardar();
     pintarOfertas();
+    verPestana('ofertas');
     contenedor.querySelector('#empleo-ofertas')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     // La alerta diaria sigue a la última búsqueda.
     const a = estadoAlerta?.alerta;
@@ -910,7 +960,22 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
     seccion.querySelectorAll('[data-abrir]').forEach((b) => b.addEventListener('click', () => api.ventana.abrirEnlace(b.dataset.abrir)));
   }
 
+  // Agrupadas por lo que toca hacer: primero las que hay que revisar.
+  const GRUPOS = [
+    ['revisar', 'por revisar', (p) => !p.revisada],
+    ['preparada', 'preparadas, sin enviar', (p) => p.revisada && p.estado === 'preparada'],
+    ['enviada', 'enviadas', (p) => p.revisada && p.estado === 'enviada'],
+    ['entrevista', 'con entrevista', (p) => p.revisada && p.estado === 'entrevista'],
+    ['descartada', 'descartadas', (p) => p.revisada && p.estado === 'descartada'],
+  ];
+
   function pintarCandidaturas() {
+    const porRevisar = datos.postulaciones.filter((p) => !p.revisada).length;
+    const insignia = contenedor.querySelector('#empleo-insignia');
+    if (insignia) {
+      insignia.hidden = !porRevisar;
+      insignia.textContent = String(porRevisar);
+    }
     const seccion = contenedor.querySelector('#empleo-candidaturas');
     if (!seccion) return;
     const enCola = estadoAlerta?.enCola ?? 0;
@@ -918,36 +983,98 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
       ? `<p class="empleo-mono empleo-preparando" role="status"><span class="empleo-progreso__punto"></span>preparando ${enCola === 1 ? '1 candidatura' : `${enCola} candidaturas`} en el servidor · aparecerán aquí</p>`
       : '';
     if (!datos.postulaciones.length) {
-      seccion.innerHTML = preparando;
+      seccion.innerHTML = `${preparando}<div class="empleo-vacio">
+        <p><strong>Aún no tienes candidaturas.</strong></p>
+        <p>Pulsa «Buscar y preparar» y te dejo hechos el CV y la carta de las ofertas que mejor encajan, o abre una oferta y pulsa «Adaptar mi CV».</p>
+      </div>`;
       return;
     }
-    seccion.innerHTML = `${preparando}
-      <p class="empleo-etiqueta">(tus candidaturas · ${datos.postulaciones.length}${
-        datos.postulaciones.some((p) => !p.revisada) ? ` · ${datos.postulaciones.filter((p) => !p.revisada).length} por revisar` : ''
-      })</p>
-      <ul class="filas">
-        ${datos.postulaciones
-          .map(
-            (p) => `<li class="fila"><button type="button" class="fila__abrir empleo-cand" data-cand="${escapar(p.id)}">
-              <span class="fila__icono">${icono('documento', 16)}</span>
+    const fila = (p) => `<li class="fila"><button type="button" class="fila__abrir empleo-cand" data-cand="${escapar(p.id)}">
+              <span class="fila__icono">${icono(p.envio?.via === 'correo' ? 'sobre' : 'documento', 16)}</span>
               <span class="fila__cuerpo"><span class="fila__titulo">${escapar(p.oferta.puesto)}</span><span class="fila__detalle">${escapar(
-                [p.oferta.empresa, fechaCorta(p.fecha)].filter(Boolean).join(' · '),
+                [p.oferta.empresa, p.envio ? `${p.envio.via === 'correo' ? 'por correo' : 'formulario'} el ${fechaCorta(p.envio.fecha)}` : fechaCorta(p.fecha), p.oferta.encaje != null ? `encaje ${p.oferta.encaje}` : '']
+                  .filter(Boolean)
+                  .join(' · '),
               )}</span></span>
               ${
                 p.revisada
                   ? `<span class="chip empleo-estado" data-estado="${p.estado}">${ESTADOS.find(([v]) => v === p.estado)[1]}</span>`
-                  : '<span class="chip empleo-estado" data-estado="lista">Lista para revisar</span>'
+                  : '<span class="chip empleo-estado" data-estado="lista">Revisar</span>'
               }
-            </button></li>`,
-          )
-          .join('')}
-      </ul>`;
+            </button></li>`;
+    seccion.innerHTML =
+      preparando +
+      GRUPOS.map(([id, titulo, cumple]) => {
+        const lista = datos.postulaciones.filter(cumple);
+        return lista.length
+          ? `<div class="empleo-grupo" data-grupo="${id}"><p class="empleo-etiqueta">(${titulo} · ${lista.length})</p><ul class="filas">${lista.map(fila).join('')}</ul></div>`
+          : '';
+      }).join('');
     seccion.querySelectorAll('[data-cand]').forEach((b) =>
       b.addEventListener('click', () => {
         const p = datos.postulaciones.find((x) => x.id === b.dataset.cand);
         if (p) detalle(p);
       }),
     );
+  }
+
+  // ---------- Pestañas de Empleo ----------
+  // Se recuerda la última; al entrar con candidaturas por revisar, se abre en Candidaturas.
+  let pestanaEmpleo = null;
+  // Si la has elegido tú, no se cambia sola (por ejemplo, al llegar candidaturas del servidor).
+  let pestanaElegida = false;
+
+  function verPestana(nombre) {
+    const raiz = contenedor.querySelector('.empleo');
+    if (!raiz || !raiz.querySelector(`[data-panel-empleo="${nombre}"]`)) return;
+    pestanaEmpleo = nombre;
+    for (const b of raiz.querySelectorAll('[data-pestana-empleo]')) b.setAttribute('aria-selected', String(b.dataset.pestanaEmpleo === nombre));
+    for (const panelEl of raiz.querySelectorAll('[data-panel-empleo]')) panelEl.hidden = panelEl.dataset.panelEmpleo !== nombre;
+  }
+
+  function conectarPestanas() {
+    contenedor.querySelectorAll('[data-pestana-empleo]').forEach((b) =>
+      b.addEventListener('click', () => {
+        pestanaElegida = true;
+        verPestana(b.dataset.pestanaEmpleo);
+        contenedor.querySelector('.empleo')?.scrollTo?.(0, 0);
+      }),
+    );
+    pestanaElegida = false;
+    const porRevisar = datos.postulaciones.some((p) => !p.revisada);
+    verPestana(porRevisar ? 'candidaturas' : pestanaEmpleo ?? (datos.postulaciones.length ? 'candidaturas' : 'ofertas'));
+  }
+
+  // «Mi CV»: el diseño (plantilla, color y foto) que usan todas las candidaturas.
+  function pintarEstiloCV() {
+    const caja = contenedor.querySelector('#empleo-estilo');
+    if (!caja) return;
+    caja.innerHTML = `<p class="empleo-etiqueta">(diseño de tus CV y cartas)</p>${barraEstilo()}`;
+    conectarBarraEstilo(caja, async (cambios) => {
+      datos.estiloCV = normalizarEstiloCV({ ...datos.estiloCV, ...cambios });
+      await guardar();
+      pintarEstiloCV();
+    });
+  }
+
+  // Los controles de diseño, para «Mi CV» y para cada candidatura.
+  function conectarBarraEstilo(caja, cambiar) {
+    caja.querySelectorAll('.cv-estilo [data-plantilla]').forEach((b) => b.addEventListener('click', () => cambiar({ plantilla: b.dataset.plantilla })));
+    caja.querySelectorAll('.cv-estilo [data-color]').forEach((b) => b.addEventListener('click', () => cambiar({ color: b.dataset.color })));
+    caja.querySelectorAll('.cv-estilo__forma [data-forma]').forEach((b) => b.addEventListener('click', () => cambiar({ forma: b.dataset.forma })));
+    caja.querySelector('#cv-con-foto')?.addEventListener('change', (e) => cambiar({ conFoto: e.target.checked }));
+    caja.querySelector('#cv-quitar-foto')?.addEventListener('click', async () => {
+      datos.foto = '';
+      await cambiar({});
+    });
+    caja.querySelector('#cv-foto')?.addEventListener('change', async (e) => {
+      try {
+        datos.foto = await prepararFoto(e.target.files?.[0]);
+        await cambiar({ conFoto: true });
+      } catch (error) {
+        mensaje(error.message);
+      }
+    });
   }
 
   // La candidatura ya preparada para una oferta (misma dirección o misma oferta).
@@ -1275,24 +1402,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
       comprobar().catch(() => {});
     }
 
-    function conectarEstilo() {
-      contenido.querySelectorAll('.cv-estilo [data-plantilla]').forEach((b) => b.addEventListener('click', () => cambiarEstilo({ plantilla: b.dataset.plantilla })));
-      contenido.querySelectorAll('.cv-estilo [data-color]').forEach((b) => b.addEventListener('click', () => cambiarEstilo({ color: b.dataset.color })));
-      contenido.querySelectorAll('.cv-estilo__forma [data-forma]').forEach((b) => b.addEventListener('click', () => cambiarEstilo({ forma: b.dataset.forma })));
-      contenido.querySelector('#cv-con-foto')?.addEventListener('change', (e) => cambiarEstilo({ conFoto: e.target.checked }));
-      contenido.querySelector('#cv-quitar-foto')?.addEventListener('click', async () => {
-        datos.foto = '';
-        await cambiarEstilo({});
-      });
-      contenido.querySelector('#cv-foto')?.addEventListener('change', async (e) => {
-        try {
-          datos.foto = await prepararFoto(e.target.files?.[0]);
-          await cambiarEstilo({ conFoto: true });
-        } catch (error) {
-          mensaje(error.message);
-        }
-      });
-    }
+    const conectarEstilo = () => conectarBarraEstilo(contenido, cambiarEstilo);
 
     async function pintarATS() {
       const caja = contenido.querySelector('#cand-ats');
@@ -1554,5 +1664,5 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
     if (!contenedor.hidden && !contenedor.closest('[hidden]')) mostrar();
   }
 
-  return { mostrar, recargar, cambiarModo };
+  return { mostrar, recargar, cambiarModo, abrirCandidatura, abrirPestana };
 }
