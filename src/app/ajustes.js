@@ -2,6 +2,7 @@ import { icono } from './iconos.js';
 import { PALETAS } from '../kitsune/paletas.js';
 import { PERMISOS, NOMBRES_NIVEL, nivelesDe, nivel } from '../compartido/permisos.js';
 import { VOCES } from '../compartido/voz.js';
+import { leerBloqueo, bloqueoDisponible, activarBloqueo, desactivarBloqueo, cambiarTras, comprobarIdentidad, OPCIONES_TRAS, nombreBiometria } from './web/bloqueo.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -228,6 +229,24 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
           </div>
           <div class="botonera"><button type="button" class="boton" id="voz-probar">${icono('altavoz', 15)} Escuchar la voz</button></div>
           <p class="mensaje-ajuste" id="mensaje-voz" role="status"></p>
+          ${
+            api.plataforma === 'web' && !api.demo
+              ? `<div id="ajuste-bloqueo" hidden>
+            <div class="ajuste ajuste--fila">
+              <div>
+                <div class="ajuste__etiqueta" id="et-bloqueo">Bloquear con ${nombreBiometria() === 'Face ID' ? 'Face ID' : 'huella o cara'}</div>
+                <p class="ajuste__ayuda">Al abrir Kitsune, o al volver tras un rato, te pide ${nombreBiometria()} (o el código del dispositivo).</p>
+              </div>
+              <button type="button" class="interruptor" role="switch" aria-labelledby="et-bloqueo" id="bloqueo-interruptor" aria-checked="${Boolean(leerBloqueo())}"></button>
+            </div>
+            <div class="ajuste ajuste--fila" id="bloqueo-tras-fila" ${leerBloqueo() ? '' : 'hidden'}>
+              <label class="ajuste__etiqueta" for="bloqueo-tras">Pedirlo al volver</label>
+              <div style="width:170px"><select class="campo" id="bloqueo-tras">${OPCIONES_TRAS.map(([v, n]) => `<option value="${v}" ${leerBloqueo()?.tras === v ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+            </div>
+            <p class="mensaje-ajuste" id="mensaje-bloqueo" role="status"></p>
+          </div>`
+              : ''
+          }
           ${interruptor('pulsoDiario', 'Pulso del día', 'La primera vez que abres Kitsune cada día te ofrece un resumen de correo y recordatorios.')}
         </section>
 
@@ -649,6 +668,30 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
         boton.disabled = false;
       }
     });
+    const bloque = contenedor.querySelector('#ajuste-bloqueo');
+    if (bloque) {
+      bloqueoDisponible().then((ok) => (bloque.hidden = !ok));
+      const interruptorBloqueo = bloque.querySelector('#bloqueo-interruptor');
+      interruptorBloqueo.addEventListener('click', async () => {
+        const activo = interruptorBloqueo.getAttribute('aria-checked') === 'true';
+        try {
+          if (activo) {
+            // Para quitarlo también hay que ser tú.
+            if (!(await comprobarIdentidad())) throw new Error('No se ha podido comprobar que eres tú.');
+            desactivarBloqueo();
+          } else {
+            await activarBloqueo(Number(bloque.querySelector('#bloqueo-tras').value) || 1);
+          }
+          const ahora = Boolean(leerBloqueo());
+          interruptorBloqueo.setAttribute('aria-checked', String(ahora));
+          bloque.querySelector('#bloqueo-tras-fila').hidden = !ahora;
+          mostrarMensaje('mensaje-bloqueo', ahora ? `Listo: Kitsune te pedirá ${nombreBiometria()}.` : 'Bloqueo quitado.', true);
+        } catch (error) {
+          mostrarMensaje('mensaje-bloqueo', error.name === 'NotAllowedError' ? 'Cancelado.' : error.message, false);
+        }
+      });
+      bloque.querySelector('#bloqueo-tras').addEventListener('change', (e) => cambiarTras(Number(e.target.value)));
+    }
     contenedor.querySelector('#vs-cargar')?.addEventListener('click', async () => {
       const selector = contenedor.querySelector('#ajuste-vs-voz');
       try {

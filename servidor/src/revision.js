@@ -6,6 +6,7 @@ import { Nucleo } from './nucleo.js';
 import { partesLocales, desdeLocal, horaLocal, fechaLegible, enSilencio, aMinutos } from './tiempo.js';
 import { coincideCorreo, coincideCita, duracion } from '../../src/compartido/automatizaciones.js';
 import { extraerEvento } from './ia.js';
+import { tocaAlerta, alertaEmpleo } from './empleo.js';
 import { aviso } from '../../src/compartido/notificaciones.js';
 
 // Pestañas de Gmail de las que no se avisa si «solo lo principal» está activo.
@@ -21,6 +22,16 @@ export async function revisar(env, ahora = Date.now()) {
   const avisos = await n.avisos();
   const activas = (await n.automatizaciones()).filter((x) => x.activa);
   const conGoogle = Boolean(a.google && !a.google.caducado);
+
+  // Alertas de empleo: el minuto que toca solo se hace esto (el resto, al siguiente).
+  if (await tocaAlerta(n, local)) {
+    try {
+      await alertaEmpleo(n);
+    } catch (error) {
+      await fallo(n, error);
+    }
+    return;
+  }
 
   const pasos = [() => recordatorios(n), () => horarios(n, activas, local, zona, conGoogle)];
   if (conGoogle) {

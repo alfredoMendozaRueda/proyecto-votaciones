@@ -573,6 +573,8 @@ export function crearDemo() {
       };
     })(),
     servidor: (() => {
+      let alertaDemo = null;
+      let ultimasDemo = null;
       let autos = PLANTILLAS.slice(0, 2).map((p, i) => normalizarAutomatizacion(p.automatizacion, `ademo${i}`));
       let avisos = { correo: true, soloPrincipal: true, correoCadaMin: 2, citas: 15, silencio: { activo: true, desde: '23:00', hasta: '08:00' } };
       let pushAqui = false;
@@ -603,6 +605,24 @@ export function crearDemo() {
           async buscar() {
             await new Promise((r) => setTimeout(r, 600));
             return { ofertas: OFERTAS_DEMO.map((o, i) => ({ ...o, id: `demo-${i}`, fuente: i === 1 ? 'freehire' : 'LinkedIn' })), errores: [] };
+          },
+          async alerta() {
+            return { alerta: alertaDemo, ultimas: ultimasDemo, groq: true };
+          },
+          async guardarAlerta(datos) {
+            if (datos.activa && !String(datos.puestos ?? '').trim()) throw new Error('Di qué puesto buscar para las alertas.');
+            alertaDemo = { activa: Boolean(datos.activa), puestos: datos.puestos ?? '', ubicacion: datos.ubicacion ?? '', modalidad: datos.modalidad ?? '', hora: datos.hora || '08:30', minEncaje: Number(datos.minEncaje ?? 60), conPerfil: true };
+            return { alerta: alertaDemo };
+          },
+          async probarAlerta() {
+            await new Promise((r) => setTimeout(r, 600));
+            ultimasDemo = {
+              fecha: Date.now(),
+              evaluadas: true,
+              errores: [],
+              ofertas: [{ ...OFERTA_ALERTA_DEMO, id: `alerta-${Date.now()}` }],
+            };
+            return { ultimas: ultimasDemo };
           },
           async detalle(url) {
             const o = OFERTAS_DEMO.find((x) => x.url === url) ?? OFERTAS_DEMO[0];
@@ -706,6 +726,26 @@ const PERFIL_DEMO = {
   certificaciones: [],
   puestosObjetivo: ['Desarrolladora frontend sénior', 'Ingeniera frontend React', 'Frontend lead'],
   nivel: 'senior',
+};
+
+// Lo que trae la alerta diaria en el ejemplo.
+const OFERTA_ALERTA_DEMO = {
+  puesto: 'Ingeniera frontend (React + TypeScript)',
+  empresa: 'Senda Rutas',
+  ubicacion: 'Madrid',
+  modalidad: 'híbrido',
+  salario: '45.000–52.000 €',
+  publicada: 'hoy',
+  url: 'https://empleo.ejemplo.es/senda/frontend',
+  fuente: 'LinkedIn',
+  resumen: 'Planificador de rutas para repartidores. Equipo pequeño y producto propio.',
+  requisitos: ['React', 'TypeScript', 'Accesibilidad'],
+  encaje: 81,
+  veredicto: 'encaje fuerte',
+  puerta: 'pasa',
+  dimensiones: { tecnica: 86, experiencia: 78, cultura: 74, carrera: 82 },
+  motivos: ['React y TypeScript como en tus dos últimos puestos'],
+  faltan: [],
 };
 
 const OFERTAS_DEMO = [

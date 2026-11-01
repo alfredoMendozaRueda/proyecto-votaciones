@@ -400,3 +400,74 @@ test('dictado: Whisper en el servidor (audio en flujo) y en Groq, sin frases fan
   assert.equal(limpiarTranscripcion('Subtítulos realizados por la comunidad de Amara.org'), '');
   await assert.rejects(transcribirGroq({ apiKey: 'x', audio, tipo: 'audio/webm', fetch: async () => new Response('{}', { status: 429 }) }), /gastado/);
 });
+
+test('alerta de empleo: a su hora busca, puntúa con Groq y avisa solo de lo nuevo que encaja', async () => {
+  const env = entorno();
+  const { token } = await vincular(env);
+  const nav = await navegador();
+  await pedir(env, '/suscripcion', { metodo: 'PUT', token, cuerpo: { suscripcion: nav.suscripcion } });
+  internet();
+  await pedir(env, '/groq', { metodo: 'PUT', token, cuerpo: { clave: 'gsk_abcdefghijklmnopqrstuvwxyz123456' } });
+
+  // Sin puesto no se puede activar; sin vincular, nada.
+  assert.equal((await pedir(env, '/empleo/alerta')).status, 401);
+  const sinPuesto = await pedir(env, '/empleo/alerta', { metodo: 'PUT', token, cuerpo: { activa: true, puestos: '' } });
+  assert.equal(sinPuesto.status, 400);
+  const perfil = { nombre: 'Lucía Prieto', titular: 'Frontend', habilidades: ['React'], idiomas: ['Español nativo'] };
+  const guardada = await (
+    await pedir(env, '/empleo/alerta', { metodo: 'PUT', token, cuerpo: { activa: true, puestos: 'frontend react', ubicacion: 'Madrid', hora: '09:00', minEncaje: 60, perfil } })
+  ).json();
+  assert.deepEqual({ ...guardada.alerta }, { activa: true, puestos: 'frontend react', ubicacion: 'Madrid', modalidad: '', hora: '09:00', minEncaje: 60, conPerfil: true });
+  const fila = await env.DB.prepare("SELECT valor FROM ajustes WHERE clave = 'empleoAlerta'").first();
+  assert.doesNotMatch(fila.valor, /Lucía/, 'el perfil se guarda cifrado');
+
+  // Portales y Groq simulados: dos ofertas; una encaja (80) y otra no pasa la puerta del idioma.
+  const llamadas = internet();
+  const base = globalThis.fetch;
+  const pedidos = [];
+  let ofertas = [
+    { public_slug: 'brujula-frontend', title: 'Frontend React', company: 'Brújula', location: 'Madrid', url: 'https://freehire.me/jobs/brujula-frontend', description: 'React' },
+    { public_slug: 'nube-aleman', title: 'Frontend (alemán C1)', company: 'Nube', location: 'Madrid', url: 'https://freehire.me/jobs/nube-aleman', description: 'Deutsch C1' },
+  ];
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.startsWith('https://www.linkedin.com/')) return new Response('', { status: 200 });
+    if (u.startsWith('https://freehire.me/')) return (pedidos.push(u), Response.json({ data: ofertas }));
+    if (u.startsWith('https://api.groq.com/')) {
+      const ids = [...JSON.parse(init.body).messages[1].content.matchAll(/<oferta id="([^"]+)">/g)].map((m) => m[1]);
+      const evaluaciones = ids.map((id) =>
+        id.includes('nube') ? { id, puerta: 'no', notaPuerta: 'Pide alemán C1', tecnica: 80, experiencia: 80, cultura: 80, carrera: 80 } : { id, puerta: 'pasa', tecnica: 80, experiencia: 80, cultura: 80, carrera: 80 },
+      );
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ evaluaciones }) } }] });
+    }
+    return base(url, init);
+  };
+
+  const hoy = partesLocales(Date.now(), 'Europe/Madrid').fecha;
+  const nueve = desdeLocal(hoy, '09:00', 'Europe/Madrid');
+  await revisar(env, nueve - 60_000);
+  assert.equal(pedidos.length, 0, 'antes de su hora no busca');
+  await revisar(env, nueve + 60_000);
+  await revisar(env, nueve + 120_000);
+  assert.equal(pedidos.length, 1, 'una sola vez al día');
+  assert.match(pedidos[0], /countries=es/);
+  const avisos = await Promise.all(llamadas.push.map((p) => nav.descifrar(p.cuerpo).then(JSON.parse)));
+  const empleo = avisos.filter((a) => a.etiqueta === 'empleo');
+  assert.equal(empleo.length, 1);
+  assert.equal(empleo[0].titulo, 'Kitsune: oferta nueva: Frontend React');
+  assert.match(empleo[0].cuerpo, /Brújula \(80\)/);
+  assert.equal(empleo[0].url, './?empleo');
+
+  const estado = await (await pedir(env, '/empleo/alerta', { token })).json();
+  assert.equal(estado.groq, true);
+  assert.equal(estado.alerta.perfil, undefined);
+  assert.equal(estado.ultimas.evaluadas, true);
+  assert.deepEqual(estado.ultimas.ofertas.map((o) => o.empresa), ['Brújula']);
+
+  // Probar ahora: las ya vistas no vuelven; solo la nueva, y sin push.
+  ofertas = [...ofertas, { public_slug: 'faro-react', title: 'React Developer', company: 'Faro', location: 'Madrid', url: 'https://freehire.me/jobs/faro-react', description: 'React' }];
+  const antes = llamadas.push.length;
+  const prueba = await (await pedir(env, '/empleo/alerta/probar', { metodo: 'POST', token })).json();
+  assert.deepEqual(prueba.ultimas.ofertas.map((o) => o.empresa), ['Faro']);
+  assert.equal(llamadas.push.length, antes);
+});

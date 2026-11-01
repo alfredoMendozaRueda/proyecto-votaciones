@@ -13,6 +13,7 @@ import { aviso } from '../../src/compartido/notificaciones.js';
 import { sintetizar, validarVoz } from './voz.js';
 import { limpiarTranscripcion, MAX_AUDIO } from '../../src/compartido/dictado.js';
 import { buscarEnPortales, detalleOferta } from '../../src/compartido/portales.js';
+import { guardarAlerta, alertaPublica, alertaEmpleo } from './empleo.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -391,6 +392,20 @@ async function atender(peticion, env) {
         dias: Math.min(60, Math.max(1, Number(d.dias) || 14)),
       }),
     );
+  }
+  if (m === 'GET' && ruta === '/empleo/alerta') {
+    const a = await n.ajustes();
+    return json({ alerta: alertaPublica(a.empleoAlerta), ultimas: a.empleoUltimas ?? null, groq: Boolean(await n.claveGroq().catch(() => null)) });
+  }
+  if (m === 'PUT' && ruta === '/empleo/alerta') {
+    try {
+      return json({ alerta: await guardarAlerta(n, await cuerpo(peticion)) });
+    } catch (error) {
+      throw new ErrorHttp(400, error.message);
+    }
+  }
+  if (m === 'POST' && ruta === '/empleo/alerta/probar') {
+    return json({ ultimas: await alertaEmpleo(n, { avisar: false }) });
   }
   if (m === 'POST' && ruta === '/empleo/detalle') {
     const { url } = await cuerpo(peticion);

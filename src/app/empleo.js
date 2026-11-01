@@ -11,6 +11,7 @@ import {
   prepararEntrevista,
   comprobarATS,
   normalizarDatosEmpleo,
+  normalizarOferta,
   normalizarPreferencias,
   MAX_POSTULACIONES,
 } from '../compartido/empleo.js';
@@ -28,6 +29,13 @@ const MODALIDADES = [
   ['remoto', 'Remoto'],
   ['híbrido', 'Híbrido'],
   ['presencial', 'Presencial'],
+];
+// Umbrales del marco de ai-job-search: fuerte 75, bueno 60.
+const NIVELES_ALERTA = [
+  [75, 'Encaje fuerte (75+)'],
+  [60, 'Encaje bueno (60+)'],
+  [45, 'Encaje medio (45+)'],
+  [0, 'Todas las nuevas'],
 ];
 const TITULOS_HTML = {
   es: ['Perfil', 'Experiencia', 'Formación', 'Habilidades', 'Idiomas', 'Certificaciones'],
@@ -71,6 +79,11 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
   // Los portales de ai-job-search (LinkedIn y freehire) van por el servidor de avisos.
   const portales = api.servidor?.empleo ? (d) => api.servidor.empleo.buscar(d) : null;
   const detallePortal = api.servidor?.empleo ? (url) => api.servidor.empleo.detalle(url) : null;
+  // Alerta diaria: la hace el servidor de avisos cada mañana.
+  const alertas = api.servidor?.empleo?.alerta ? api.servidor.empleo : null;
+  let estadoAlerta = null;
+  let alertaCargada = 0;
+  const nuevas = new Set();
 
   async function cargar() {
     if (datos) return;
@@ -86,7 +99,11 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
   }
 
   async function mostrar() {
-    if (pintado) return;
+    if (pintado) {
+      // Al volver al apartado, por si la alerta de esta mañana ha traído ofertas.
+      if (datos?.cv && Date.now() - alertaCargada > 5 * 60_000) cargarAlerta();
+      return;
+    }
     pintado = true;
     contenedor.innerHTML = '<div class="apartado"><div class="esqueleto" style="height:160px;margin:16px"></div></div>';
     await cargar();
@@ -228,6 +245,8 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
           <button type="submit" class="boton boton--primario empleo-buscar" data-bloquear>${icono('buscar', 16)} Buscar ofertas</button>
         </form>
 
+        ${alertas ? '<section class="empleo-alerta" id="empleo-alerta" aria-label="Alerta diaria de ofertas" hidden></section>' : ''}
+
         <details class="empleo-pegar" id="empleo-oferta-propia">
           <summary>¿Tienes una oferta concreta?</summary>
           <form id="empleo-oferta">
@@ -252,12 +271,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     );
     formulario.addEventListener('submit', (e) => {
       e.preventDefault();
-      datos.preferencias = normalizarPreferencias({
-        puestos: formulario.puestos.value,
-        ubicacion: formulario.ubicacion.value,
-        salario: formulario.salario.value,
-        modalidad: formulario.querySelector('[data-modalidad][aria-pressed="true"]')?.dataset.modalidad ?? '',
-      });
+      datos.preferencias = preferenciasDelFormulario();
       tarea(buscar);
     });
     contenedor.querySelector('#empleo-oferta').addEventListener('submit', (e) => {
@@ -286,6 +300,143 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     });
     pintarOfertas();
     pintarCandidaturas();
+    if (alertas) {
+      if (estadoAlerta) pintarAlerta();
+      else cargarAlerta();
+    }
+  }
+
+  function preferenciasDelFormulario() {
+    const formulario = contenedor.querySelector('#empleo-busqueda');
+    if (!formulario) return datos.preferencias;
+    return normalizarPreferencias({
+      puestos: formulario.puestos.value,
+      ubicacion: formulario.ubicacion.value,
+      salario: formulario.salario.value,
+      modalidad: formulario.querySelector('[data-modalidad][aria-pressed="true"]')?.dataset.modalidad ?? '',
+    });
+  }
+
+  // ---------- Alerta diaria de ofertas ----------
+
+  async function cargarAlerta() {
+    if (!alertas) return;
+    alertaCargada = Date.now();
+    try {
+      estadoAlerta = await alertas.alerta();
+    } catch (error) {
+      estadoAlerta = { error: error.message };
+    }
+    if (incorporarUltimas(estadoAlerta.ultimas)) {
+      await guardar();
+      pintarOfertas();
+    }
+    pintarAlerta();
+  }
+
+  // Las ofertas que trajo la alerta (y aún no estaban), arriba y marcadas como nuevas.
+  function incorporarUltimas(ultimas) {
+    if (!ultimas?.ofertas?.length || !datos?.cv || (ultimas.fecha && ultimas.fecha <= datos.alertaVista)) return 0;
+    datos.alertaVista = ultimas.fecha || Date.now();
+    const llegadas = ultimas.ofertas.map(normalizarOferta).filter((o) => !datos.ofertas.some((x) => mismaOferta(x, o)));
+    llegadas.forEach((o) => nuevas.add(o.id));
+    if (llegadas.length) {
+      datos.ofertas = [...llegadas, ...datos.ofertas].slice(0, 20);
+      datos.busqueda = datos.alertaVista;
+    }
+    return llegadas.length || 1;
+  }
+
+  const alertaActual = () => estadoAlerta?.alerta ?? { activa: false, puestos: '', ubicacion: '', hora: '08:30', minEncaje: 60 };
+
+  function pintarAlerta(nota = '') {
+    const caja = contenedor.querySelector('#empleo-alerta');
+    if (!caja || !estadoAlerta) return;
+    caja.hidden = false;
+    if (estadoAlerta.error) {
+      caja.innerHTML = `
+        <div class="empleo-alerta__cabecera">
+          <span class="empleo-alerta__icono" aria-hidden="true">${icono('campana', 18)}</span>
+          <div><strong>Alerta diaria de ofertas</strong>
+          <p class="ajuste__ayuda">Cada mañana puedo buscarte ofertas nuevas y avisarte al móvil de las que encajan contigo. Para eso, conecta antes los avisos.</p></div>
+        </div>
+        <div class="empleo-alerta__acciones"><button type="button" class="boton" data-ir-avisos>${icono('campana', 15)} Conectar los avisos</button></div>`;
+      caja.querySelector('[data-ir-avisos]').addEventListener('click', () => abrirAjustes('avisos'));
+      return;
+    }
+    const a = alertaActual();
+    const u = estadoAlerta.ultimas;
+    const busca = a.puestos ? `Busca «${a.puestos}»${a.ubicacion ? ` en ${a.ubicacion}` : ''}${a.modalidad ? ` (${a.modalidad})` : ''}. ` : '';
+    caja.innerHTML = `
+      <div class="empleo-alerta__cabecera">
+        <span class="empleo-alerta__icono" aria-hidden="true">${icono('campana', 18)}</span>
+        <div><strong id="et-alerta">Alerta diaria de ofertas</strong>
+        <p class="ajuste__ayuda">Cada mañana miro LinkedIn y freehire y te aviso al móvil solo de las ofertas nuevas que encajan. Las que ya viste no se repiten.</p></div>
+        <button type="button" class="interruptor" role="switch" aria-labelledby="et-alerta" id="alerta-activa" aria-checked="${a.activa}" data-bloquear></button>
+      </div>
+      ${
+        a.activa
+          ? `<div class="empleo-alerta__opciones">
+              <label class="empleo-campo"><span>A qué hora</span><input class="campo" type="time" id="alerta-hora" value="${escapar(a.hora)}" data-bloquear></label>
+              <label class="empleo-campo"><span>Avisarme de</span><select class="campo" id="alerta-encaje" data-bloquear>${NIVELES_ALERTA.map(
+                ([v, n]) => `<option value="${v}"${v === a.minEncaje ? ' selected' : ''}>${n}</option>`,
+              ).join('')}</select></label>
+            </div>
+            <p class="ajuste__ayuda">${escapar(busca)}Usa lo que tengas en «qué buscas»: al buscar con otros puestos, la alerta se actualiza.</p>
+            ${estadoAlerta.groq ? '' : '<p class="ajuste__ayuda empleo-alerta__ojo">Sin Groq en el servidor te llegan todas las ofertas nuevas, sin puntuar. Para que solo te avise de las que encajan, activa Groq en Ajustes → Avisos.</p>'}
+            <div class="empleo-alerta__acciones"><button type="button" class="boton" id="alerta-probar" data-bloquear>${icono('actualizar', 15)} Probar ahora</button></div>`
+          : ''
+      }
+      ${
+        nota || u
+          ? `<p class="empleo-mono empleo-alerta__ultima" role="status">${escapar(
+              nota || `última búsqueda: ${fechaCorta(u.fecha)} · ${u.ofertas.length} ${u.ofertas.length === 1 ? 'oferta nueva' : 'ofertas nuevas'}${u.evaluadas ? '' : ' sin puntuar'}`,
+            )}</p>`
+          : ''
+      }`;
+    caja.querySelector('#alerta-activa').addEventListener('click', () => tarea(() => guardarAlerta({ activa: !a.activa })));
+    caja.querySelector('#alerta-hora')?.addEventListener('change', (e) => {
+      if (/^\d{2}:\d{2}$/.test(e.target.value)) tarea(() => guardarAlerta({ hora: e.target.value }));
+    });
+    caja.querySelector('#alerta-encaje')?.addEventListener('change', (e) => tarea(() => guardarAlerta({ minEncaje: Number(e.target.value) })));
+    caja.querySelector('#alerta-probar')?.addEventListener('click', () => tarea(probarAlerta));
+  }
+
+  // Guarda la alerta con la búsqueda de arriba y el resumen del CV (para puntuar).
+  async function guardarAlerta(cambios = {}, { callada = false } = {}) {
+    const a = alertaActual();
+    datos.preferencias = preferenciasDelFormulario();
+    const nueva = { activa: a.activa, hora: a.hora, minEncaje: a.minEncaje, ...datos.preferencias, ...cambios, perfil: datos.cv.perfil };
+    try {
+      const { alerta } = await alertas.guardarAlerta(nueva);
+      estadoAlerta = { ...estadoAlerta, alerta };
+      await guardar();
+    } catch (error) {
+      if (callada) return false;
+      pintarAlerta();
+      if (/puesto/i.test(error.message)) contenedor.querySelector('#empleo-busqueda [name="puestos"]')?.focus();
+      throw error;
+    }
+    if (callada) return true;
+    pintarAlerta(cambios.activa === true ? `activada: te aviso cada día a las ${estadoAlerta.alerta.hora}` : cambios.activa === false ? 'alerta desactivada' : 'alerta guardada');
+  }
+
+  async function probarAlerta() {
+    progreso('Buscando ofertas nuevas, como hará la alerta cada mañana…');
+    const { ultimas } = await alertas.probarAlerta();
+    estadoAlerta = { ...estadoAlerta, ultimas };
+    if (incorporarUltimas(ultimas)) {
+      await guardar();
+      pintarOfertas();
+    }
+    pintarAlerta(
+      ultimas.ofertas.length
+        ? ultimas.ofertas.length === 1
+          ? `1 oferta nueva${ultimas.evaluadas ? ' que encaja' : ''}: está abajo, marcada como «nueva»`
+          : `${ultimas.ofertas.length} ofertas nuevas${ultimas.evaluadas ? ' que encajan' : ''}: están abajo, marcadas como «nueva»`
+        : 'nada nuevo que encaje desde la última vez; mañana vuelvo a mirar',
+    );
+    if (ultimas.ofertas.length) contenedor.querySelector('#empleo-ofertas')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 
   async function buscar() {
@@ -293,6 +444,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     const pasos = { portales: 'Buscando en LinkedIn y freehire…', web: 'Buscando en InfoJobs, Indeed y webs de empresas…' };
     const { ofertas, avisos } = await buscarOfertas(ia, perfil, datos.preferencias, { portales, alPaso: (p) => progreso(pasos[p]) });
     datos.ofertas = ofertas;
+    nuevas.clear();
     datos.busqueda = Date.now();
     datos.avisosBusqueda = avisos;
     pintarOfertas();
@@ -305,6 +457,11 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     await guardar();
     pintarOfertas();
     contenedor.querySelector('#empleo-ofertas')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    // La alerta diaria sigue a la última búsqueda.
+    const a = estadoAlerta?.alerta;
+    if (a?.activa && (a.puestos !== datos.preferencias.puestos || a.ubicacion !== datos.preferencias.ubicacion || a.modalidad !== datos.preferencias.modalidad)) {
+      guardarAlerta({}, { callada: true }).then((ok) => ok && pintarAlerta('alerta actualizada con esta búsqueda'));
+    }
   }
 
   function tarjetaOferta(o, i) {
@@ -318,6 +475,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
           <h4 class="oferta__puesto">${escapar(o.puesto)}</h4>
           <p class="oferta__empresa">${escapar([o.empresa, o.ubicacion].filter(Boolean).join(' · '))}</p>
           <ul class="chips">
+            ${nuevas.has(o.id) ? '<li class="chip chip--nueva">Nueva</li>' : ''}
             ${hecha ? `<li class="chip chip--si">CV adaptado · ${fechaCorta(hecha.fecha)}</li>` : ''}
             ${o.encaje != null ? `<li class="chip chip--encaje" data-nivel="${o.puerta === 'no' ? 'bajo' : nivel}">${o.encaje} · ${escapar(o.veredicto || 'encaje')}</li>` : ''}
             ${o.modalidad ? `<li class="chip">${escapar(o.modalidad)}</li>` : ''}

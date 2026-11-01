@@ -70,7 +70,7 @@ function saludoDeLaHora(ahora = new Date()) {
   return 'Buenas noches.';
 }
 
-export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjustes }) {
+export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjustes, hablar = async () => {} }) {
   // El dictado del navegador no funciona dentro de Electron (necesita los servicios de Google).
   const Reconocimiento = api.plataforma === 'electron' ? null : window.SpeechRecognition || window.webkitSpeechRecognition;
   // Lo normal es grabar y pasarlo a texto con Whisper: el reconocimiento del
@@ -86,9 +86,15 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
   contenedor.innerHTML = `
     <div class="chat__mensajes desplazable" id="chat-mensajes" role="log" aria-live="polite" aria-relevant="additions"></div>
     <button type="button" class="chat__bajar" id="chat-bajar" aria-label="Ir al último mensaje" title="Ir al último mensaje" hidden>${icono('bajar', 18)}</button>
+    <div class="conversacion" id="chat-conversacion" role="status" hidden>
+      <span class="conversacion__ondas" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+      <button type="button" class="conversacion__estado"></button>
+      <button type="button" class="boton conversacion__terminar" id="conversacion-terminar">Terminar</button>
+    </div>
     <form class="compositor" id="chat-formulario">
       <button type="button" class="icono-boton" id="chat-nueva" aria-label="Nueva conversación" title="Nueva conversación">${icono('nueva')}</button>
       <textarea id="chat-entrada" rows="1" placeholder="Escribe a Kitsune…" aria-label="Mensaje para Kitsune"></textarea>
+      ${puedeGrabar ? `<button type="button" class="icono-boton boton-conversar" id="chat-conversar" aria-label="Hablar con Kitsune" aria-pressed="false" title="Conversación por voz">${icono('ondas')}</button>` : ''}
       ${puedeGrabar || Reconocimiento ? `<button type="button" class="icono-boton boton-micro" id="chat-micro" aria-label="Dictar" aria-pressed="false" title="Dictar">${icono('microfono')}</button>` : ''}
       <button type="submit" class="boton-enviar" id="chat-enviar" aria-label="Enviar">${icono('enviar', 17)}</button>
     </form>`;
@@ -490,23 +496,28 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
         quitarEstado();
         error('Claude no puede ayudar con esta petición. Prueba a plantearla de otra forma.');
         alEstado('reposo');
+        resolverRespuesta(null);
         break;
       case 'cancelado':
         cerrarBloque();
         quitarEstado();
         alEstado('reposo');
+        resolverRespuesta(null);
         break;
       case 'error':
         cerrarBloque();
         quitarEstado();
         error(e.mensaje);
         alEstado('reposo');
+        resolverRespuesta(null);
         break;
       case 'fin': {
         cerrarBloque();
         quitarEstado();
         if (e.recortado) error('La respuesta era tan larga que se cortó. Pídeme que continúe.');
-        alEstado('fin', respuestaCompleta.trim());
+        // En conversación la respuesta la lee el propio bucle (siempre en voz alta).
+        alEstado('fin', conversando ? '' : respuestaCompleta.trim());
+        resolverRespuesta(respuestaCompleta.trim());
         break;
       }
     }
@@ -528,6 +539,7 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
       quitarEstado();
       error(e.message);
       alEstado('reposo');
+      resolverRespuesta(null);
     } finally {
       ocupar(false);
     }
@@ -605,11 +617,13 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     alEstado('escuchar');
   }
   // Grabar y transcribir. Como un asistente de voz: al callarte (1,4 s) se
-  // para, se pasa a texto y se envía. Otro toque lo para antes.
+  // para y se pasa a texto. Otro toque lo para antes. Lo usan el micrófono y
+  // el modo conversación.
   let grabacion = null;
   const TIPOS_AUDIO = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
 
   function marcarMicro(estado) {
+    if (!botonMicro) return;
     botonMicro.classList.toggle('escuchando', estado === 'escuchando');
     botonMicro.classList.toggle('transcribiendo', estado === 'transcribiendo');
     botonMicro.setAttribute('aria-pressed', String(estado === 'escuchando'));
@@ -617,20 +631,19 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     botonMicro.disabled = estado === 'transcribiendo';
   }
 
-  async function grabar() {
-    if (grabacion) return grabacion.parar();
+  // Devuelve { texto } o { sinVoz: true } o { cancelado: true }; lanza si falla.
+  async function escucharUnaVez({ alEstadoGrabacion = () => {} } = {}) {
     // En el iPhone, para grabar la sesión de audio tiene que admitir micrófono.
     if (navigator.audioSession) navigator.audioSession.type = 'play-and-record';
     let flujo;
     try {
       flujo = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     } catch (e) {
-      error(
+      throw new Error(
         e.name === 'NotAllowedError'
           ? 'No tengo permiso para usar el micrófono. En el iPhone: Ajustes → Kitsune (o Safari) → Micrófono → Permitir.'
           : 'No encuentro ningún micrófono.',
       );
-      return;
     }
     const tipo = TIPOS_AUDIO.find((t) => MediaRecorder.isTypeSupported?.(t)) ?? '';
     const grabador = new MediaRecorder(flujo, tipo ? { mimeType: tipo } : undefined);
@@ -655,6 +668,7 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     let ruido = 0.01;
     let pico = 0;
     let sinVoz = false;
+    let cancelado = false;
     let reloj = null;
     const parar = () => {
       clearInterval(reloj);
@@ -662,7 +676,6 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     };
     // Cada 100 ms (no con requestAnimationFrame: va a saltos si el zorro está ocupado dibujando).
     const vigilar = () => {
-      if (grabacion?.grabador !== grabador) return clearInterval(reloj);
       const ahora = performance.now();
       if (analizador) {
         analizador.getByteTimeDomainData(muestras);
@@ -681,54 +694,160 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
           return parar();
         }
       }
-      if (ahora - inicio > 60_000) return parar();
+      if (ahora - inicio > 60_000) parar();
     };
 
-    grabador.onstop = async () => {
-      clearInterval(reloj);
-      flujo.getTracks().forEach((t) => t.stop());
-      ctx?.close().catch(() => {});
-      grabacion = null;
-      if (sinVoz || !trozos.length) {
-        marcarMicro('parado');
-        alEstado(entrada.value.trim() ? 'escuchar' : 'reposo');
-        if (sinVoz) error('No te he oído. Toca el micrófono y habla.');
-        return;
-      }
-      marcarMicro('transcribiendo');
-      alEstado('pensar');
-      try {
-        const audio = new Blob(trozos, { type: grabador.mimeType || tipo || 'audio/webm' });
-        const texto = await api.ia.transcribir(new Uint8Array(await audio.arrayBuffer()), audio.type);
-        marcarMicro('parado');
-        if (!texto) {
-          alEstado('reposo');
-          error('No te he entendido. Prueba otra vez.');
-          return;
-        }
-        const previo = entrada.value.trim();
-        entrada.value = previo ? `${previo} ${texto}` : texto;
-        ajustarAltura();
-        actualizarBoton();
-        preguntar(entrada.value);
-      } catch (e) {
-        marcarMicro('parado');
-        alEstado('reposo');
-        error(e.message);
-      }
+    const terminado = new Promise((resolver) => {
+      grabador.onstop = () => {
+        clearInterval(reloj);
+        flujo.getTracks().forEach((t) => t.stop());
+        ctx?.close().catch(() => {});
+        resolver();
+      };
+    });
+    grabacion = {
+      parar,
+      cancelar: () => {
+        cancelado = true;
+        parar();
+      },
     };
-
-    grabacion = { grabador, parar };
     grabador.start(250);
-    marcarMicro('escuchando');
-    alEstado('escuchar');
+    alEstadoGrabacion('escuchando');
     reloj = setInterval(vigilar, 100);
+    await terminado;
+    grabacion = null;
+    if (cancelado) return { cancelado: true };
+    if (sinVoz || !trozos.length) return { sinVoz: true };
+    alEstadoGrabacion('transcribiendo');
+    const audio = new Blob(trozos, { type: grabador.mimeType || tipo || 'audio/webm' });
+    const texto = await api.ia.transcribir(new Uint8Array(await audio.arrayBuffer()), audio.type);
+    return { texto: texto?.trim() ?? '' };
+  }
+
+  // Micrófono: dicta un mensaje y lo envía.
+  async function grabar() {
+    if (grabacion) return grabacion.parar();
+    try {
+      const r = await escucharUnaVez({
+        alEstadoGrabacion: (e) => {
+          marcarMicro(e);
+          alEstado(e === 'escuchando' ? 'escuchar' : 'pensar');
+        },
+      });
+      marcarMicro('parado');
+      if (r.cancelado) return alEstado('reposo');
+      if (r.sinVoz) {
+        alEstado(entrada.value.trim() ? 'escuchar' : 'reposo');
+        return error('No te he oído. Toca el micrófono y habla.');
+      }
+      if (!r.texto) {
+        alEstado('reposo');
+        return error('No te he entendido. Prueba otra vez.');
+      }
+      const previo = entrada.value.trim();
+      entrada.value = previo ? `${previo} ${r.texto}` : r.texto;
+      ajustarAltura();
+      actualizarBoton();
+      preguntar(entrada.value);
+    } catch (e) {
+      marcarMicro('parado');
+      alEstado('reposo');
+      error(e.message);
+    }
   }
 
   botonMicro?.addEventListener('click', () => {
-    if (ocupado || entrada.disabled) return;
+    if (ocupado || entrada.disabled || conversando) return;
     if (puedeGrabar) grabar();
     else dictar();
+  });
+
+  // ---------- Modo conversación ----------
+  // Como una llamada: te escucha, Kitsune responde en voz alta y vuelve a
+  // escucharte. Se termina con el mismo botón, con «Terminar» o si te quedas
+  // callado dos veces seguidas.
+  let conversando = false;
+  let esperaRespuesta = null;
+  const barra = contenedor.querySelector('#chat-conversacion');
+  const botonConversar = contenedor.querySelector('#chat-conversar');
+  const ESTADOS_CONVERSACION = { escuchando: 'Te escucho…', transcribiendo: 'Entendiéndote…', pensando: 'Pensando…', hablando: 'Hablando… (toca para cortar)' };
+
+  function marcarConversacion(estadoConversacion) {
+    barra.hidden = !conversando;
+    barra.dataset.estado = estadoConversacion ?? '';
+    barra.querySelector('.conversacion__estado').textContent = ESTADOS_CONVERSACION[estadoConversacion] ?? '';
+    botonConversar.classList.toggle('activo', conversando);
+    botonConversar.setAttribute('aria-pressed', String(conversando));
+    botonConversar.setAttribute('aria-label', conversando ? 'Terminar la conversación' : 'Hablar con Kitsune');
+  }
+
+  // Envía y espera a que termine la respuesta (o a un error): devuelve el texto o null.
+  function preguntarYEsperar(textoDicho) {
+    return new Promise((resolver) => {
+      esperaRespuesta = resolver;
+      preguntar(textoDicho);
+    });
+  }
+  const resolverRespuesta = (valor) => {
+    const resolver = esperaRespuesta;
+    esperaRespuesta = null;
+    resolver?.(valor);
+  };
+
+  async function conversar() {
+    conversando = true;
+    hablar.preparar?.();
+    marcarConversacion('escuchando');
+    let silencios = 0;
+    try {
+      while (conversando) {
+        if (ocupado) await new Promise((r) => setTimeout(r, 300));
+        if (ocupado) continue;
+        const r = await escucharUnaVez({
+          alEstadoGrabacion: (e) => {
+            marcarConversacion(e);
+            alEstado(e === 'escuchando' ? 'escuchar' : 'pensar');
+          },
+        });
+        if (!conversando || r.cancelado) break;
+        if (r.sinVoz || !r.texto) {
+          if (++silencios >= 2) break;
+          continue;
+        }
+        silencios = 0;
+        marcarConversacion('pensando');
+        const respuesta = await preguntarYEsperar(r.texto);
+        if (!conversando || respuesta == null) break;
+        if (respuesta) {
+          marcarConversacion('hablando');
+          await hablar(respuesta);
+        }
+      }
+    } catch (e) {
+      error(e.message);
+    }
+    terminarConversacion();
+  }
+
+  function terminarConversacion() {
+    if (!conversando && barra.hidden) return;
+    conversando = false;
+    grabacion?.cancelar();
+    hablar.callar?.();
+    resolverRespuesta(null);
+    marcarConversacion(null);
+    alEstado('reposo');
+  }
+
+  botonConversar?.addEventListener('click', () => {
+    if (conversando) terminarConversacion();
+    else if (!entrada.disabled) conversar();
+  });
+  barra?.querySelector('#conversacion-terminar').addEventListener('click', terminarConversacion);
+  // Tocar la barra mientras habla corta la voz y vuelve a escuchar.
+  barra?.querySelector('.conversacion__estado').addEventListener('click', () => {
+    if (barra.dataset.estado === 'hablando') hablar.callar?.();
   });
 
   async function comprobarClave() {
@@ -743,6 +862,8 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
   comprobarClave();
   return {
     enfocar: () => entrada.focus(),
+    terminarConversacion,
+    enConversacion: () => conversando,
     preguntar,
     comprobarClave,
     // Texto compartido desde otra app: se deja escrito para que el usuario lo envíe.

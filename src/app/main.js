@@ -9,6 +9,7 @@ import { crearAgenda, crearRecordatorios, crearMemoria, crearHistorial } from '.
 import { icono } from './iconos.js';
 import { trozosDeVoz, limpiarParaVoz } from '../compartido/voz.js';
 import { prepararMovil } from './movil.js';
+import { prepararBloqueo } from './web/bloqueo.js';
 import { prepararOndas, prepararIndicador, entrarVista, saltar, prepararEnvio } from './animaciones.js';
 
 // Electron trae window.asistente (preload). En el navegador se usa la versión
@@ -16,6 +17,8 @@ import { prepararOndas, prepararIndicador, entrarVista, saltar, prepararEnvio } 
 const modoEjemplo = window.KITSUNE_DEMO === true || new URLSearchParams(location.search).has('demo');
 const api = window.asistente ?? (modoEjemplo ? crearDemo() : crearBackendWeb());
 document.documentElement.dataset.plataforma = api.plataforma;
+// Face ID: lo primero, antes de enseñar nada.
+if (api.plataforma === 'web' && !modoEjemplo) prepararBloqueo();
 
 // El proceso principal puede pedir "mostrar" antes de que todo esté listo.
 const pendientes = [];
@@ -171,7 +174,7 @@ function contextoAudio() {
   return audioCtx;
 }
 // En el iPhone el audio solo puede empezar tras un toque: se despierta con el primero.
-const despertarAudio = () => ajustes?.voz && ajustes.vozTipo !== 'dispositivo' && contextoAudio()?.resume().catch(() => {});
+const despertarAudio = () => ajustes && ajustes.vozTipo !== 'dispositivo' && contextoAudio()?.resume().catch(() => {});
 document.addEventListener('pointerdown', despertarAudio, { passive: true });
 document.addEventListener('keydown', despertarAudio);
 
@@ -289,8 +292,14 @@ function hablarDispositivo(texto) {
   // Cada palabra pronunciada mueve la boca del zorro.
   frase.onboundary = (e) => kitsune.pulsoHabla(e.charLength || 5);
   return new Promise((resolver) => {
-    frase.onend = resolver;
-    frase.onerror = resolver;
+    // A veces (iOS) no avisa al acabar: como mucho, lo que tardaría en leerlo.
+    const limite = setTimeout(resolver, 4000 + frase.text.split(/\s+/).length * 450);
+    const fin = () => {
+      clearTimeout(limite);
+      resolver();
+    };
+    frase.onend = fin;
+    frase.onerror = fin;
     speechSynthesis.cancel();
     speechSynthesis.speak(frase);
   });
@@ -324,10 +333,26 @@ async function iniciar() {
   });
   aplicarAjustes(ajustes);
 
+  // Modo conversación: lee la respuesta (siempre en voz alta) y avisa al terminar.
+  const hablarEnConversacion = async (texto) => {
+    kitsune.setEstado('hablar');
+    try {
+      await hablarEnVoz(texto);
+    } finally {
+      kitsune.setEstado('reposo');
+    }
+  };
+  hablarEnConversacion.callar = () => callarVoz();
+  // Con el mismo toque que empieza la conversación se desbloquea el audio del iPhone.
+  hablarEnConversacion.preparar = () => {
+    contextoAudio()?.resume().catch(() => {});
+    if ('speechSynthesis' in window) speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+  };
   chat = crearChat({
     contenedor: vistas.chat,
     api,
     alEstado: alEstadoChat,
+    hablar: hablarEnConversacion,
     abrirAjustes: (seccion) => mostrarVista('ajustes', seccion),
     obtenerAjustes: () => ajustes,
   });

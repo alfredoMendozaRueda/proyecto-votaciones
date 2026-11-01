@@ -120,6 +120,18 @@ export class ClienteServidor {
     return this.pedir('/empleo/buscar', { metodo: 'POST', cuerpo: datos });
   }
 
+  empleoAlerta() {
+    return this.pedir('/empleo/alerta');
+  }
+
+  guardarEmpleoAlerta(datos) {
+    return this.pedir('/empleo/alerta', { metodo: 'PUT', cuerpo: datos });
+  }
+
+  probarEmpleoAlerta() {
+    return this.pedir('/empleo/alerta/probar', { metodo: 'POST' });
+  }
+
   empleoDetalle(url) {
     return this.pedir('/empleo/detalle', { metodo: 'POST', cuerpo: { url } });
   }

@@ -54,6 +54,9 @@ export const servidor = {
   empleo: {
     buscar: (datos) => usar((c) => c.empleoBuscar(datos)),
     detalle: (url) => usar((c) => c.empleoDetalle(String(url ?? ''))),
+    alerta: () => usar((c) => c.empleoAlerta()),
+    guardarAlerta: (datos) => usar((c) => c.guardarEmpleoAlerta(datos)),
+    probarAlerta: () => usar((c) => c.probarEmpleoAlerta()),
   },
   resumen: () => usar((c) => c.resumen()),
   crearCodigo: () => usar((c) => c.crearCodigo()),

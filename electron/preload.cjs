@@ -87,6 +87,9 @@ contextBridge.exposeInMainWorld('asistente', {
     empleo: {
       buscar: (datos) => invocar('servidor:empleoBuscar', datos),
       detalle: (url) => invocar('servidor:empleoDetalle', url),
+      alerta: () => invocar('servidor:empleoAlerta'),
+      guardarAlerta: (datos) => invocar('servidor:guardarEmpleoAlerta', datos),
+      probarAlerta: () => invocar('servidor:probarEmpleoAlerta'),
     },
     resumen: () => invocar('servidor:resumen'),
     crearCodigo: () => invocar('servidor:codigo'),

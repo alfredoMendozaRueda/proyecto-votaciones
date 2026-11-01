@@ -575,6 +575,8 @@ export function normalizarDatosEmpleo(d = {}) {
     preferencias: normalizarPreferencias(d.preferencias),
     ofertas: (Array.isArray(d.ofertas) ? d.ofertas : []).slice(0, 20).map(normalizarOferta),
     busqueda: Number(d.busqueda) || 0,
+    // Fecha de la última tanda de la alerta diaria ya añadida a las ofertas.
+    alertaVista: Number(d.alertaVista) || 0,
     avisosBusqueda: lista(d.avisosBusqueda, 3, 300),
     postulaciones: (Array.isArray(d.postulaciones) ? d.postulaciones : []).slice(0, MAX_POSTULACIONES).map((p) => ({
       id: cadena(p.id, 40),
