@@ -147,8 +147,12 @@ async function pedirConEspera(url, opciones, hacerFetch, intentos = 3) {
 
 const MODALIDAD_LINKEDIN = { presencial: '1', remoto: '2', híbrido: '3' };
 
+// La búsqueda pública de LinkedIn ignora f_WT (la modalidad): se pide también con palabras.
+const PALABRAS_MODALIDAD = { remoto: '(remoto OR remote OR teletrabajo)', híbrido: '(híbrido OR hybrid)' };
+
 export function urlBusquedaLinkedIn({ palabras, ubicacion, dias = 14, modalidad = '', inicio = 0, millas = 0 }) {
-  const p = new URLSearchParams({ keywords: palabras, location: ubicacion || 'España', start: String(inicio) });
+  const clave = PALABRAS_MODALIDAD[modalidad] ? `${palabras} ${PALABRAS_MODALIDAD[modalidad]}` : palabras;
+  const p = new URLSearchParams({ keywords: clave, location: ubicacion || 'España', start: String(inicio) });
   if (dias > 0) p.set('f_TPR', `r${dias * 86400}`);
   if (millas > 0) p.set('distance', String(millas));
   if (MODALIDAD_LINKEDIN[modalidad]) p.set('f_WT', MODALIDAD_LINKEDIN[modalidad]);
@@ -302,6 +306,37 @@ export async function detalleFreehire(slug, hacerFetch = fetch) {
 }
 export const slugFreehire = (url) => String(url ?? '').match(/^https:\/\/(?:[a-z0-9-]+\.)?freehire\.me\/jobs\/([a-z0-9-]+)/i)?.[1] ?? null;
 
+// ---------- Modalidad (remoto, híbrido, presencial) ----------
+// LinkedIn no la da en sus tarjetas ni en la ficha: se deduce del texto.
+// Primero el título y el lugar; si no dicen nada, la descripción.
+const REMOTO_SEGURO = /100\s*%\s*(en\s+)?(remot|teletrabajo)|(remoto|teletrabajo)\s*(al\s*)?100\s*%|full[\s-]*remote|fully[\s-]*remote|remote[\s-]*only|remote[\s-]*first|totalmente\s+(en\s+)?remot|en\s+remoto\s+total/;
+const HIBRIDO = /h[ií]brid|hybrid|semi[\s-]*presencial|presencialidad\s*\/\s*teletrabajo|teletrabajo\s*\/\s*presencial|\d\s*d[ií]as?\s+(a\s+la\s+semana\s+|por\s+semana\s+|semanales\s+)?(en\s+|de\s+)(la\s+)?oficina|\d\s*d[ií]as?\s+(de\s+)?(teletrabajo|presencial)|teletrabajo\s+\d\s*d[ií]as?|remoto\s*\+\s*\d|\d\s*days?\s+(a|per)\s+week\s+(in|on|at)\s+(the\s+)?(office|site)|days?\s+(in|at)\s+the\s+office/;
+const NO_REMOTO = /\b(no|sin)\s+(es\s+)?(un\s+)?(puesto\s+|trabajo\s+)?(en\s+)?(remoto|teletrabajo)|not\s+(a\s+)?(fully\s+)?remote|no\s+remote|non[\s-]remote|100\s*%\s*presencial/;
+const REMOTO = /\bremot[oa]s?\b|\bremote\b|teletrabaj|work\s+from\s+home|\bwfh\b|desde\s+casa|anywhere/;
+const PRESENCIAL = /presencial|on[\s-]?site|in[\s-]office|en\s+(la|nuestra|nuestras)\s+oficinas?/;
+
+function modalidadDe(texto) {
+  const t = String(texto ?? '').toLowerCase();
+  if (!t.trim()) return '';
+  if (REMOTO_SEGURO.test(t)) return 'remoto';
+  if (HIBRIDO.test(t)) return 'híbrido';
+  if (NO_REMOTO.test(t)) return 'presencial';
+  if (REMOTO.test(t)) return 'remoto';
+  if (PRESENCIAL.test(t)) return 'presencial';
+  return '';
+}
+export function modalidadDeTexto({ puesto = '', ubicacion = '', descripcion = '' } = {}) {
+  return modalidadDe(`${puesto} · ${ubicacion}`) || modalidadDe(String(descripcion).slice(0, 8000));
+}
+
+// ¿Sirve una oferta de esta modalidad a quien busca «quiere»? Si no se sabe, sí (la IA la revisa).
+export function aceptaModalidad(quiere, tiene) {
+  if (!tiene || !quiere) return true;
+  if (quiere === 'remoto') return tiene === 'remoto';
+  if (quiere === 'híbrido') return tiene !== 'presencial';
+  return true;
+}
+
 // ---------- Búsqueda combinada ----------
 
 // Busca cada puesto (hasta 3) en cada zona (hasta 5) en los dos portales a la
@@ -323,10 +358,10 @@ export async function buscarEnPortales({ puestos, ubicacion, zonas = [], distanc
     const mod = zona.modalidad ?? modalidad;
     const millas = zona.tipo === 'ciudad' || zona.tipo === 'provincia' || zona.tipo === 'libre' ? millasDe(distancia) : 0;
     return [
-      buscarLinkedIn({ palabras, ubicacion: zona.busqueda, modalidad: mod, dias, millas }, hacerFetch).then((o) => ({ portal: 'LinkedIn', ofertas: o })),
+      buscarLinkedIn({ palabras, ubicacion: zona.busqueda, modalidad: mod, dias, millas }, hacerFetch).then((o) => ({ portal: 'LinkedIn', ofertas: o.map((x) => ({ ...x, quiere: mod })) })),
       buscarFreehire({ palabras, ubicacion: zona.busqueda, pais: zona.pais || null, modalidad: mod, dias: Math.max(dias, 30) }, hacerFetch).then((o) => ({
         portal: 'freehire',
-        ofertas: o,
+        ofertas: o.map((x) => ({ ...x, quiere: mod })),
       })),
     ];
   });
@@ -336,7 +371,7 @@ export async function buscarEnPortales({ puestos, ubicacion, zonas = [], distanc
   const errores = [];
   // Intercaladas: una de cada portal y búsqueda, para no llenar la lista con el primero.
   const listas = resultados.map((r) => (r.status === 'fulfilled' ? r.value.ofertas : (errores.push(r.reason?.message ?? 'error'), [])));
-  for (let i = 0; ofertas.length < 30 && listas.some((l) => i < l.length); i++) {
+  for (let i = 0; ofertas.length < 45 && listas.some((l) => i < l.length); i++) {
     for (const l of listas) {
       const o = l[i];
       const clave = o && `${o.puesto}|${o.empresa}`.toLowerCase();
@@ -347,8 +382,34 @@ export async function buscarEnPortales({ puestos, ubicacion, zonas = [], distanc
       }
     }
   }
-  return { ofertas: ofertas.slice(0, 30), errores: [...new Set(errores)] };
+  // Modalidad: la de freehire o la que diga el texto. Si se busca en remoto (o
+  // híbrido) y una tarjeta de LinkedIn no lo dice, se lee su ficha (hasta 10).
+  for (const o of ofertas) o.modalidad ||= modalidadDeTexto(o);
+  const porLeer = ofertas.filter((o) => o.quiere && o.quiere !== 'presencial' && !o.modalidad && o.fuente === 'LinkedIn').slice(0, MAX_FICHAS);
+  for (let i = 0; i < porLeer.length; i += 3) {
+    await Promise.all(
+      porLeer.slice(i, i + 3).map(async (o) => {
+        try {
+          const ficha = await detalleLinkedIn(o.id.replace(/^li-/, ''), hacerFetch);
+          if (!ficha) return;
+          if (ficha.descripcion) o.descripcion = ficha.descripcion.slice(0, 12000);
+          if (ficha.abierta === false) o.cerrada = true;
+          o.modalidad = modalidadDeTexto({ puesto: o.puesto, ubicacion: o.ubicacion, descripcion: ficha.descripcion });
+        } catch {
+          // Si la ficha no se deja leer, la oferta se queda y la IA la revisa.
+        }
+      }),
+    );
+  }
+  const validas = ofertas.filter((o) => !o.cerrada && aceptaModalidad(o.quiere, o.modalidad));
+  const descartadas = ofertas.length - validas.length;
+  return {
+    ofertas: validas.slice(0, 30).map(({ quiere, cerrada, ...o }) => o),
+    errores: [...new Set(errores)],
+    ...(descartadas ? { descartadas } : {}),
+  };
 }
+const MAX_FICHAS = 10;
 
 // Oferta completa a partir de su enlace (LinkedIn, freehire o cualquier web).
 export async function detalleOferta(url, hacerFetch = fetch) {

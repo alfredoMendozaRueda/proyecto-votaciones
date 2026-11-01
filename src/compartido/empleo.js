@@ -7,6 +7,7 @@
 //
 // Todo pasa por ia({ sistema, usuario, web, max }) → { texto, fuentes }, que
 // en la app es la IA elegida en Ajustes (Groq gratis o Claude).
+import { aceptaModalidad, modalidadDeTexto } from './portales.js';
 
 const hoy = () => new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -257,7 +258,7 @@ export function normalizarOferta(o = {}) {
     puesto,
     empresa,
     ubicacion: cadena(o.ubicacion, 120),
-    modalidad: cadena(o.modalidad, 30),
+    modalidad: MODALIDADES.includes(o.modalidad) && o.modalidad ? o.modalidad : modalidadDeTexto({ puesto: o.puesto, ubicacion: o.ubicacion, descripcion: o.descripcion }) || (/remot/i.test(o.modalidad ?? '') ? 'remoto' : /h[ií]brid/i.test(o.modalidad ?? '') ? 'híbrido' : /presencial|on-?site/i.test(o.modalidad ?? '') ? 'presencial' : ''),
     salario: cadena(o.salario, 80),
     publicada: cadena(o.publicada, 40),
     url,
@@ -360,6 +361,7 @@ export async function buscarOfertas(ia, perfil, preferencias, { portales = null,
         dias: 14,
       });
       anadir((r.ofertas ?? []).map(normalizarOferta));
+      if (r.descartadas) avisos.push(`He quitado ${r.descartadas === 1 ? '1 oferta que no era' : `${r.descartadas} ofertas que no eran`} ${pref.modalidad === 'híbrido' ? 'en híbrido o remoto' : 'en remoto'}.`);
       if (r.errores?.length) avisos.push(`Algún portal no ha respondido (${r.errores.join('; ')}).`);
     } catch (error) {
       fallo = error;
@@ -370,7 +372,8 @@ export async function buscarOfertas(ia, perfil, preferencias, { portales = null,
   for (const [i, enfoque] of enfoques.entries()) {
     alPaso('web', i);
     try {
-      anadir(await buscarConIA(ia, perfil, pref, enfoque));
+      // La IA a veces trae ofertas de otra modalidad: fuera las que no sirven.
+      anadir((await buscarConIA(ia, perfil, pref, enfoque)).filter((o) => aceptaModalidad(pref.modalidad, o.modalidad)));
     } catch (error) {
       fallo ??= error;
     }
@@ -407,6 +410,7 @@ const SISTEMA_EVALUACION =
   '1) Puertas previas, antes de puntuar. IDIOMA: lee los idiomas que el PUESTO exige (no el idioma del anuncio). ' +
   'Si exige uno que el candidato no tiene, "no"; si lo tiene pero el nivel pedido parece mayor que el suyo, "aviso"; si no, "pasa". ' +
   'UBICACIÓN: si obliga a mudarse lejos de donde vive o busca y no es remoto, "no"; si pide viajar mucho, "aviso". ' +
+  'MODALIDAD: si en <busca> pide remoto y la oferta exige ir a la oficina (presencial o híbrida, aunque sea un día), "no"; si pide híbrido y es presencial, "no"; si no queda claro, "aviso". ' +
   'En "notaPuerta" cita la frase exacta de la oferta cuando no sea "pasa".\n' +
   '2) Puntúa de 0 a 100: "tecnica" (las habilidades que pide frente a las suyas: 80+ si lo esencial es su fuerte, 60-79 si faltan 1-2 cosas aprendibles), ' +
   '"experiencia" (por la función y el tipo de trabajo, no por el título literal), "cultura" (lo que se sabe del equipo y la empresa), ' +

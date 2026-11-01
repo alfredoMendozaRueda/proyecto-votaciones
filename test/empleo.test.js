@@ -100,7 +100,7 @@ test('portales: tarjetas y oferta de LinkedIn, sin texto oculto ni invisibles', 
   assert.equal(oferta.abierta, true);
   assert.equal(idLinkedIn('https://es.linkedin.com/jobs/view/react-developer-at-capitole-4012345678'), '4012345678');
   assert.equal(paisDe('Barcelona'), 'es');
-  assert.match(urlBusquedaLinkedIn({ palabras: 'react', ubicacion: 'Madrid', dias: 7, modalidad: 'remoto' }), /keywords=react&location=Madrid&start=0&f_TPR=r604800&f_WT=2/);
+  assert.match(urlBusquedaLinkedIn({ palabras: 'react', ubicacion: 'Madrid', dias: 7, modalidad: 'remoto' }), /keywords=react\+%28remoto\+OR\+remote\+OR\+teletrabajo%29&location=Madrid&start=0&f_TPR=r604800&f_WT=2/);
 });
 
 test('portales: búsqueda combinada intercalada y tolerante a fallos', async () => {
@@ -297,4 +297,80 @@ test('ofertas de la web: el enlace solo se conserva si la IA visitó esa página
   assert.equal(inventada.origen, 'Indeed');
   assert.equal(new URL(inventada.url).searchParams.get('q'), 'QA Beta Indeed oferta de empleo');
   assert.equal(ofertaDeLaWeb({ puesto: 'Sin enlace' }, fuentes).url, '');
+});
+
+import { modalidadDeTexto, aceptaModalidad } from '../src/compartido/portales.js';
+
+test('modalidad: se deduce del título, el lugar o la descripción (frases reales de LinkedIn)', () => {
+  const m = (puesto, descripcion = '', ubicacion = 'Madrid') => modalidadDeTexto({ puesto, ubicacion, descripcion });
+  assert.equal(m('Developer Frontend Angular 16+ (100% remoto) - Madrid'), 'remoto');
+  assert.equal(m('Desarrollador Senior React + TypeScript - Trabajo Remoto'), 'remoto');
+  assert.equal(m('HYBRID - FRONTEND DEVELOPER'), 'híbrido');
+  assert.equal(m('React Developer', 'Hybrid model: 1 day per week onsite, the rest from home.'), 'híbrido');
+  assert.equal(m('Desarrollador/a Frontend', 'Horario flexible (3 días remoto + 2 oficina) | Buen ambiente'), 'híbrido');
+  assert.equal(m('Junior Frontend Developer', 'Flexibilidad presencialidad/teletrabajo. Sala de wellness.'), 'híbrido');
+  assert.equal(m('Frontend Dev', 'Ofrecemos 2 días de teletrabajo a la semana.'), 'híbrido');
+  assert.equal(m('Frontend Dev', 'Posición 100% presencial en nuestras oficinas.'), 'presencial');
+  assert.equal(m('Frontend Dev', 'This is not a remote position.'), 'presencial');
+  assert.equal(m('Frontend Dev', 'Trabajarás en remoto desde cualquier punto de España.'), 'remoto');
+  // El título manda sobre la descripción.
+  assert.equal(m('Frontend (100% remoto)', 'Somos un equipo híbrido repartido por Europa.'), 'remoto');
+  assert.equal(m('Frontend Dev', 'Buscamos a alguien con React.'), '');
+  assert.equal(aceptaModalidad('remoto', 'híbrido'), false);
+  assert.equal(aceptaModalidad('remoto', ''), true);
+  assert.equal(aceptaModalidad('híbrido', 'remoto'), true);
+  assert.equal(aceptaModalidad('híbrido', 'presencial'), false);
+  assert.equal(aceptaModalidad('', 'presencial'), true);
+});
+
+test('remoto: LinkedIn se busca con palabras, se lee la ficha si no lo dice y se quitan las que no son remotas', async () => {
+  const tarjeta = (id, titulo) =>
+    `<li><div class="base-card" data-entity-urn="urn:li:jobPosting:${id}"><h3 class="base-search-card__title">${titulo}</h3><h4 class="base-search-card__subtitle"><a href="#">Acme ${id}</a></h4><span class="job-search-card__location">Madrid</span></div></li>`;
+  const fichas = {
+    4000000002: 'Hybrid model: 2 days per week in the office.',
+    4000000003: 'Trabajo 100% remoto desde España.',
+    4000000004: 'Buscamos a alguien con React y ganas de aprender.',
+  };
+  const pedidas = [];
+  const hacerFetch = async (url) => {
+    const u = new URL(String(url));
+    pedidas.push(u);
+    if (u.hostname.includes('freehire')) {
+      return Response.json({ data: [
+        { public_slug: 'r-1', title: 'Frontend React', company: 'Remota SL', location: 'Spain', work_mode: 'remote', url: 'https://z.es/1' },
+        { public_slug: 'h-1', title: 'Frontend Vue', company: 'Oficina SL', location: 'Madrid', work_mode: 'hybrid', url: 'https://z.es/2' },
+      ] });
+    }
+    const ficha = u.pathname.match(/jobPosting\/(\d+)/)?.[1];
+    if (ficha) return new Response(`<h1 class="top-card-layout__title">x</h1><div class="show-more-less-html__markup">${fichas[ficha]}</div>`);
+    return new Response(`<ul>${tarjeta(4000000001, 'Frontend (100% remoto)')}${tarjeta(4000000002, 'React Developer')}${tarjeta(4000000003, 'Frontend Engineer')}${tarjeta(4000000004, 'Frontend Dev')}${tarjeta(4000000005, 'Frontend híbrido Madrid')}</ul>`);
+  };
+  const r = await buscarEnPortales({ puestos: 'Frontend', ubicacion: 'Madrid', modalidad: 'remoto' }, hacerFetch);
+  const busqueda = pedidas.find((u) => u.pathname.includes('seeMoreJobPostings'));
+  assert.equal(busqueda.searchParams.get('keywords'), 'Frontend (remoto OR remote OR teletrabajo)');
+  // Fichas leídas: solo las tarjetas que no dicen su modalidad en el título.
+  assert.deepEqual(pedidas.filter((u) => u.pathname.includes('jobPosting')).map((u) => u.pathname.split('/').pop()).sort(), ['4000000002', '4000000003', '4000000004']);
+  assert.deepEqual(r.ofertas.map((o) => `${o.empresa}:${o.modalidad}`).sort(), ['Acme 4000000001:remoto', 'Acme 4000000003:remoto', 'Acme 4000000004:', 'Remota SL:remoto']);
+  assert.equal(r.descartadas, 3);
+  assert.match(r.ofertas.find((o) => o.empresa === 'Acme 4000000003').descripcion, /100% remoto/);
+  assert.ok(r.ofertas.every((o) => !('quiere' in o)));
+  // Sin modalidad pedida no se leen fichas ni se quita nada.
+  pedidas.length = 0;
+  const todas = await buscarEnPortales({ puestos: 'Frontend', ubicacion: 'Madrid' }, hacerFetch);
+  assert.equal(todas.ofertas.length, 7);
+  assert.equal(todas.descartadas, undefined);
+  assert.ok(!pedidas.some((u) => u.pathname.includes('jobPosting')));
+});
+
+test('remoto: la búsqueda web descarta las ofertas presenciales y avisa de las quitadas', async () => {
+  const { ia } = iaFalsa([
+    { ofertas: [
+      { puesto: 'Frontend', empresa: 'Presencia', modalidad: 'presencial', url: 'https://a.es/1' },
+      { puesto: 'Frontend', empresa: 'Casa', modalidad: 'remoto', url: 'https://a.es/2' },
+    ] },
+  ]);
+  const portales = async () => ({ ofertas: [{ id: 'fh-x', puesto: 'Dev', empresa: 'Z', url: 'https://freehire.me/jobs/x', fuente: 'freehire', modalidad: 'remoto' }], errores: [], descartadas: 2 });
+  const r = await buscarOfertas(ia, PERFIL, { puestos: 'Frontend', modalidad: 'remoto' }, { portales });
+  assert.deepEqual(r.ofertas.map((o) => o.empresa), ['Z', 'Casa']);
+  assert.ok(r.avisos.some((a) => /quitado 2 ofertas que no eran en remoto/.test(a)), r.avisos.join(' | '));
 });
