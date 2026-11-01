@@ -848,5 +848,15 @@ export function crearEmpleo({ contenedor, api, abrirAjustes }) {
     contenedor.querySelector('.apartado')?.scrollTo?.(0, 0);
   }
 
-  return { mostrar };
+  // Han llegado cambios de otro dispositivo: se vuelve a leer (si no hay nada en marcha).
+  function recargar() {
+    if (ocupado) return;
+    datos = null;
+    estadoAlerta = null;
+    if (!pintado) return;
+    pintado = false;
+    if (!contenedor.hidden && !contenedor.closest('[hidden]')) mostrar();
+  }
+
+  return { mostrar, recargar };
 }

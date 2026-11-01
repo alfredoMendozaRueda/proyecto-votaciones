@@ -37,6 +37,11 @@ export function leerDatos(nombre) {
   return Array.isArray(datos) ? datos : [];
 }
 
+export function leerObjeto(nombre) {
+  const datos = leerJson(path.join(carpeta(), `${nombre}.json`));
+  return datos && typeof datos === 'object' && !Array.isArray(datos) && Object.keys(datos).length ? datos : null;
+}
+
 export function guardarDatos(nombre, datos) {
   escribirJson(path.join(carpeta(), `${nombre}.json`), datos);
 }

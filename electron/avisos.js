@@ -2,9 +2,9 @@
 // él mismo), pero se vincula con un código del móvil para mandar sus
 // recordatorios al servidor y gestionar las automatizaciones.
 import os from 'node:os';
-import { ClienteServidor, URL_VALIDA, recordatoriosParaServidor } from '../src/compartido/servidor.js';
+import { ClienteServidor, URL_VALIDA, paqueteRecordatorios } from '../src/compartido/servidor.js';
 import { URL_SERVIDOR } from '../src/compartido/nube.js';
-import { leerSecreto, guardarSecreto, borrarSecreto, obtenerAjustes, leerDatos } from './almacen.js';
+import { leerSecreto, guardarSecreto, borrarSecreto, obtenerAjustes, leerDatos, guardarDatos } from './almacen.js';
 
 const zona = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 const url = () => (URL_VALIDA.test(obtenerAjustes().servidorUrl) ? obtenerAjustes().servidorUrl : URL_SERVIDOR);
@@ -21,12 +21,23 @@ async function usar(funcion) {
   }
 }
 
+// Cliente con el token de este ordenador (sincronización entre dispositivos).
+export function clienteServidor() {
+  if (!url()) throw new Error('El servidor de avisos no está configurado.');
+  const token = leerSecreto('servidorToken');
+  if (!token) throw new Error('Vincula primero este ordenador en Ajustes → Avisos.');
+  return new ClienteServidor({ url: url(), token });
+}
+
 let temporizador = null;
 export function sincronizarRecordatorios() {
   clearTimeout(temporizador);
   temporizador = setTimeout(() => {
     if (!url() || !leerSecreto('servidorToken')) return;
-    usar((c) => c.recordatorios(recordatoriosParaServidor(leerDatos('recordatorios')))).catch(() => {});
+    const { lista, borrados } = paqueteRecordatorios(leerDatos('recordatorios'), leerDatos('recordatorios-enviados'));
+    usar((c) => c.recordatorios(lista, borrados))
+      .then(() => guardarDatos('recordatorios-enviados', lista.map((r) => r.id)))
+      .catch(() => {});
   }, 400);
 }
 

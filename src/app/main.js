@@ -457,6 +457,18 @@ async function iniciar() {
     mostrarVista(orden[siguiente]);
     pestanas[orden[siguiente]].focus();
   });
+  // Llegan cambios de tus otros dispositivos: se refresca lo que se ve.
+  api.sincro?.alCambios(async (colecciones) => {
+    if (colecciones.includes('ajustes')) {
+      ajustes = await api.ajustes.obtener();
+      aplicarAjustes(ajustes);
+    }
+    if (colecciones.includes('ajustes') || colecciones.includes('claves')) chat.comprobarClave();
+    if (colecciones.includes('recordatorios')) contarRecordatoriosDeHoy();
+    if (colecciones.includes('empleo')) apartados.empleo.recargar();
+    const vista = { memoria: 'memoria', recordatorios: 'recordatorios', conversaciones: 'historial' };
+    if (colecciones.some((c) => vista[c] === vistaActual)) apartados[vistaActual]?.mostrar();
+  });
   contarRecordatoriosDeHoy();
   setInterval(contarRecordatoriosDeHoy, 60_000);
   api.claude.alEvento((e) => e.tipo === 'recordatorio' && contarRecordatoriosDeHoy());
@@ -656,7 +668,10 @@ function prepararWeb() {
     navigator.serviceWorker.addEventListener('message', (e) => {
       if (!['abrir-correo', 'abrir-vista', 'abrir-app'].includes(e.data?.tipo)) return;
       abrirDialogo();
-      if (e.data.tipo !== 'abrir-app') mostrarVista(e.data.vista ?? 'correo');
+      if (e.data.tipo !== 'abrir-app') {
+        const [vista, seccion] = String(e.data.vista ?? 'correo').split(':');
+        mostrarVista(vista, seccion ?? null);
+      }
     });
   }
 }
@@ -671,13 +686,14 @@ function atenderParametros() {
   else if (parametros.has('recordatorios')) mostrarVista('recordatorios');
   else if (parametros.has('ajustes')) mostrarVista('ajustes');
   else if (parametros.has('empleo')) mostrarVista('empleo');
+  else if (parametros.has('sincro')) mostrarVista('ajustes', 'sincro');
   else if (parametros.has('pulso')) chat.preguntar('Prepárame el pulso de hoy');
   else if (compartido.length) {
     mostrarVista('chat');
     chat.ofrecerTexto([...new Set(compartido)].join('\n'), 'compartido');
   }
   // Llegar con una acción abre el diálogo directamente; que recargar no la repita.
-  if ([...parametros.keys()].some((c) => ['correo', 'agenda', 'recordatorios', 'ajustes', 'pulso', 'chat', 'titulo', 'texto', 'enlace'].includes(c))) {
+  if ([...parametros.keys()].some((c) => ['correo', 'agenda', 'recordatorios', 'ajustes', 'sincro', 'empleo', 'pulso', 'chat', 'titulo', 'texto', 'enlace'].includes(c))) {
     abrirDialogo();
     history.replaceState(null, '', location.pathname);
   }

@@ -74,7 +74,7 @@ self.addEventListener('push', (evento) => {
 // (Ajustes → Avisos en el móvil); aquí no hay token con el que avisar al servidor.
 
 // Tocar un aviso abre (o trae al frente) la app en el apartado que toca.
-const DESTINOS = { '?correo': 'correo', '?agenda': 'agenda', '?recordatorios': 'recordatorios', '?ajustes': 'ajustes', '?empleo': 'empleo' };
+const DESTINOS = { '?correo': 'correo', '?agenda': 'agenda', '?recordatorios': 'recordatorios', '?ajustes': 'ajustes', '?empleo': 'empleo', '?sincro': 'ajustes:sincro' };
 self.addEventListener('notificationclick', (evento) => {
   evento.notification.close();
   const destino = evento.notification.data?.url ?? './?correo';

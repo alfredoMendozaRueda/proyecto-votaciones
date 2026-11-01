@@ -103,12 +103,12 @@ export class Nucleo {
   }
 
   // datos: { titulo, cuerpo, url, etiqueta }. Devuelve a cuántos dispositivos llegó.
-  async notificar(datos, { soloDispositivo = null } = {}) {
+  async notificar(datos, { soloDispositivo = null, excepto = null } = {}) {
     const vapid = await this.vapid();
     const contacto = `mailto:${(await this.ajustes()).dueno ?? 'kitsune@example.com'}`;
     let enviados = 0;
     for (const d of await this.dispositivos()) {
-      if (!d.suscripcion || (soloDispositivo && d.id !== soloDispositivo)) continue;
+      if (!d.suscripcion || (soloDispositivo && d.id !== soloDispositivo) || d.id === excepto) continue;
       const resultado = await enviarPush(JSON.parse(d.suscripcion), datos, vapid, { contacto }).catch(() => 'error');
       if (resultado === 'caducada') await this.db.prepare('UPDATE dispositivos SET suscripcion = NULL WHERE id = ?').bind(d.id).run();
       if (resultado === 'ok') enviados++;

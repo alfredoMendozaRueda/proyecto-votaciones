@@ -3,6 +3,7 @@ import { PALETAS } from '../kitsune/paletas.js';
 import { PERMISOS, NOMBRES_NIVEL, nivelesDe, nivel } from '../compartido/permisos.js';
 import { VOCES } from '../compartido/voz.js';
 import { leerBloqueo, bloqueoDisponible, activarBloqueo, desactivarBloqueo, cambiarTras, comprobarIdentidad, OPCIONES_TRAS, nombreBiometria } from './web/bloqueo.js';
+import { COLECCIONES_SINCRO, codigoDe } from '../compartido/sincro.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -252,6 +253,8 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
 
         ${estadoAvisos ? seccionAvisos(estadoAvisos) : ''}
 
+        ${api.sincro && estadoAvisos ? '<section class="grupo sincro" id="seccion-sincro" aria-label="Sincronizar con tus dispositivos"></section>' : ''}
+
         <section class="grupo" id="seccion-permisos" aria-label="Permisos">
           <h3>Permisos</h3>
           <p class="ajuste__ayuda">Qué puede hacer Kitsune por su cuenta. <strong>Sí</strong>: lo hace y te lo cuenta. <strong>Preguntar</strong>: te enseña en el chat lo que va a hacer y espera a que lo aceptes. <strong>No</strong>: no lo hace aunque se lo pidas.</p>
@@ -377,7 +380,227 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
 
     conectar();
     if (estadoAvisos) conectarAvisos(estadoAvisos);
+    if (api.sincro && estadoAvisos) pintarSincro(estadoAvisos.vinculado);
     if (seccion) contenedor.querySelector(`#seccion-${seccion}`)?.scrollIntoView({ block: 'start' });
+  }
+
+  // ---------- Sincronizar con tus otros dispositivos ----------
+
+  let sincroAqui = false;
+  let esperandoSincro = false;
+  const conBiometria = api.plataforma === 'web' && !api.demo;
+  const haceCuanto = (ms) => {
+    if (!ms) return 'todavía no';
+    const min = Math.round((Date.now() - ms) / 60_000);
+    return min < 1 ? 'hace un momento' : min < 60 ? `hace ${min} min` : min < 1440 ? `hace ${Math.round(min / 60)} h` : `hace ${Math.round(min / 1440)} d`;
+  };
+
+  // En el iPhone, todo lo que da acceso a tus datos sincronizados pasa por Face ID:
+  // si el bloqueo no está activado, se activa (Kitsune lleva tus claves).
+  async function comprobarConCara() {
+    if (!conBiometria || !(await bloqueoDisponible())) return;
+    if (!leerBloqueo()) {
+      await activarBloqueo(1);
+      const bloque = contenedor.querySelector('#ajuste-bloqueo');
+      bloque?.querySelector('#bloqueo-interruptor')?.setAttribute('aria-checked', 'true');
+      const fila = bloque?.querySelector('#bloqueo-tras-fila');
+      if (fila) fila.hidden = false;
+      return;
+    }
+    if (!(await comprobarIdentidad())) throw new Error('No se ha podido comprobar que eres tú.');
+  }
+  const errorCara = (error) => (error?.name === 'NotAllowedError' ? new Error(`Cancelado: hace falta ${nombreBiometria()}.`) : error);
+
+  async function pintarSincro(vinculado) {
+    const caja = contenedor.querySelector('#seccion-sincro');
+    if (!caja) return;
+    const cabecera = `<h3>Sincronizar con tus dispositivos</h3>
+          <p class="ajuste__ayuda">Tu memoria, conversaciones, recordatorios, Empleo, ajustes y claves de la IA, iguales en el iPhone y en Windows. Viajan cifrados con una llave que solo tienen tus dispositivos: el servidor no puede leerlos.</p>`;
+    if (!vinculado) {
+      caja.innerHTML = `${cabecera}<p class="ajuste__ayuda">Primero conecta los avisos (aquí arriba) en los dos dispositivos.</p>`;
+      return;
+    }
+    caja.innerHTML = `${cabecera}<div class="esqueleto" style="height:64px"></div>`;
+    let r;
+    try {
+      r = await api.sincro.resumen();
+    } catch (error) {
+      caja.innerHTML = `${cabecera}<p class="mensaje-ajuste" role="status">${escapar(error.message)}</p>`;
+      return;
+    }
+    sincroAqui = r.aqui;
+    const conCara = conBiometria && (await bloqueoDisponible());
+    const notaCara = conCara ? `<p class="ajuste__ayuda sincro__cara">${icono('llave', 14)} En este iPhone va con ${nombreBiometria()}: se activa el bloqueo de Kitsune y cada dispositivo nuevo se aprueba con tu cara.</p>` : '';
+
+    if (!r.aqui && esperandoSincro && r.esperando) {
+      caja.innerHTML = `${cabecera}
+          <div class="sincro__espera">
+            <p class="ajuste__ayuda">Abre Kitsune en tu otro dispositivo, ve a Ajustes → Sincronizar y aprueba la petición si ves este mismo código:</p>
+            <p class="sincro__codigo" aria-label="Código ${escapar(r.esperando.codigo)}">${escapar(r.esperando.codigo)}</p>
+            <p class="ajuste__ayuda sincro__latido"><span class="empleo-progreso__punto"></span> Esperando la aprobación…</p>
+            <div class="botonera"><button type="button" class="boton" id="sincro-cancelar">Cancelar</button></div>
+          </div>
+          <p class="mensaje-ajuste" id="mensaje-sincro" role="status"></p>`;
+      caja.querySelector('#sincro-cancelar').addEventListener('click', async () => {
+        esperandoSincro = false;
+        await api.sincro.cancelarEspera().catch(() => {});
+        pintarSincro(true);
+      });
+      return;
+    }
+
+    if (!r.aqui) {
+      caja.innerHTML = `${cabecera}
+          ${
+            r.servidor
+              ? `<p class="ajuste__ayuda">Ya sincronizas en otro dispositivo. Une este y tendrás aquí lo mismo; lo que tengas solo aquí se suma.</p>
+          <div class="botonera"><button type="button" class="boton boton--primario" id="sincro-unir">${icono('enlace', 15)} Unir este dispositivo</button></div>
+          <details class="avanzado"><summary>¿Ya no tienes el otro dispositivo?</summary>
+            <p class="ajuste__ayuda">Borra la copia cifrada del servidor y empieza la sincronización desde aquí. Tus dispositivos conservan sus datos.</p>
+            <button type="button" class="boton" id="sincro-cero">Empezar de cero desde aquí</button></details>`
+              : `<div class="botonera"><button type="button" class="boton boton--primario" id="sincro-activar">${icono('actualizar', 15)} Activar la sincronización${conCara ? ` con ${nombreBiometria()}` : ''}</button></div>`
+          }
+          ${notaCara}
+          <p class="mensaje-ajuste" id="mensaje-sincro" role="status"></p>`;
+      const ocupar = (b, texto) => {
+        b.disabled = true;
+        b.textContent = texto;
+      };
+      caja.querySelector('#sincro-activar')?.addEventListener('click', async (e) => {
+        const boton = e.currentTarget;
+        try {
+          await comprobarConCara();
+          ocupar(boton, 'Subiendo tus datos cifrados…');
+          await api.sincro.activar();
+          pintarSincro(true);
+        } catch (error) {
+          pintarSincro(true).then(() => mostrarMensaje('mensaje-sincro', errorCara(error).message, false));
+        }
+      });
+      caja.querySelector('#sincro-unir')?.addEventListener('click', async () => {
+        try {
+          await comprobarConCara();
+          await api.sincro.solicitar();
+          esperandoSincro = true;
+          await pintarSincro(true);
+          await api.sincro.esperar();
+          esperandoSincro = false;
+          await pintarSincro(true);
+          mostrarMensaje('mensaje-sincro', 'Listo: este dispositivo ya está sincronizado.', true);
+        } catch (error) {
+          if (!esperandoSincro && /Cancelado/.test(error.message)) return;
+          esperandoSincro = false;
+          pintarSincro(true).then(() => mostrarMensaje('mensaje-sincro', errorCara(error).message, false));
+        }
+      });
+      const cero = caja.querySelector('#sincro-cero');
+      cero?.addEventListener('click', async () => {
+        if (cero.dataset.confirmar !== 'si') {
+          cero.dataset.confirmar = 'si';
+          cero.textContent = '¿Seguro? Pulsa otra vez: se borra la copia del servidor';
+          return;
+        }
+        try {
+          await comprobarConCara();
+          await api.sincro.borrarServidor();
+          await api.sincro.activar();
+          pintarSincro(true);
+        } catch (error) {
+          pintarSincro(true).then(() => mostrarMensaje('mensaje-sincro', errorCara(error).message, false));
+        }
+      });
+      return;
+    }
+
+    const solicitudes = await Promise.all(r.solicitudes.map(async (x) => ({ ...x, codigo: await codigoDe(x.publica) })));
+    caja.innerHTML = `${cabecera}
+          ${
+            solicitudes.length
+              ? solicitudes
+                  .map(
+                    (x) => `<div class="sincro__peticion" data-solicitud="${escapar(x.id)}">
+              <div><strong>${escapar(x.nombre)}</strong> quiere sincronizar contigo.
+              <p class="ajuste__ayuda">Apruébalo solo si en su pantalla ves este código:</p>
+              <p class="sincro__codigo sincro__codigo--peq">${escapar(x.codigo)}</p></div>
+              <div class="botonera"><button type="button" class="boton boton--primario" data-aprobar="${escapar(x.id)}">${conCara ? `Aprobar con ${nombreBiometria()}` : 'Aprobar'}</button>
+              <button type="button" class="boton" data-rechazar="${escapar(x.id)}">Rechazar</button></div>
+            </div>`,
+                  )
+                  .join('')
+              : ''
+          }
+          <div class="ajuste ajuste--fila">
+            <div><div class="ajuste__etiqueta">${r.error ? 'No se ha podido sincronizar' : 'Sincronizado'}</div>
+              <p class="ajuste__ayuda">${r.error ? escapar(r.error) : `Última vez: ${haceCuanto(r.ultima)}${r.pendientes ? ` · ${r.pendientes} cambios por subir` : ''}.`} Para añadir otro dispositivo, pulsa «Unir este dispositivo» en él.</p></div>
+            <button type="button" class="boton" id="sincro-ahora">${icono('actualizar', 15)} Ahora</button>
+          </div>
+          <div class="ajuste"><div class="ajuste__etiqueta">Qué se comparte desde aquí</div>
+            <ul class="chips sincro__colecciones">${COLECCIONES_SINCRO.map(
+              ([c, n]) => `<li><label class="chip chip--marcable"><input type="checkbox" value="${c}" ${r.colecciones.includes(c) ? 'checked' : ''}> ${escapar(n)}</label></li>`,
+            ).join('')}</ul>
+            <p class="ajuste__ayuda">La pantalla, el atajo y el motor de voz son de cada dispositivo y no se tocan.</p></div>
+          ${notaCara}
+          <details class="avanzado"><summary>Dejar de sincronizar</summary>
+            <p class="ajuste__ayuda">Este dispositivo se queda con sus datos y deja de mandar y recibir cambios.</p>
+            <div class="botonera"><button type="button" class="boton" id="sincro-dejar">Dejar de sincronizar aquí</button>
+            <button type="button" class="boton" id="sincro-borrar">Borrar la copia del servidor</button></div></details>
+          <p class="mensaje-ajuste" id="mensaje-sincro" role="status"></p>`;
+    caja.querySelector('#sincro-ahora').addEventListener('click', async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        await api.sincro.sincronizar();
+        await pintarSincro(true);
+        mostrarMensaje('mensaje-sincro', 'Al día.', true);
+      } catch (error) {
+        pintarSincro(true).then(() => mostrarMensaje('mensaje-sincro', error.message, false));
+      }
+    });
+    caja.querySelectorAll('[data-aprobar]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const x = solicitudes.find((s) => s.id === b.dataset.aprobar);
+        try {
+          await comprobarConCara();
+          await api.sincro.aprobar(x.id, x.publica);
+          await pintarSincro(true);
+          mostrarMensaje('mensaje-sincro', `${x.nombre} ya tiene la llave: en un momento verá tus datos.`, true);
+        } catch (error) {
+          mostrarMensaje('mensaje-sincro', errorCara(error).message, false);
+        }
+      }),
+    );
+    caja.querySelectorAll('[data-rechazar]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        await api.sincro.rechazar(b.dataset.rechazar).catch(() => {});
+        pintarSincro(true);
+      }),
+    );
+    caja.querySelectorAll('.sincro__colecciones input').forEach((c) =>
+      c.addEventListener('change', async () => {
+        const lista = [...caja.querySelectorAll('.sincro__colecciones input:checked')].map((x) => x.value);
+        try {
+          await api.sincro.elegirColecciones(lista);
+          mostrarMensaje('mensaje-sincro', 'Guardado.', true);
+        } catch (error) {
+          mostrarMensaje('mensaje-sincro', error.message, false);
+        }
+      }),
+    );
+    const confirmar = (b, texto, accion) =>
+      b.addEventListener('click', async () => {
+        if (b.dataset.confirmar !== 'si') {
+          b.dataset.confirmar = 'si';
+          b.textContent = texto;
+          return;
+        }
+        try {
+          await accion();
+          await pintarSincro(true);
+        } catch (error) {
+          mostrarMensaje('mensaje-sincro', error.message, false);
+        }
+      });
+    confirmar(caja.querySelector('#sincro-dejar'), '¿Seguro? Pulsa otra vez', () => api.sincro.desactivar());
+    confirmar(caja.querySelector('#sincro-borrar'), '¿Seguro? Todos tus dispositivos dejarán de sincronizar', () => api.sincro.borrarServidor());
   }
 
   // ---------- Avisos en el móvil (servidor de avisos) ----------
@@ -676,6 +899,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
         const activo = interruptorBloqueo.getAttribute('aria-checked') === 'true';
         try {
           if (activo) {
+            if (sincroAqui) throw new Error('Mientras sincronizas, Kitsune va protegido con Face ID en este iPhone (lleva tus claves). Deja de sincronizar para quitarlo.');
             // Para quitarlo también hay que ser tú.
             if (!(await comprobarIdentidad())) throw new Error('No se ha podido comprobar que eres tú.');
             desactivarBloqueo();

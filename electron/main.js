@@ -9,6 +9,7 @@ import {
   leerSecreto,
   leerDatos,
   guardarDatos,
+  leerObjeto,
   leerCifrado,
   guardarCifrado,
   borrarCifrado,
@@ -18,11 +19,19 @@ import { ConversacionClaude, mensajeDeError } from '../src/compartido/claude.js'
 import { Recordatorios } from '../src/compartido/recordatorios.js';
 import { Memoria } from '../src/compartido/memoria.js';
 import { Conversaciones, ID_CONVERSACION } from '../src/compartido/conversaciones.js';
-import { servidor, sincronizarRecordatorios, automatizacionesChat } from './avisos.js';
+import { servidor, sincronizarRecordatorios, automatizacionesChat, clienteServidor } from './avisos.js';
 import { aviso } from '../src/compartido/notificaciones.js';
 import { normalizarDatosEmpleo } from '../src/compartido/empleo.js';
 import { hablarVoiceStudio, vocesVoiceStudio } from './voicestudio.js';
 import { transcribirGroq } from '../src/compartido/dictado.js';
+import {
+  Sincronizador,
+  coleccionLista,
+  coleccionConversaciones,
+  coleccionEmpleo,
+  coleccionAjustes,
+  coleccionClaves,
+} from '../src/compartido/sincro.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const URL_DESARROLLO = process.env.KITSUNE_DEV_URL;
@@ -40,11 +49,15 @@ let temporizadorCitas = null;
 let textoOfrecido = '';
 
 const gmail = new Gmail(obtenerAjustes);
+// Sincronización con tus otros dispositivos: cada cambio guardado la avisa.
+let sincro = null;
+const tocado = () => sincro?.marcar();
 const recordatorios = new Recordatorios({
   leer: () => leerDatos('recordatorios'),
   guardar: (lista) => {
     guardarDatos('recordatorios', lista);
     sincronizarRecordatorios();
+    tocado();
   },
   avisar: avisarRecordatorio,
 });
@@ -57,14 +70,54 @@ const memoria = new Memoria({
       return [];
     }
   },
-  guardar: (lista) => guardarSecreto('memoria', JSON.stringify(lista)),
+  guardar: (lista) => {
+    guardarSecreto('memoria', JSON.stringify(lista));
+    tocado();
+  },
 });
-const conversaciones = new Conversaciones({
+const almacenConversaciones = {
   leerIndice: () => leerCifrado('indice') ?? [],
-  guardarIndice: (lista) => guardarCifrado('indice', lista),
+  guardarIndice: (lista) => {
+    guardarCifrado('indice', lista);
+    tocado();
+  },
   leer: (id) => leerCifrado(id),
   guardar: (id, datos) => guardarCifrado(id, datos),
   borrar: (id) => borrarCifrado(id),
+};
+const conversaciones = new Conversaciones(almacenConversaciones);
+const leerEmpleo = () => {
+  try {
+    return JSON.parse(leerSecreto('empleo') ?? 'null');
+  } catch {
+    return null;
+  }
+};
+const guardarEmpleo = (datos) => {
+  guardarSecreto('empleo', JSON.stringify(normalizarDatosEmpleo(datos)));
+  tocado();
+};
+
+sincro = new Sincronizador({
+  cliente: async () => clienteServidor(),
+  colecciones: {
+    memoria: coleccionLista({ leer: () => memoria.leer(), guardar: (lista) => memoria.guardar(lista) }),
+    recordatorios: coleccionLista({
+      leer: () => leerDatos('recordatorios'),
+      guardar: (lista) => recordatorios.guardar(lista),
+      despues: () => recordatorios.programar(),
+    }),
+    conversaciones: coleccionConversaciones(almacenConversaciones),
+    empleo: coleccionEmpleo({ leer: leerEmpleo, guardar: guardarEmpleo }),
+    ajustes: coleccionAjustes({ leer: () => obtenerAjustes(), guardar: (cambios) => guardarAjustes(cambios) }),
+    claves: coleccionClaves({ leer: leerSecreto, guardar: guardarSecreto, borrar: borrarSecreto }),
+  },
+  leerEstado: () => leerObjeto('sincro'),
+  guardarEstado: (estado) => guardarDatos('sincro', estado ?? {}),
+  leerLlave: () => leerSecreto('sincroLlave'),
+  guardarLlave: (llave) => guardarSecreto('sincroLlave', llave),
+  borrarLlave: () => borrarSecreto('sincroLlave'),
+  alCambiar: (colecciones) => ventana?.webContents.send('sincro:cambios', colecciones),
 });
 // Cada IA tiene su clave, cifrada con el sistema.
 const SECRETO_CLAVE = { claude: 'claveClaude', groq: 'claveGroq' };
@@ -188,6 +241,7 @@ function mostrar() {
   ventana.show();
   ventana.focus();
   ventana.webContents.send('ventana:alternar', 'mostrar');
+  sincro.marcar(300);
 }
 
 // Al llamarlo con el atajo, si hay texto nuevo copiado, Kitsune ofrece
@@ -311,6 +365,7 @@ function registrarCanales() {
       throw new Error('Ese atajo no está disponible: puede que lo use otro programa.');
     }
     const ajustes = guardarAjustes(cambios);
+    tocado();
     if (cambios.tamano || cambios.posicion) ventana.setBounds(medidas(ajustes));
     if ('iniciarConWindows' in cambios) app.setLoginItemSettings({ openAtLogin: ajustes.iniciarConWindows });
     if ('correoCadaMin' in cambios) programarCorreo();
@@ -322,6 +377,7 @@ function registrarCanales() {
     const ia = proveedorValido(proveedor);
     if (!clave) {
       borrarSecreto(SECRETO_CLAVE[ia]);
+      tocado();
       return estadoIA();
     }
     const limpia = String(clave).trim().slice(0, 300);
@@ -331,6 +387,7 @@ function registrarCanales() {
       throw new Error(mensajeDeError(error));
     }
     guardarSecreto(SECRETO_CLAVE[ia], limpia);
+    tocado();
     return estadoIA();
   });
   manejar('claude:enviar', (texto) => {
@@ -403,8 +460,19 @@ function registrarCanales() {
     if (hayServidor) return servidor.transcribir(bytes, String(tipo ?? ''));
     throw new Error('Para dictar necesito tu clave gratuita de Groq (Ajustes → Inteligencia artificial) o vincular el servidor de avisos.');
   });
-  manejar('empleo:leer', () => JSON.parse(leerSecreto('empleo') ?? 'null'));
-  manejar('empleo:guardar', (datos) => guardarSecreto('empleo', JSON.stringify(normalizarDatosEmpleo(datos))));
+  manejar('empleo:leer', () => leerEmpleo());
+  manejar('empleo:guardar', (datos) => guardarEmpleo(datos));
+  manejar('sincro:resumen', () => sincro.resumen());
+  manejar('sincro:activar', () => sincro.activar());
+  manejar('sincro:solicitar', () => sincro.solicitar());
+  manejar('sincro:esperar', () => sincro.esperar());
+  manejar('sincro:cancelarEspera', () => sincro.cancelarEspera());
+  manejar('sincro:aprobar', (id, publica) => sincro.aprobar(String(id ?? ''), String(publica ?? '')));
+  manejar('sincro:rechazar', (id) => sincro.rechazar(String(id ?? '')));
+  manejar('sincro:colecciones', (lista) => sincro.elegirColecciones(Array.isArray(lista) ? lista.map(String) : []));
+  manejar('sincro:sincronizar', () => sincro.sincronizar());
+  manejar('sincro:desactivar', () => sincro.desactivar());
+  manejar('sincro:borrarServidor', () => sincro.borrarServidor());
 
   manejar('correo:estado', () => gmail.estado());
   manejar('correo:cliente', (secreto) => gmail.guardarCliente(String(secreto ?? '')));
@@ -473,6 +541,9 @@ if (!app.requestSingleInstanceLock()) {
     programarCorreo();
     programarCitas();
     recordatorios.programar();
+    // Sincronización: al abrir y cada pocos minutos.
+    sincro.marcar(3000);
+    setInterval(() => sincro.marcar(0), 3 * 60_000);
     // Si la última conversación es de hace poco, se sigue con ella.
     conversaciones.reciente().then(async (ultima) => {
       const datos = ultima && (await conversaciones.cargar(ultima.id));

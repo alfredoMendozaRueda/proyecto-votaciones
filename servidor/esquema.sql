@@ -29,3 +29,15 @@ CREATE TABLE IF NOT EXISTS pendientes (
   error TEXT
 );
 CREATE TABLE IF NOT EXISTS codigos (codigo TEXT PRIMARY KEY, caduca INTEGER NOT NULL, intentos INTEGER NOT NULL DEFAULT 0);
+-- Sincronización entre dispositivos: cada dato va cifrado de extremo a extremo
+-- (el servidor no tiene la llave). «version» crece con cada cambio.
+CREATE TABLE IF NOT EXISTS sincro (id TEXT PRIMARY KEY, version INTEGER NOT NULL, cambiado INTEGER NOT NULL, datos TEXT, dispositivo TEXT);
+CREATE INDEX IF NOT EXISTS sincro_version ON sincro (version);
+CREATE TABLE IF NOT EXISTS sincro_solicitudes (
+  id TEXT PRIMARY KEY,
+  dispositivo TEXT NOT NULL,
+  nombre TEXT NOT NULL,
+  publica TEXT NOT NULL,
+  sobre TEXT,
+  creado INTEGER NOT NULL
+);

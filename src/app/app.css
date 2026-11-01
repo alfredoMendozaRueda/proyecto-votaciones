@@ -5423,3 +5423,83 @@ html {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ---------- Ajustes: sincronizar con tus dispositivos ---------- */
+
+.sincro__codigo {
+  margin: 4px 0 8px;
+  font-family: var(--mono);
+  font-size: 34px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  color: var(--texto);
+}
+
+.sincro__codigo--peq {
+  font-size: 24px;
+  margin: 2px 0 0;
+}
+
+.sincro__espera {
+  padding: 14px;
+  border: 1px solid var(--linea-suave);
+  border-radius: var(--radio);
+  background: var(--carbon-2);
+}
+
+.sincro__latido {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sincro__peticion {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  margin-bottom: 12px;
+  border: 1px solid var(--acento-hondo);
+  border-radius: var(--radio);
+  background: var(--acento-velo);
+}
+
+.sincro__peticion .ajuste__ayuda {
+  margin: 4px 0 0;
+}
+
+.sincro__cara {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.sincro__cara svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.sincro__colecciones {
+  margin: 8px 0 0;
+}
+
+.chip--marcable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.chip--marcable input {
+  margin: 0;
+  accent-color: var(--acento);
+}
+
+.chip--marcable:has(input:checked) {
+  border-color: var(--acento-hondo);
+  color: var(--texto);
+}
+
+.chip--marcable:has(input:not(:checked)) {
+  opacity: 0.6;
+}

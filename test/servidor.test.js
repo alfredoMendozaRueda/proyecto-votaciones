@@ -8,6 +8,17 @@ import { cifrar, firmaVapid, generarVapid } from '../servidor/src/push.js';
 import { aBase64Url, deBase64Url, unir, utf8 } from '../servidor/src/base64.js';
 import { desdeLocal, partesLocales, enSilencio } from '../servidor/src/tiempo.js';
 import { normalizarAutomatizacion, coincideCorreo, PLANTILLAS, describirCuando } from '../src/compartido/automatizaciones.js';
+import { ClienteServidor, paqueteRecordatorios } from '../src/compartido/servidor.js';
+import { normalizarAjustes, aplicarCambios } from '../src/compartido/ajustes.js';
+import {
+  Sincronizador,
+  coleccionLista,
+  coleccionConversaciones,
+  coleccionEmpleo,
+  coleccionAjustes,
+  coleccionClaves,
+  codigoDe,
+} from '../src/compartido/sincro.js';
 
 // D1 sobre el SQLite de Node: la misma interfaz (prepare/bind/run/all/first/batch).
 function d1() {
@@ -470,4 +481,146 @@ test('alerta de empleo: a su hora busca, puntúa con Groq y avisa solo de lo nue
   const prueba = await (await pedir(env, '/empleo/alerta/probar', { metodo: 'POST', token })).json();
   assert.deepEqual(prueba.ultimas.ofertas.map((o) => o.empresa), ['Faro']);
   assert.equal(llamadas.push.length, antes);
+});
+
+// Un dispositivo con sus datos en memoria y el motor de sincronización real.
+function dispositivoSimulado(env, token) {
+  const d = {
+    memoria: [],
+    recordatorios: [],
+    indice: [],
+    convs: new Map(),
+    empleo: null,
+    ajustes: normalizarAjustes({}),
+    secretos: new Map(),
+    estado: null,
+    cambios: [],
+  };
+  const cliente = new ClienteServidor({ url: 'https://kitsune.ejemplo.workers.dev', token, fetch: (u, init) => servidor.fetch(new Request(u, init), env) });
+  d.sincro = new Sincronizador({
+    cliente: async () => cliente,
+    colecciones: {
+      memoria: coleccionLista({ leer: async () => d.memoria, guardar: async (l) => (d.memoria = l) }),
+      recordatorios: coleccionLista({ leer: async () => d.recordatorios, guardar: async (l) => (d.recordatorios = l) }),
+      conversaciones: coleccionConversaciones({
+        leerIndice: async () => d.indice,
+        guardarIndice: async (l) => (d.indice = l),
+        leer: async (id) => d.convs.get(id) ?? null,
+        guardar: async (id, datos) => d.convs.set(id, datos),
+        borrar: async (id) => d.convs.delete(id),
+      }),
+      empleo: coleccionEmpleo({ leer: async () => d.empleo, guardar: async (x) => (d.empleo = x) }),
+      ajustes: coleccionAjustes({ leer: async () => d.ajustes, guardar: async (c) => (d.ajustes = aplicarCambios(d.ajustes, c)) }),
+      claves: coleccionClaves({ leer: async (n) => d.secretos.get(n) ?? null, guardar: async (n, v) => d.secretos.set(n, v), borrar: async (n) => d.secretos.delete(n) }),
+    },
+    leerEstado: async () => d.estado,
+    guardarEstado: async (e) => (d.estado = e && structuredClone(e)),
+    leerLlave: async () => d.secretos.get('sincroLlave') ?? null,
+    guardarLlave: async (l) => d.secretos.set('sincroLlave', l),
+    borrarLlave: async () => d.secretos.delete('sincroLlave'),
+    alCambiar: (c) => d.cambios.push(...c),
+  });
+  return d;
+}
+
+test('sincronización: iPhone y Windows comparten todo cifrado y solo con el código aprobado', async () => {
+  const env = entorno();
+  const { token } = await vincular(env);
+  const { codigo } = await (await pedir(env, '/codigo', { metodo: 'POST', token })).json();
+  const { token: tokenPc } = await (await pedir(env, '/canjear', { metodo: 'POST', cuerpo: { codigo, nombre: 'Windows (CASA)' } })).json();
+  internet();
+  const movil = dispositivoSimulado(env, token);
+  const pc = dispositivoSimulado(env, tokenPc);
+
+  // El iPhone ya tiene sus cosas.
+  movil.memoria = [{ id: 'm1', texto: 'Mi hermana se llama Ana', creado: 1 }];
+  movil.recordatorios = [{ id: 'r1abc', texto: 'Llamar al dentista', cuando: Date.now() + 3_600_000, avisado: false }];
+  movil.indice = [{ id: 'c1', titulo: 'Viaje a Lisboa', resumen: '', mensajes: 2, creada: 1, actualizada: 10 }];
+  movil.convs.set('c1', { historial: [{ role: 'user', content: 'Hola' }], visibles: [{ rol: 'usuario', texto: 'Hola' }] });
+  movil.empleo = { cv: { texto: 'CV de Lucía' }, postulaciones: [{ id: 'p1', fecha: 5, estado: 'enviada' }] };
+  movil.ajustes = aplicarCambios(movil.ajustes, { estilo: 'anime', personalidad: 'Tutéame', tamano: 'grande' });
+  movil.secretos.set('claveGroq', 'gsk_secreta_de_prueba_1234567890');
+
+  // Activa la sincronización: nada viaja en claro.
+  await movil.sincro.activar();
+  const filas = (await env.DB.prepare('SELECT id, datos FROM sincro').all()).results;
+  assert.ok(filas.some((f) => f.id === 'claves/groq'));
+  const todo = filas.map((f) => f.datos ?? '').join(' ');
+  for (const secreto of ['gsk_secreta', 'Ana', 'Lisboa', 'Lucía', 'Tutéame']) assert.ok(!todo.includes(secreto), secreto);
+
+  // El PC pide unirse; el código coincide en las dos pantallas; el móvil lo aprueba.
+  pc.ajustes = aplicarCambios(pc.ajustes, { estilo: 'tinta', tamano: 'pequeno' });
+  pc.memoria = [{ id: 'm2', texto: 'Trabajo en remoto los viernes', creado: 2 }];
+  const { id, codigo: codigoPc } = await pc.sincro.solicitar();
+  const esperando = pc.sincro.esperar();
+  const resumen = await movil.sincro.resumen();
+  assert.equal(resumen.solicitudes.length, 1);
+  assert.equal(resumen.solicitudes[0].nombre, 'Windows (CASA)');
+  assert.equal(await codigoDe(resumen.solicitudes[0].publica), codigoPc);
+  // Un dispositivo no puede aprobarse a sí mismo.
+  await assert.rejects(pc.sincro.aprobar(id, resumen.solicitudes[0].publica));
+  await movil.sincro.aprobar(id, resumen.solicitudes[0].publica);
+  assert.equal(await esperando, true);
+
+  // El PC tiene lo del móvil; lo suyo propio se suma; lo de cada dispositivo no se toca.
+  assert.equal(pc.secretos.get('claveGroq'), 'gsk_secreta_de_prueba_1234567890');
+  assert.equal(pc.ajustes.estilo, 'anime');
+  assert.equal(pc.ajustes.personalidad, 'Tutéame');
+  assert.equal(pc.ajustes.tamano, 'pequeno');
+  assert.deepEqual(pc.memoria.map((m) => m.id).sort(), ['m1', 'm2']);
+  assert.equal(pc.convs.get('c1').visibles[0].texto, 'Hola');
+  assert.equal(pc.empleo.cv.texto, 'CV de Lucía');
+  assert.equal(pc.empleo.postulaciones[0].estado, 'enviada');
+  assert.equal(pc.recordatorios[0].texto, 'Llamar al dentista');
+
+  await movil.sincro.sincronizar();
+  assert.deepEqual(movil.memoria.map((m) => m.id).sort(), ['m1', 'm2']);
+  assert.ok(movil.cambios.includes('memoria'));
+
+  // Cambios y borrados van y vuelven.
+  pc.memoria = pc.memoria.filter((m) => m.id !== 'm1');
+  pc.empleo = { ...pc.empleo, postulaciones: [{ ...pc.empleo.postulaciones[0], estado: 'entrevista' }] };
+  pc.secretos.set('claveClaude', 'sk-ant-prueba');
+  await pc.sincro.sincronizar();
+  await movil.sincro.sincronizar();
+  assert.deepEqual(movil.memoria.map((m) => m.id), ['m2']);
+  assert.equal(movil.empleo.postulaciones[0].estado, 'entrevista');
+  assert.equal(movil.secretos.get('claveClaude'), 'sk-ant-prueba');
+  assert.equal(movil.empleo.cv.texto, 'CV de Lucía');
+
+  // Si los dos cambian lo mismo, gana el último cambio.
+  movil.ajustes = aplicarCambios(movil.ajustes, { estilo: 'kawaii' });
+  await movil.sincro.sincronizar();
+  pc.ajustes = aplicarCambios(pc.ajustes, { estilo: 'realista' });
+  await new Promise((r) => setTimeout(r, 5));
+  await pc.sincro.sincronizar();
+  await movil.sincro.sincronizar();
+  assert.equal(movil.ajustes.estilo, 'realista');
+  assert.equal(pc.ajustes.estilo, 'realista');
+
+  // Sin sincronizar, otro dispositivo no puede leer nada: hace falta la llave.
+  assert.equal((await pedir(env, '/sincro/cambios')).status, 401);
+
+  // Empezar de cero: el servidor lo olvida y los dispositivos se quedan con sus datos.
+  await movil.sincro.borrarServidor();
+  assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM sincro').first()).n, 0);
+  await pc.sincro.sincronizar().catch(() => {});
+  assert.equal(await pc.sincro.activaAqui(), false);
+  assert.deepEqual(pc.memoria.map((m) => m.id), ['m2']);
+});
+
+test('recordatorios: un dispositivo no borra en el servidor los que creó otro', async () => {
+  const env = entorno();
+  const { token } = await vincular(env);
+  const { codigo } = await (await pedir(env, '/codigo', { metodo: 'POST', token })).json();
+  const { token: tokenPc } = await (await pedir(env, '/canjear', { metodo: 'POST', cuerpo: { codigo, nombre: 'PC' } })).json();
+  const futuro = Date.now() + 3_600_000;
+  const subir = (t, lista, enviados) => pedir(env, '/recordatorios', { metodo: 'PUT', token: t, cuerpo: paqueteRecordatorios(lista, enviados) });
+  await subir(token, [{ id: 'rmovil1', texto: 'Del móvil', cuando: futuro }], []);
+  await subir(tokenPc, [{ id: 'rpc0001', texto: 'Del PC', cuando: futuro }], []);
+  const ids = async () => (await env.DB.prepare("SELECT id FROM recordatorios WHERE origen = 'app' ORDER BY id").all()).results.map((r) => r.id);
+  assert.deepEqual(await ids(), ['rmovil1', 'rpc0001']);
+  // El PC borra el suyo: el del móvil sigue.
+  await subir(tokenPc, [], ['rpc0001']);
+  assert.deepEqual(await ids(), ['rmovil1']);
 });

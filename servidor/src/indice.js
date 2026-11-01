@@ -14,6 +14,7 @@ import { sintetizar, validarVoz } from './voz.js';
 import { limpiarTranscripcion, MAX_AUDIO } from '../../src/compartido/dictado.js';
 import { buscarEnPortales, detalleOferta } from '../../src/compartido/portales.js';
 import { guardarAlerta, alertaPublica, alertaEmpleo } from './empleo.js';
+import { rutaSincro } from './sincro.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -241,23 +242,37 @@ function validarSuscripcion(s) {
 }
 
 // La app manda sus recordatorios pendientes; los que creó el servidor (por
-// una automatización) se quedan.
+// una automatización) se quedan. Con «borrados» (apps actuales) solo se quitan
+// los que ese dispositivo dice haber borrado: así un dispositivo no borra los
+// recordatorios que ha creado otro. Sin «borrados» (apps antiguas), la lista
+// sustituye a todo lo anterior.
 async function sincronizarRecordatorios(n, peticion) {
-  const { lista } = await cuerpo(peticion);
+  const { lista, borrados } = await cuerpo(peticion);
   if (!Array.isArray(lista) || lista.length > 200) throw new ErrorHttp(400, 'Lista no válida.');
+  const idValido = (id) => typeof id === 'string' && /^r[0-9a-z]{3,30}$/.test(id);
   const limpia = lista
-    .filter((r) => r && typeof r.id === 'string' && /^r[0-9a-z]{3,30}$/.test(r.id) && Number.isFinite(r.cuando) && typeof r.texto === 'string')
+    .filter((r) => r && idValido(r.id) && Number.isFinite(r.cuando) && typeof r.texto === 'string')
     .map((r) => ({ id: r.id, texto: r.texto.slice(0, 200), cuando: r.cuando }));
   const { results } = await n.db.prepare("SELECT id, avisado FROM recordatorios WHERE origen = 'app'").all();
   const avisados = new Set(results.filter((r) => r.avisado).map((r) => r.id));
-  await n.db.batch([
-    n.db.prepare("DELETE FROM recordatorios WHERE origen = 'app'"),
-    ...limpia.map((r) =>
-      n.db
-        .prepare("INSERT INTO recordatorios (id, texto, cuando, avisado, origen) VALUES (?, ?, ?, ?, 'app')")
-        .bind(r.id, r.texto, r.cuando, avisados.has(r.id) || r.cuando < n.ahora - 60_000 ? 1 : 0),
-    ),
-  ]);
+  const insertar = (r) =>
+    n.db
+      .prepare(
+        "INSERT INTO recordatorios (id, texto, cuando, avisado, origen) VALUES (?, ?, ?, ?, 'app') " +
+          'ON CONFLICT(id) DO UPDATE SET texto = excluded.texto, avisado = excluded.avisado, cuando = excluded.cuando',
+      )
+      .bind(r.id, r.texto, r.cuando, avisados.has(r.id) || r.cuando < n.ahora - 60_000 ? 1 : 0);
+  if (Array.isArray(borrados)) {
+    const quitar = borrados.filter(idValido).slice(0, 500);
+    await n.db.batch([
+      ...quitar.map((id) => n.db.prepare("DELETE FROM recordatorios WHERE origen = 'app' AND id = ?").bind(id)),
+      // Los ya avisados hace más de dos días sobran.
+      n.db.prepare("DELETE FROM recordatorios WHERE origen = 'app' AND avisado = 1 AND cuando < ?").bind(n.ahora - 2 * 86_400_000),
+      ...limpia.map(insertar),
+    ]);
+  } else {
+    await n.db.batch([n.db.prepare("DELETE FROM recordatorios WHERE origen = 'app'"), ...limpia.map(insertar)]);
+  }
   return json({ ok: true, total: limpia.length });
 }
 
@@ -292,7 +307,7 @@ async function desvincular(n) {
     if (refresco) await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(refresco)}`, { method: 'POST' }).catch(() => {});
   }
   await n.db.batch(
-    ['dispositivos', 'recordatorios', 'automatizaciones', 'avisados', 'registro', 'pendientes', 'codigos'].map((t) => n.db.prepare(`DELETE FROM ${t}`)),
+    ['dispositivos', 'recordatorios', 'automatizaciones', 'avisados', 'registro', 'pendientes', 'codigos', 'sincro', 'sincro_solicitudes'].map((t) => n.db.prepare(`DELETE FROM ${t}`)),
   );
   // Las claves VAPID se quedan: así los navegadores no tienen que volver a suscribirse con otra.
   await n.db.prepare("DELETE FROM ajustes WHERE clave <> 'vapid'").run();
@@ -380,6 +395,10 @@ async function atender(peticion, env) {
     return json({ ok: true });
   }
   if (m === 'POST' && ruta === '/desvincular') return desvincular(n);
+  if (ruta === '/sincro' || ruta.startsWith('/sincro/')) {
+    const respuesta = await rutaSincro(n, d, m, ruta, { json, ErrorHttp, cuerpo: () => cuerpo(peticion), url });
+    if (respuesta) return respuesta;
+  }
   // Empleo: los portales de ai-job-search (LinkedIn y freehire), que el
   // navegador no puede consultar directamente.
   if (m === 'POST' && ruta === '/empleo/buscar') {

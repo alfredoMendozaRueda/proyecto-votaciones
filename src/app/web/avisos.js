@@ -1,7 +1,7 @@
 // Avisos con la app cerrada (versión web): vincular este navegador con el
 // servidor de Kitsune, activar las notificaciones push, mandar los
 // recordatorios y gestionar las automatizaciones.
-import { ClienteServidor, URL_VALIDA, recordatoriosParaServidor } from '../../compartido/servidor.js';
+import { ClienteServidor, URL_VALIDA, paqueteRecordatorios } from '../../compartido/servidor.js';
 import { URL_SERVIDOR } from '../../compartido/nube.js';
 
 const CLAVE_PUSH = 'kitsune.push';
@@ -77,12 +77,32 @@ export function crearAvisos({ leerSecreto, guardarSecreto, borrarSecreto, obtene
     usar((c) => c.zona(zona())).catch(() => {});
   }
 
+  // Los recordatorios que este dispositivo ya ha mandado al servidor.
+  const CLAVE_ENVIADOS = 'kitsune.recordatorios.enviados';
+  const leerEnviados = () => {
+    try {
+      return JSON.parse(localStorage.getItem(CLAVE_ENVIADOS)) ?? [];
+    } catch {
+      return [];
+    }
+  };
+  const guardarEnviados = (ids) => {
+    try {
+      localStorage.setItem(CLAVE_ENVIADOS, JSON.stringify(ids));
+    } catch {
+      // Sin almacenamiento, el servidor solo recibe altas.
+    }
+  };
+
   let temporizador = null;
   function sincronizar() {
     clearTimeout(temporizador);
     temporizador = setTimeout(async () => {
       if (!url() || !(await cargarToken())) return;
-      usar((c) => c.recordatorios(recordatoriosParaServidor(leerRecordatorios()))).catch(() => {});
+      const { lista, borrados } = paqueteRecordatorios(leerRecordatorios(), leerEnviados());
+      usar((c) => c.recordatorios(lista, borrados))
+        .then(() => guardarEnviados(lista.map((r) => r.id)))
+        .catch(() => {});
     }, 400);
   }
 
@@ -241,6 +261,13 @@ export function crearAvisos({ leerSecreto, guardarSecreto, borrarSecreto, obtene
   return {
     servidor,
     sincronizar,
+    // Cliente con el token de este dispositivo (sincronización entre dispositivos).
+    async cliente() {
+      if (!url()) throw new Error('El servidor de avisos no está configurado.');
+      if (!(await cargarToken())) throw new Error('Conecta primero los avisos en Ajustes.');
+      return new ClienteServidor({ url: url(), token });
+    },
+    vinculado: async () => Boolean(url() && (await cargarToken())),
     // Con el push activo, los avisos los da el servidor: la app no los repite.
     pushActivo: leerPush,
     // Para el chat: solo con el servidor vinculado.

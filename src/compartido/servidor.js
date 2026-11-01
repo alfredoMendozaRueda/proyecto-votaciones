@@ -71,8 +71,8 @@ export class ClienteServidor {
     return this.pedir('/resumen', { metodo: 'POST' });
   }
 
-  recordatorios(lista) {
-    return this.pedir('/recordatorios', { metodo: 'PUT', cuerpo: { lista } });
+  recordatorios(lista, borrados) {
+    return this.pedir('/recordatorios', { metodo: 'PUT', cuerpo: { lista, ...(borrados ? { borrados } : {}) } });
   }
 
   avisos(avisos) {
@@ -136,6 +136,43 @@ export class ClienteServidor {
     return this.pedir('/empleo/detalle', { metodo: 'POST', cuerpo: { url } });
   }
 
+  // Sincronización entre dispositivos (datos cifrados de extremo a extremo).
+  sincroEstado() {
+    return this.pedir('/sincro');
+  }
+
+  sincroActivar(comprobante) {
+    return this.pedir('/sincro/activar', { metodo: 'POST', cuerpo: { comprobante } });
+  }
+
+  sincroSolicitar(publica) {
+    return this.pedir('/sincro/solicitudes', { metodo: 'POST', cuerpo: { publica } });
+  }
+
+  sincroSolicitud(id) {
+    return this.pedir(`/sincro/solicitudes/${encodeURIComponent(id)}`);
+  }
+
+  sincroAprobar(id, sobre) {
+    return this.pedir(`/sincro/solicitudes/${encodeURIComponent(id)}/aprobar`, { metodo: 'POST', cuerpo: { sobre } });
+  }
+
+  sincroRechazar(id) {
+    return this.pedir(`/sincro/solicitudes/${encodeURIComponent(id)}`, { metodo: 'DELETE' });
+  }
+
+  sincroCambios(desde) {
+    return this.pedir(`/sincro/cambios?desde=${Number(desde) || 0}`);
+  }
+
+  sincroSubir(cambios) {
+    return this.pedir('/sincro/cambios', { metodo: 'POST', cuerpo: { cambios } });
+  }
+
+  sincroBorrar() {
+    return this.pedir('/sincro/borrar', { metodo: 'POST' });
+  }
+
   // Dictado: el audio grabado → texto (Whisper en Workers AI).
   async transcribir(audio, tipo) {
     let respuesta;
@@ -172,3 +209,11 @@ export class ClienteServidor {
 // Lo que la app manda al servidor: solo los recordatorios pendientes.
 export const recordatoriosParaServidor = (lista) =>
   lista.filter((r) => !r.avisado && r.cuando > Date.now() - 60_000).map(({ id, texto, cuando }) => ({ id, texto, cuando }));
+
+// Lo que se manda de los recordatorios: los pendientes y los que este
+// dispositivo mandó antes y ya no están (borrados o avisados aquí).
+export function paqueteRecordatorios(lista, enviados = []) {
+  const pendientes = recordatoriosParaServidor(lista);
+  const ids = new Set(pendientes.map((r) => r.id));
+  return { lista: pendientes, borrados: [...new Set(enviados)].filter((id) => !ids.has(id)) };
+}

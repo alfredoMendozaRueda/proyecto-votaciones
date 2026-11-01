@@ -1,6 +1,7 @@
 // Modo de ejemplo: misma interfaz que window.asistente (el puente de Electron),
 // con correos y respuestas inventados. Se usa al abrir la app en un navegador.
 import { PLANTILLAS, normalizarAutomatizacion } from '../compartido/automatizaciones.js';
+import { crearPeticion, COLECCIONES_SINCRO } from '../compartido/sincro.js';
 
 const MINUTO = 60 * 1000;
 const HORA = 60 * MINUTO;
@@ -570,6 +571,43 @@ export function crearDemo() {
         guardar: async (datos) => {
           guardado = JSON.stringify(datos);
         },
+      };
+    })(),
+    // Sincronización simulada: al activarla, «Windows (CASA)» pide unirse.
+    sincro: (() => {
+      const e = { aqui: false, servidor: false, ultima: 0, solicitudes: [], colecciones: COLECCIONES_SINCRO.map(([c]) => c) };
+      return {
+        async resumen() {
+          return { ...e, error: '', pendientes: 0, esperando: null, solicitudes: [...e.solicitudes] };
+        },
+        async activar() {
+          await new Promise((r) => setTimeout(r, 500));
+          Object.assign(e, { aqui: true, servidor: true, ultima: Date.now() });
+          const { publica } = await crearPeticion();
+          e.solicitudes = [{ id: 'sdemo', nombre: 'Windows (CASA)', publica, creado: Date.now() }];
+        },
+        async aprobar(id) {
+          e.solicitudes = e.solicitudes.filter((x) => x.id !== id);
+        },
+        async rechazar(id) {
+          e.solicitudes = e.solicitudes.filter((x) => x.id !== id);
+        },
+        async elegirColecciones(lista) {
+          e.colecciones = lista;
+        },
+        async sincronizar() {
+          e.ultima = Date.now();
+        },
+        async desactivar() {
+          e.aqui = false;
+        },
+        async borrarServidor() {
+          Object.assign(e, { aqui: false, servidor: false, solicitudes: [] });
+        },
+        solicitar: async () => ({ id: 'x', codigo: '000 000' }),
+        esperar: async () => true,
+        cancelarEspera: async () => {},
+        alCambios: () => () => {},
       };
     })(),
     servidor: (() => {

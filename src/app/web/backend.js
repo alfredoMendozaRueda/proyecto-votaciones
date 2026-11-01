@@ -9,6 +9,15 @@ import { leerSecreto, guardarSecreto, borrarSecreto } from './secretos.js';
 import { crearAvisos } from './avisos.js';
 import { aviso } from '../../compartido/notificaciones.js';
 import { transcribirGroq } from '../../compartido/dictado.js';
+import { normalizarDatosEmpleo } from '../../compartido/empleo.js';
+import {
+  Sincronizador,
+  coleccionLista,
+  coleccionConversaciones,
+  coleccionEmpleo,
+  coleccionAjustes,
+  coleccionClaves,
+} from '../../compartido/sincro.js';
 
 // Versión web (PWA): el mismo contrato que window.asistente en Electron,
 // pero todo ocurre en el navegador. Claude se llama directamente desde aquí
@@ -18,6 +27,7 @@ const CLAVE_AJUSTES = 'kitsune.ajustes';
 const CLAVE_EMAIL = 'kitsune.correo.email';
 const CLAVE_RECORDATORIOS = 'kitsune.recordatorios';
 const CLAVE_ALCANCES = 'kitsune.google.alcances';
+const CLAVE_SINCRO = 'kitsune.sincro';
 const PERMISOS = `https://www.googleapis.com/auth/gmail.modify ${PERMISO_CALENDARIO}`;
 const OPCIONES_CLAUDE = { dangerouslyAllowBrowser: true };
 // Cada IA tiene su clave, cifrada en el navegador.
@@ -64,7 +74,10 @@ function errorReconectar() {
 
 export function crearBackendWeb() {
   let ajustes = normalizarAjustes(leerLocal(CLAVE_AJUSTES) ?? {});
-  const oyentes = { claude: [], nuevo: [], recordatorio: [], cita: [], renovado: [] };
+  const oyentes = { claude: [], nuevo: [], recordatorio: [], cita: [], renovado: [], sincro: [] };
+  // Sincronización con tus otros dispositivos: cada cambio guardado la avisa.
+  let sincro = null;
+  const tocado = () => sincro?.marcar();
   // El cliente propio (Ajustes) manda; si no hay, el que trae la app.
   const idCliente = () => ajustes.googleClientId || GOOGLE.web;
   const emitir = (lista, dato) => oyentes[lista].forEach((f) => f(dato));
@@ -261,7 +274,10 @@ export function crearBackendWeb() {
         return [];
       }
     },
-    guardar: (lista) => guardarSecreto('memoria', JSON.stringify(lista)),
+    guardar: async (lista) => {
+      await guardarSecreto('memoria', JSON.stringify(lista));
+      tocado();
+    },
   });
 
   // ---------- Recordatorios ----------
@@ -280,6 +296,7 @@ export function crearBackendWeb() {
     guardar: (lista) => {
       guardarLocal(CLAVE_RECORDATORIOS, lista);
       avisos.sincronizar();
+      tocado();
     },
     avisar: (r) => {
       emitir('recordatorio', r);
@@ -305,13 +322,17 @@ export function crearBackendWeb() {
       return null;
     }
   };
-  const conversaciones = new Conversaciones({
+  const almacenConversaciones = {
     leerIndice: async () => (await leerJsonSecreto('conversaciones')) ?? [],
-    guardarIndice: (lista) => guardarSecreto('conversaciones', JSON.stringify(lista)),
+    guardarIndice: async (lista) => {
+      await guardarSecreto('conversaciones', JSON.stringify(lista));
+      tocado();
+    },
     leer: (id) => leerJsonSecreto(`conv:${id}`),
     guardar: (id, datos) => guardarSecreto(`conv:${id}`, JSON.stringify(datos)),
     borrar: (id) => borrarSecreto(`conv:${id}`),
-  });
+  };
+  const conversaciones = new Conversaciones(almacenConversaciones);
 
   // Las versiones anteriores guardaban una sola conversación: pasa al historial.
   const migrada = (async () => {
@@ -384,6 +405,52 @@ export function crearBackendWeb() {
     prepararCliente().catch(() => {});
   }
 
+  async function leerEmpleo() {
+    try {
+      return JSON.parse((await leerSecreto('empleo')) ?? 'null');
+    } catch {
+      return null;
+    }
+  }
+  async function guardarEmpleo(datos) {
+    await guardarSecreto('empleo', JSON.stringify(datos));
+    tocado();
+  }
+
+  // ---------- Sincronización con tus otros dispositivos ----------
+
+  sincro = new Sincronizador({
+    cliente: () => avisos.cliente(),
+    colecciones: {
+      memoria: coleccionLista({ leer: () => memoria.leer(), guardar: (lista) => memoria.guardar(lista) }),
+      recordatorios: coleccionLista({
+        leer: () => leerLocal(CLAVE_RECORDATORIOS) ?? [],
+        guardar: (lista) => recordatorios.guardar(lista),
+        despues: () => recordatorios.programar(),
+      }),
+      conversaciones: coleccionConversaciones(almacenConversaciones),
+      empleo: coleccionEmpleo({ leer: leerEmpleo, guardar: guardarEmpleo, normalizar: normalizarDatosEmpleo }),
+      ajustes: coleccionAjustes({
+        leer: async () => ajustes,
+        guardar: async (cambios) => {
+          ajustes = aplicarCambios(ajustes, cambios);
+          guardarLocal(CLAVE_AJUSTES, ajustes);
+        },
+      }),
+      claves: coleccionClaves({ leer: leerSecreto, guardar: guardarSecreto, borrar: borrarSecreto }),
+    },
+    leerEstado: async () => leerLocal(CLAVE_SINCRO),
+    guardarEstado: async (estado) => guardarLocal(CLAVE_SINCRO, estado),
+    leerLlave: () => leerSecreto('sincroLlave'),
+    guardarLlave: (llave) => guardarSecreto('sincroLlave', llave),
+    borrarLlave: () => borrarSecreto('sincroLlave'),
+    alCambiar: (colecciones) => emitir('sincro', colecciones),
+  });
+  // Al abrir, al volver a la app y cada pocos minutos con la app abierta.
+  sincro.marcar(1500);
+  setInterval(() => document.visibilityState === 'visible' && sincro.marcar(0), 3 * 60_000);
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && sincro.marcar(300));
+
   const api = {
     plataforma: 'web',
     ajustes: {
@@ -391,6 +458,7 @@ export function crearBackendWeb() {
       async guardar(cambios) {
         ajustes = aplicarCambios(ajustes, cambios);
         guardarLocal(CLAVE_AJUSTES, ajustes);
+        tocado();
         if ('correoCadaMin' in cambios && leerLocal(CLAVE_EMAIL)) programarCorreo();
         if (cambios.avisarCorreo && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission();
         return { ...ajustes };
@@ -402,6 +470,7 @@ export function crearBackendWeb() {
         const ia = proveedorValido(proveedor);
         if (!clave) {
           await borrarSecreto(SECRETO_CLAVE[ia]);
+          tocado();
           return estadoIA();
         }
         const limpia = clave.trim().slice(0, 300);
@@ -412,6 +481,7 @@ export function crearBackendWeb() {
           throw new Error(mensajeDeError(error));
         }
         await guardarSecreto(SECRETO_CLAVE[ia], limpia);
+        tocado();
         return estadoIA();
       },
       enviar: async (texto) => (await obtenerConversacion()).enviar(String(texto).trim().slice(0, 20000)),
@@ -502,8 +572,22 @@ export function crearBackendWeb() {
     },
     // CV, búsquedas y candidaturas: datos personales, cifrados como las claves.
     empleo: {
-      leer: async () => JSON.parse((await leerSecreto('empleo')) ?? 'null'),
-      guardar: (datos) => guardarSecreto('empleo', JSON.stringify(datos)),
+      leer: leerEmpleo,
+      guardar: guardarEmpleo,
+    },
+    sincro: {
+      resumen: () => sincro.resumen(),
+      activar: () => sincro.activar(),
+      solicitar: () => sincro.solicitar(),
+      esperar: () => sincro.esperar(),
+      cancelarEspera: () => sincro.cancelarEspera(),
+      aprobar: (id, publica) => sincro.aprobar(id, publica),
+      rechazar: (id) => sincro.rechazar(id),
+      elegirColecciones: (lista) => sincro.elegirColecciones(lista),
+      sincronizar: () => sincro.sincronizar(),
+      desactivar: () => sincro.desactivar(),
+      borrarServidor: () => sincro.borrarServidor(),
+      alCambios: (f) => escuchar('sincro', f),
     },
     ventana: {
       alAlternar: () => () => {},
