@@ -60,6 +60,9 @@ contextBridge.exposeInMainWorld('asistente', {
     leer: () => invocar('empleo:leer'),
     guardar: (datos) => invocar('empleo:guardar', datos),
   },
+  consumo: {
+    resumen: () => invocar('consumo:resumen'),
+  },
   sincro: {
     resumen: () => invocar('sincro:resumen'),
     activar: () => invocar('sincro:activar'),

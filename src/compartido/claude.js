@@ -650,6 +650,8 @@ export class ConversacionClaude {
     emitir,
     alCambiarHistorial = () => {},
     opcionesCliente = {},
+    // Lo que se gasta con OpenAI (modelo, uso): ver consumo.js.
+    anotarUso = () => {},
   }) {
     this.obtenerClave = obtenerClave;
     this.obtenerAjustes = obtenerAjustes;
@@ -661,6 +663,9 @@ export class ConversacionClaude {
     this.emitir = emitir;
     this.alCambiarHistorial = alCambiarHistorial;
     this.opcionesCliente = opcionesCliente;
+    this.anotarUso = (modelo, uso) => {
+      if (uso) Promise.resolve(anotarUso(modelo, uso)).catch(() => {});
+    };
     // Solo se añade al final (nunca se editan turnos anteriores): así los
     // bloques de razonamiento que devuelve el modelo siguen siendo válidos.
     this.historial = [];
@@ -845,6 +850,7 @@ export class ConversacionClaude {
             herramientas,
             signal: this.controlador.signal,
             alTexto: (delta) => this.emitir({ tipo: 'texto', delta }),
+            alUso: this.anotarUso,
             fetch: this.opcionesCliente.fetch,
           });
         } else if (proveedor === 'groq') {
@@ -1136,6 +1142,8 @@ export class ConversacionClaude {
       case 'buscar_en_internet': {
         const buscar = this.proveedorTurno === 'openai' ? buscarEnInternetOpenAI : buscarEnInternetGroq;
         const { resultado, fuentes } = await buscar({
+          alUso: this.anotarUso,
+          modelo: this.obtenerAjustes().modeloOpenAI,
           apiKey: this.clienteTurno.apiKey,
           consulta: entrada.consulta,
           signal: this.controlador?.signal,
@@ -1166,7 +1174,7 @@ export class ConversacionClaude {
       return textoGroq({ apiKey: cliente.apiKey, modelo: this.obtenerAjustes().modeloGroq, sistema, usuario, fetch: this.opcionesCliente.fetch });
     }
     if (proveedor === 'openai') {
-      return textoOpenAI({ apiKey: cliente.apiKey, modelo: this.obtenerAjustes().modeloOpenAI, sistema, usuario, fetch: this.opcionesCliente.fetch });
+      return textoOpenAI({ apiKey: cliente.apiKey, modelo: this.obtenerAjustes().modeloOpenAI, sistema, usuario, fetch: this.opcionesCliente.fetch, alUso: this.anotarUso });
     }
     const flujo = cliente.beta.messages.stream(
       this.#parametros({ maxTokens: 16000, sistema, mensajes: [{ role: 'user', content: usuario }] }),
@@ -1189,7 +1197,7 @@ export class ConversacionClaude {
       return tareaGroq({ apiKey: cliente.apiKey, modelo: this.obtenerAjustes().modeloGroq, sistema, usuario, web, max, fetch: this.opcionesCliente.fetch });
     }
     if (proveedor === 'openai') {
-      return tareaOpenAI({ apiKey: cliente.apiKey, modelo: this.obtenerAjustes().modeloOpenAI, sistema, usuario, web, max, fetch: this.opcionesCliente.fetch });
+      return tareaOpenAI({ apiKey: cliente.apiKey, modelo: this.obtenerAjustes().modeloOpenAI, sistema, usuario, web, max, fetch: this.opcionesCliente.fetch, alUso: this.anotarUso });
     }
     const { modelo } = this.obtenerAjustes();
     const mensajes = [{ role: 'user', content: usuario }];

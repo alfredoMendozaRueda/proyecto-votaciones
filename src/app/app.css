@@ -5503,3 +5503,62 @@ html {
 .chip--marcable:has(input:not(:checked)) {
   opacity: 0.6;
 }
+
+/* ---------- Ajustes: gasto de OpenAI ---------- */
+
+.gasto {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  margin: 4px 0 12px;
+  border: 1px solid var(--linea-suave);
+  border-radius: var(--radio);
+  background: var(--carbon-2);
+}
+
+.gasto .ajuste__ayuda {
+  margin: 0;
+}
+
+.gasto__total {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto);
+}
+
+.gasto__total span {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--texto-3);
+}
+
+.gasto__lista {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13.5px;
+}
+
+.gasto__lista li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--linea-suave);
+  font-variant-numeric: tabular-nums;
+}
+
+.gasto__lista em {
+  color: var(--texto-3);
+  font-style: normal;
+}
+
+.gasto__historial {
+  text-transform: none;
+}

@@ -11,7 +11,7 @@ const esIOS = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.pla
 const instalada = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const zona = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-function nombreDispositivo() {
+export function nombreDispositivo() {
   const ua = navigator.userAgent;
   if (/iPhone/.test(ua)) return 'iPhone';
   if (/iPad/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'iPad';

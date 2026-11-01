@@ -135,3 +135,52 @@ test('OpenAI: proveedor y modelo válidos en los ajustes', () => {
   assert.equal(normalizarAjustes({}).modeloOpenAI, 'gpt-6-luna');
   assert.throws(() => aplicarCambios(a, { modeloOpenAI: 'gpt-3' }));
 });
+
+import { Consumo, coste, sumarUso, usoDeRespuesta } from '../src/compartido/consumo.js';
+
+test('gasto: precios oficiales, caché más barata y búsquedas a 0,01 $', () => {
+  // GPT-6 Luna: 1 M de entrada (la mitad en caché) y 100.000 de salida.
+  const u = { entrada: 1_000_000, cache: 500_000, salida: 100_000, busquedas: 2 };
+  assert.equal(Math.round(coste('gpt-6-luna', u) * 1e4) / 1e4, Math.round((0.05 + 0.005 + 0.05 + 0.02) * 1e4) / 1e4);
+  assert.equal(coste('gpt-6.1-sol', { entrada: 1_000_000, cache: 0, salida: 0 }), 2);
+  assert.deepEqual(usoDeRespuesta({ usage: { input_tokens: 10, input_tokens_details: { cached_tokens: 4 }, output_tokens: 3 }, output: [{ type: 'web_search_call' }, { type: 'message' }] }), {
+    entrada: 10,
+    cache: 4,
+    salida: 3,
+    busquedas: 1,
+  });
+  let meses = {};
+  for (let i = 0; i < 14; i++) meses = sumarUso(meses, 'gpt-6-luna', { entrada: 1, cache: 0, salida: 1 }, Date.UTC(2025, i, 15));
+  assert.equal(Object.keys(meses).length, 12, 'solo se guardan los últimos 12 meses');
+});
+
+test('gasto: cada respuesta de OpenAI (chat, búsqueda y tareas) se apunta con sus tokens', async () => {
+  const usos = [];
+  const { fetch, peticiones } = openaiSimulado([
+    {
+      trozos: [
+        delta({ content: 'Hola.' }),
+        delta({}, 'stop'),
+        { choices: [], usage: { prompt_tokens: 3000, prompt_tokens_details: { cached_tokens: 2048 }, completion_tokens: 12 } },
+      ],
+    },
+    { json: { ...salida('{"a":1}'), usage: { input_tokens: 500, output_tokens: 80 } } },
+  ]);
+  const { c } = conversacion(fetch, { anotarUso: (modelo, uso) => usos.push({ modelo, ...uso }) });
+  await c.enviar('Hola');
+  assert.deepEqual(peticiones[0].cuerpo.stream_options, { include_usage: true });
+  await c.tarea({ sistema: 'Devuelve SOLO JSON', usuario: 'x' });
+  assert.deepEqual(usos, [
+    { modelo: 'gpt-6-luna', entrada: 3000, cache: 2048, salida: 12, busquedas: 0 },
+    { modelo: 'gpt-6-luna', entrada: 500, cache: 0, salida: 80, busquedas: 1 },
+  ]);
+
+  let guardado = null;
+  const consumo = new Consumo({ leer: async () => guardado, guardar: async (d) => (guardado = structuredClone(d)), nombre: 'iPhone' });
+  await Promise.all(usos.map((u) => consumo.anotar(u.modelo, u)));
+  guardado.otros = { gpc: { nombre: 'Windows (CASA)', meses: { [Object.keys(guardado.meses)[0]]: { usd: 0.5, peticiones: 3 } } } };
+  const r = await consumo.resumen({ servidor: { [Object.keys(guardado.meses)[0]]: { usd: 0.25, peticiones: 1 } } });
+  assert.equal(r.total.peticiones, 6);
+  assert.ok(Math.abs(r.total.usd - (0.75 + coste('gpt-6-luna', usos[0]) + coste('gpt-6-luna', usos[1]))) < 1e-6);
+  assert.deepEqual(r.dispositivos.map((d) => d.nombre), ['iPhone', 'Windows (CASA)', 'Servidor (alertas y automatizaciones)']);
+});

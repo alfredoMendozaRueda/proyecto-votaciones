@@ -2,6 +2,7 @@
 // (D1), el acceso a Google con el permiso guardado y el envío de avisos a
 // todos los dispositivos vinculados.
 import { ClienteGmail } from '../../src/compartido/gmail.js';
+import { sumarUso } from '../../src/compartido/consumo.js';
 import { ClienteCalendario } from '../../src/compartido/calendario.js';
 import { generarVapid, enviarPush } from './push.js';
 import { cifrarTexto, descifrarTexto } from './cifrado.js';
@@ -168,6 +169,15 @@ export class Nucleo {
   async claveOpenAI() {
     const cifrada = (await this.ajustes()).openai;
     return cifrada ? descifrarTexto(cifrada, this.env.CLAVE_CIFRADO) : null;
+  }
+
+  // Lo que gasta el servidor en OpenAI, por meses (lo ve la app en Ajustes).
+  async anotarConsumo(usos) {
+    const validos = usos.filter(([, uso]) => uso);
+    if (!validos.length) return;
+    let meses = (await this.ajustes()).consumoOpenAI ?? {};
+    for (const [modelo, uso] of validos) meses = sumarUso(meses, modelo, uso, this.ahora);
+    await this.poner('consumoOpenAI', meses);
   }
 
   // La IA que usa el servidor: OpenAI si está su clave; si no, Groq; si no, ninguna.

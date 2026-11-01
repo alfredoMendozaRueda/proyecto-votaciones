@@ -4,6 +4,7 @@
 // La búsqueda web y las tareas de Empleo van por la API Responses, que trae la
 // búsqueda en internet y deja razonar un poco más cuando hace falta.
 import { herramientasOpenAI, mensajesOpenAI, inicioReciente, leerFlujoChat } from './groq.js';
+import { usoDeChat, usoDeRespuesta } from './consumo.js';
 
 export const URL_OPENAI = 'https://api.openai.com/v1';
 export const MODELOS_OPENAI = ['gpt-6-luna', 'gpt-6.1-terra', 'gpt-6.1-sol'];
@@ -63,7 +64,8 @@ async function pedir(apiKey, ruta, { cuerpo, signal, fetch: hacerFetch = fetch }
 }
 
 // Un turno de la conversación con respuesta en directo, en el formato de Claude.
-export async function turnoOpenAI({ apiKey, modelo, sistema, historial, inicioTurno, herramientas, signal, alTexto, fetch }) {
+// alUso(modelo, uso): para llevar la cuenta de lo gastado (ver consumo.js).
+export async function turnoOpenAI({ apiKey, modelo, sistema, historial, inicioTurno, herramientas, signal, alTexto, alUso, fetch }) {
   const reciente = historial.slice(inicioReciente(historial, inicioTurno, PRESUPUESTO_HISTORIAL));
   const tools = herramientasOpenAI(herramientas);
   const respuesta = await pedir(apiKey, '/chat/completions', {
@@ -73,6 +75,8 @@ export async function turnoOpenAI({ apiKey, modelo, sistema, historial, inicioTu
       model: modelo,
       messages: mensajesOpenAI(sistema, reciente),
       stream: true,
+      // Al final llegan los tokens usados: así Kitsune sabe lo que ha costado.
+      stream_options: { include_usage: true },
       max_completion_tokens: MAX_RESPUESTA,
       ...(tools.length ? { tools } : {}),
       // Con herramientas en Chat Completions, sin razonamiento (y así responde antes).
@@ -82,7 +86,9 @@ export async function turnoOpenAI({ apiKey, modelo, sistema, historial, inicioTu
       store: false,
     },
   });
-  return leerFlujoChat(respuesta, alTexto, (detalle) => new ErrorOpenAI(mensajeDeEstado(0, '', detalle)));
+  const mensaje = await leerFlujoChat(respuesta, alTexto, (detalle) => new ErrorOpenAI(mensajeDeEstado(0, '', detalle)));
+  alUso?.(modelo, usoDeChat(mensaje.usage));
+  return mensaje;
 }
 
 // ---------- API Responses: búsqueda web, borradores y tareas ----------
@@ -107,9 +113,10 @@ function textoYFuentes(datos) {
   };
 }
 
-async function responder(apiKey, cuerpo, { signal, fetch } = {}) {
+async function responder(apiKey, cuerpo, { signal, fetch, alUso } = {}) {
   const respuesta = await pedir(apiKey, '/responses', { signal, fetch, cuerpo: { store: false, ...cuerpo } });
   const datos = await respuesta.json();
+  alUso?.(cuerpo.model, usoDeRespuesta(datos));
   const resultado = textoYFuentes(datos);
   if (!resultado.texto) {
     throw new ErrorOpenAI(
@@ -120,14 +127,14 @@ async function responder(apiKey, cuerpo, { signal, fetch } = {}) {
 }
 
 // Una respuesta suelta, sin conversación (borradores de correo).
-export async function textoOpenAI({ apiKey, modelo, sistema, usuario, fetch }) {
-  const { texto } = await responder(apiKey, { model: modelo, instructions: sistema, input: usuario, reasoning: { effort: 'low' }, max_output_tokens: 6000 }, { fetch });
+export async function textoOpenAI({ apiKey, modelo, sistema, usuario, fetch, alUso }) {
+  const { texto } = await responder(apiKey, { model: modelo, instructions: sistema, input: usuario, reasoning: { effort: 'low' }, max_output_tokens: 6000 }, { fetch, alUso });
   return texto;
 }
 
 // Una tarea fuera del chat (Empleo). Si pide JSON, OpenAI garantiza que la
 // respuesta sea JSON válido. Con web, busca en internet. Devuelve { texto, fuentes }.
-export async function tareaOpenAI({ apiKey, modelo, sistema, usuario, web = false, max = 8000, fetch }) {
+export async function tareaOpenAI({ apiKey, modelo, sistema, usuario, web = false, max = 8000, fetch, alUso }) {
   const json = !web && /\bJSON\b/.test(`${sistema}\n${usuario}`);
   return responder(
     apiKey,
@@ -141,12 +148,12 @@ export async function tareaOpenAI({ apiKey, modelo, sistema, usuario, web = fals
       ...(web ? { tools: [{ type: 'web_search' }] } : {}),
       ...(json ? { text: { format: { type: 'json_object' } } } : {}),
     },
-    { fetch },
+    { fetch, alUso },
   );
 }
 
 // La herramienta buscar_en_internet del chat: una búsqueda aparte que devuelve un resumen con fuentes.
-export async function buscarEnInternetOpenAI({ apiKey, modelo = MODELOS_OPENAI[0], consulta, signal, fetch }) {
+export async function buscarEnInternetOpenAI({ apiKey, modelo = MODELOS_OPENAI[0], consulta, signal, fetch, alUso }) {
   const { texto, fuentes } = await responder(
     apiKey,
     {
@@ -160,7 +167,7 @@ export async function buscarEnInternetOpenAI({ apiKey, modelo = MODELOS_OPENAI[0
       reasoning: { effort: 'low' },
       max_output_tokens: 4000,
     },
-    { signal, fetch },
+    { signal, fetch, alUso },
   );
   return { resultado: texto, fuentes };
 }

@@ -19,6 +19,7 @@ export const COLECCIONES_SINCRO = [
   ['empleo', 'Empleo (CV y candidaturas)'],
   ['ajustes', 'Ajustes'],
   ['claves', 'Claves de la IA'],
+  ['consumo', 'Gasto de la IA'],
 ];
 // Ajustes que son de cada dispositivo (pantalla, atajos, motor de voz…).
 export const AJUSTES_LOCALES = new Set([
@@ -278,6 +279,40 @@ export function coleccionClaves({ leer, guardar, borrar, despues }) {
   };
 }
 
+// Gasto de la IA: cada dispositivo escribe solo el suyo y recibe el de los demás.
+export function coleccionConsumo({ leer, guardar, despues }) {
+  return {
+    // Lo de otro dispositivo solo lo borra él: aquí nunca se da por borrado.
+    sinBorrados: true,
+    async leer() {
+      const d = await leer();
+      if (!d) return new Map();
+      const mapa = new Map();
+      if (d.id) {
+        const propio = comoTexto({ nombre: d.nombre, meses: d.meses ?? {} });
+        mapa.set(d.id, { firma: propio, valor: propio });
+      }
+      for (const [id, o] of Object.entries(d.otros ?? {})) {
+        const v = comoTexto(o);
+        mapa.set(id, { firma: v, valor: v });
+      }
+      return mapa;
+    },
+    firma: (v) => v,
+    async aplicar(cambios) {
+      const d = (await leer()) ?? {};
+      d.otros = { ...(d.otros ?? {}) };
+      for (const { id, valor } of cambios) {
+        if (id === d.id) continue;
+        if (valor === null) delete d.otros[id];
+        else d.otros[id] = JSON.parse(valor);
+      }
+      await guardar(d);
+      await despues?.();
+    },
+  };
+}
+
 // ---------- Motor ----------
 
 const estadoNuevo = () => ({ cursor: 0, base: {}, pendientes: {}, ultima: 0, error: '', primera: true, colecciones: COLECCIONES_SINCRO.map(([c]) => c) });
@@ -490,7 +525,7 @@ export class Sincronizador {
       else delete e.pendientes[id];
     }
     for (const id of Object.keys(e.base)) {
-      if (!activas.has(coleccionDe(id))) continue;
+      if (!activas.has(coleccionDe(id)) || this.colecciones[coleccionDe(id)].sinBorrados) continue;
       if (!locales.has(id)) e.pendientes[id] ??= ahora;
     }
     for (const id of Object.keys(e.pendientes)) if (!locales.has(id) && !(id in e.base)) delete e.pendientes[id];

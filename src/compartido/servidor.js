@@ -91,6 +91,11 @@ export class ClienteServidor {
     return this.pedir('/openai', { metodo: 'PUT', cuerpo: { clave } });
   }
 
+  // Lo gastado en OpenAI por el propio servidor (alertas, automatizaciones).
+  consumo() {
+    return this.pedir('/consumo');
+  }
+
   automatizaciones() {
     return this.pedir('/automatizaciones');
   }

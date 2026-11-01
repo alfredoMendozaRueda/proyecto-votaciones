@@ -345,7 +345,7 @@ export function crearDemo() {
     fotosRemitentes: true,
     googleClientId: '123456789-kitsune.apps.googleusercontent.com',
     pulsoDiario: true,
-    proveedor: 'groq',
+    proveedor: 'openai',
     modeloGroq: 'openai/gpt-oss-120b',
     modeloOpenAI: 'gpt-6-luna',
     usarMemoria: true,
@@ -574,6 +574,21 @@ export function crearDemo() {
         },
       };
     })(),
+    // Gasto de OpenAI de ejemplo.
+    consumo: {
+      async resumen() {
+        const mes = new Date().toISOString().slice(0, 7);
+        const anterior = new Date(new Date().setDate(0)).toISOString().slice(0, 7);
+        const d = (usd, peticiones, entrada, cache, salida, busquedas) => ({ usd, peticiones, entrada, cache, salida, busquedas });
+        const dispositivos = [
+          { nombre: 'iPhone', yo: true, servidor: false, ...d(0.1384, 212, 1_240_000, 610_000, 64_000, 4) },
+          { nombre: 'Windows (CASA)', yo: false, servidor: false, ...d(0.0517, 85, 470_000, 260_000, 21_000, 1) },
+          { nombre: 'Servidor (alertas y automatizaciones)', yo: false, servidor: true, ...d(0.0121, 18, 96_000, 0, 5_000, 0) },
+        ];
+        const total = dispositivos.reduce((t, x) => Object.fromEntries(Object.keys(t).map((k) => [k, t[k] + x[k]])), d(0, 0, 0, 0, 0, 0));
+        return { mes, total, dispositivos, historial: [{ mes: anterior, ...d(0.3912, 640, 3_900_000, 2_100_000, 180_000, 9) }] };
+      },
+    },
     // Sincronización simulada: al activarla, «Windows (CASA)» pide unirse.
     sincro: (() => {
       const e = { aqui: false, servidor: false, ultima: 0, solicitudes: [], colecciones: COLECCIONES_SINCRO.map(([c]) => c) };

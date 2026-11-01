@@ -215,6 +215,7 @@ export async function turnoGroq({ apiKey, modelo, sistema, historial, inicioTurn
 export async function leerFlujoChat(respuesta, alTexto, crearError = (detalle) => new Error(detalle)) {
   let texto = '';
   let motivo = null;
+  let usage = null;
   const llamadas = [];
   const lector = respuesta.body.getReader();
   const decodificador = new TextDecoder();
@@ -231,6 +232,7 @@ export async function leerFlujoChat(respuesta, alTexto, crearError = (detalle) =
       if (!datos || datos === '[DONE]') continue;
       const trozo = JSON.parse(datos);
       if (trozo.error) throw crearError(trozo.error.message ?? '');
+      if (trozo.usage) usage = trozo.usage;
       const eleccion = trozo.choices?.[0];
       if (!eleccion) continue;
       const delta = eleccion.delta ?? {};
@@ -263,7 +265,7 @@ export async function leerFlujoChat(respuesta, alTexto, crearError = (detalle) =
   }
   const usaHerramientas = content.some((b) => b.type === 'tool_use');
   const stop_reason = motivo === 'length' ? 'max_tokens' : usaHerramientas ? 'tool_use' : 'end_turn';
-  return { content, stop_reason };
+  return { content, stop_reason, usage };
 }
 
 // Una respuesta suelta, sin conversación (borradores de correo).

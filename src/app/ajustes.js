@@ -348,6 +348,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
             ${selector('modeloGroq', 'ajuste-modelo-groq', MODELOS_GROQ)}
           </div>`
           }
+          ${api.consumo ? '<div class="gasto" id="gasto-openai" hidden></div>' : ''}
           <div class="ajuste">
             <label class="ajuste__etiqueta" for="ajuste-personalidad">Cómo quieres que te hable</label>
             <textarea class="campo" id="ajuste-personalidad" rows="3" maxlength="2000" placeholder="Por ejemplo: tutéame, sé breve y avísame primero de lo urgente.">${escapar(ajustes.personalidad)}</textarea>
@@ -399,7 +400,62 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
     conectar();
     if (estadoAvisos) conectarAvisos(estadoAvisos);
     if (api.sincro && estadoAvisos) pintarSincro(estadoAvisos.vinculado);
+    if (api.consumo) pintarGasto();
     if (seccion) contenedor.querySelector(`#seccion-${seccion}`)?.scrollIntoView({ block: 'start' });
+  }
+
+  // ---------- Gasto de OpenAI ----------
+
+  // Cambio aproximado (noviembre de 2026); la factura llega en dólares.
+  const EUROS_POR_DOLAR = 0.87;
+  const dinero = (n, simbolo = '$') =>
+    `${n.toLocaleString('es-ES', { minimumFractionDigits: n > 0 && n < 0.01 ? 3 : 2, maximumFractionDigits: n > 0 && n < 0.01 ? 3 : 2 })} ${simbolo}`;
+  const tokens = (n) =>
+    n >= 1e6 ? `${(n / 1e6).toLocaleString('es-ES', { maximumFractionDigits: 1 })} M` : n >= 1000 ? `${Math.round(n / 1000).toLocaleString('es-ES')} mil` : String(n);
+  const nombreMes = (mes) => new Date(`${mes}-15T12:00:00`).toLocaleDateString('es-ES', { month: 'long' });
+
+  async function pintarGasto() {
+    const caja = contenedor.querySelector('#gasto-openai');
+    if (!caja) return;
+    let r;
+    try {
+      r = await api.consumo.resumen();
+    } catch {
+      return;
+    }
+    const algo = r.total.peticiones > 0 || r.historial.some((h) => h.peticiones > 0);
+    if (ajustes.proveedor !== 'openai' && !algo) return;
+    const t = r.total;
+    const lineas = r.dispositivos.filter((d) => d.yo || d.peticiones > 0);
+    caja.hidden = false;
+    caja.innerHTML = `
+      <p class="empleo-etiqueta">(gasto de OpenAI · ${nombreMes(r.mes)})</p>
+      <p class="gasto__total">${dinero(t.usd)} <span>≈ ${dinero(t.usd * EUROS_POR_DOLAR, '€')}</span></p>
+      <p class="ajuste__ayuda">${
+        t.peticiones
+          ? `${t.peticiones.toLocaleString('es-ES')} ${t.peticiones === 1 ? 'respuesta' : 'respuestas'} · ${tokens(t.entrada)} tokens leídos${t.cache ? ` (${tokens(t.cache)} en caché, 10 veces más baratos)` : ''} · ${tokens(t.salida)} escritos${
+              t.busquedas ? ` · ${t.busquedas} ${t.busquedas === 1 ? 'búsqueda' : 'búsquedas'} web (${dinero(t.busquedas * 0.01)})` : ''
+            }`
+          : 'Todavía no has gastado nada este mes.'
+      }</p>
+      ${
+        lineas.length > 1 || lineas.some((d) => !d.yo)
+          ? `<ul class="gasto__lista">${lineas
+              .map((d) => `<li><span>${escapar(d.nombre)}${d.yo ? ' <em>(este)</em>' : ''}</span><span>${dinero(d.usd)}</span></li>`)
+              .join('')}</ul>`
+          : ''
+      }
+      ${
+        r.historial.some((h) => h.peticiones)
+          ? `<p class="ajuste__ayuda gasto__historial">${r.historial
+              .filter((h) => h.peticiones)
+              .map((h) => `${nombreMes(h.mes)}: ${dinero(h.usd)}`)
+              .join(' · ')}</p>`
+          : ''
+      }
+      <p class="ajuste__ayuda">Lo calcula Kitsune con los precios oficiales, sin IVA. ${
+        api.sincro ? 'Con la sincronización activa se suman tus otros dispositivos. ' : ''
+      }La cifra exacta está en platform.openai.com/usage.</p>`;
   }
 
   // ---------- Sincronizar con tus otros dispositivos ----------

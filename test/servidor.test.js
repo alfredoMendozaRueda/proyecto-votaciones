@@ -647,7 +647,7 @@ test('servidor con OpenAI: guarda la clave cifrada y puntúa las alertas de empl
       ia.push({ url: u, cuerpo, auth: init.headers.Authorization });
       const id = cuerpo.input.match(/<oferta id="([^"]+)">/)[1];
       const texto = JSON.stringify({ evaluaciones: [{ id, puerta: 'pasa', tecnica: 90, experiencia: 80, cultura: 70, carrera: 80 }] });
-      return Response.json({ status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text: texto, annotations: [] }] }] });
+      return Response.json({ status: 'completed', usage: { input_tokens: 2000, output_tokens: 300 }, output: [{ type: 'message', content: [{ type: 'output_text', text: texto, annotations: [] }] }] });
     }
     return base(url, init);
   };
@@ -659,4 +659,54 @@ test('servidor con OpenAI: guarda la clave cifrada y puntúa las alertas de empl
   assert.deepEqual(ia[0].cuerpo.text, { format: { type: 'json_object' } });
   assert.equal(ultimas.evaluadas, true);
   assert.ok(ultimas.ofertas[0].encaje >= 80);
+  // Lo que gasta el servidor se ve desde la app.
+  const { meses } = await (await pedir(env, '/consumo', { token })).json();
+  const mes = Object.values(meses)[0];
+  assert.equal(mes.peticiones, 1);
+  assert.equal(mes.entrada, 2000);
+  assert.ok(mes.usd > 0 && mes.usd < 0.001);
+});
+
+test('sincronización: el gasto de cada dispositivo llega al otro sin pisarse', async () => {
+  const env = entorno();
+  const { token } = await vincular(env);
+  const { codigo } = await (await pedir(env, '/codigo', { metodo: 'POST', token })).json();
+  const { token: tokenPc } = await (await pedir(env, '/canjear', { metodo: 'POST', cuerpo: { codigo, nombre: 'PC' } })).json();
+  internet();
+  const { coleccionConsumo } = await import('../src/compartido/sincro.js');
+  const { Consumo } = await import('../src/compartido/consumo.js');
+  const crear = (t, nombre) => {
+    const d = { datos: null, estado: null, llave: null };
+    const almacen = { leer: async () => d.datos && structuredClone(d.datos), guardar: async (x) => (d.datos = structuredClone(x)) };
+    d.consumo = new Consumo({ ...almacen, nombre });
+    d.sincro = new Sincronizador({
+      cliente: async () => new ClienteServidor({ url: 'https://kitsune.ejemplo.workers.dev', token: t, fetch: (u, init) => servidor.fetch(new Request(u, init), env) }),
+      colecciones: { consumo: coleccionConsumo(almacen) },
+      leerEstado: async () => d.estado,
+      guardarEstado: async (e) => (d.estado = e && structuredClone(e)),
+      leerLlave: async () => d.llave,
+      guardarLlave: async (l) => (d.llave = l),
+      borrarLlave: async () => (d.llave = null),
+    });
+    return d;
+  };
+  const movil = crear(token, 'iPhone');
+  const pc = crear(tokenPc, 'PC');
+  await movil.consumo.anotar('gpt-6-luna', { entrada: 1_000_000, cache: 0, salida: 0 });
+  await pc.consumo.anotar('gpt-6-luna', { entrada: 2_000_000, cache: 0, salida: 0 });
+  await movil.sincro.activar();
+  await pc.sincro.solicitar();
+  const esperando = pc.sincro.esperar();
+  const [s] = (await movil.sincro.resumen()).solicitudes;
+  await movil.sincro.aprobar(s.id, s.publica);
+  await esperando;
+  await movil.consumo.anotar('gpt-6-luna', { entrada: 1_000_000, cache: 0, salida: 0 });
+  await movil.sincro.sincronizar();
+  await pc.sincro.sincronizar();
+  await movil.sincro.sincronizar();
+  for (const d of [movil, pc]) {
+    const r = await d.consumo.resumen();
+    assert.equal(Math.round(r.total.usd * 100) / 100, 0.4, 'iPhone 0,20 $ + PC 0,20 $');
+    assert.equal(r.dispositivos.length, 2);
+  }
 });

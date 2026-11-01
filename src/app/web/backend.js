@@ -6,7 +6,8 @@ import { ClienteCalendario, PERMISO_CALENDARIO } from '../../compartido/calendar
 import { Conversaciones, nuevoIdConversacion } from '../../compartido/conversaciones.js';
 import { GOOGLE } from '../../compartido/google.js';
 import { leerSecreto, guardarSecreto, borrarSecreto } from './secretos.js';
-import { crearAvisos } from './avisos.js';
+import { crearAvisos, nombreDispositivo } from './avisos.js';
+import { Consumo } from '../../compartido/consumo.js';
 import { aviso } from '../../compartido/notificaciones.js';
 import { transcribirGroq } from '../../compartido/dictado.js';
 import { normalizarDatosEmpleo } from '../../compartido/empleo.js';
@@ -17,6 +18,7 @@ import {
   coleccionEmpleo,
   coleccionAjustes,
   coleccionClaves,
+  coleccionConsumo,
 } from '../../compartido/sincro.js';
 
 // Versión web (PWA): el mismo contrato que window.asistente en Electron,
@@ -28,6 +30,7 @@ const CLAVE_EMAIL = 'kitsune.correo.email';
 const CLAVE_RECORDATORIOS = 'kitsune.recordatorios';
 const CLAVE_ALCANCES = 'kitsune.google.alcances';
 const CLAVE_SINCRO = 'kitsune.sincro';
+const CLAVE_CONSUMO = 'kitsune.consumo';
 const PERMISOS = `https://www.googleapis.com/auth/gmail.modify ${PERMISO_CALENDARIO}`;
 const OPCIONES_CLAUDE = { dangerouslyAllowBrowser: true };
 // Cada IA tiene su clave, cifrada en el navegador.
@@ -78,6 +81,13 @@ export function crearBackendWeb() {
   // Sincronización con tus otros dispositivos: cada cambio guardado la avisa.
   let sincro = null;
   const tocado = () => sincro?.marcar();
+  // Lo que se gasta en OpenAI desde este dispositivo (y lo que llega de los demás).
+  const consumo = new Consumo({
+    leer: async () => leerLocal(CLAVE_CONSUMO),
+    guardar: async (d) => guardarLocal(CLAVE_CONSUMO, d),
+    nombre: nombreDispositivo(),
+    alCambiar: tocado,
+  });
   // El cliente propio (Ajustes) manda; si no hay, el que trae la app.
   const idCliente = () => ajustes.googleClientId || GOOGLE.web;
   const emitir = (lista, dato) => oyentes[lista].forEach((f) => f(dato));
@@ -360,6 +370,7 @@ export function crearBackendWeb() {
       const { ConversacionClaude } = await import('../../compartido/claude.js');
       const inicial = await conversacionInicial();
       conversacion = new ConversacionClaude({
+        anotarUso: (modelo, uso) => consumo.anotar(modelo, uso),
         recordatorios,
         memoria,
         calendario: {
@@ -438,6 +449,7 @@ export function crearBackendWeb() {
         },
       }),
       claves: coleccionClaves({ leer: leerSecreto, guardar: guardarSecreto, borrar: borrarSecreto }),
+      consumo: coleccionConsumo({ leer: async () => leerLocal(CLAVE_CONSUMO), guardar: async (d) => guardarLocal(CLAVE_CONSUMO, d) }),
     },
     leerEstado: async () => leerLocal(CLAVE_SINCRO),
     guardarEstado: async (estado) => guardarLocal(CLAVE_SINCRO, estado),
@@ -574,6 +586,12 @@ export function crearBackendWeb() {
     empleo: {
       leer: leerEmpleo,
       guardar: guardarEmpleo,
+    },
+    consumo: {
+      async resumen() {
+        const servidor = (await avisos.vinculado()) ? await avisos.cliente().then((c) => c.consumo()).catch(() => null) : null;
+        return consumo.resumen({ servidor: servidor?.meses ?? null });
+      },
     },
     sincro: {
       resumen: () => sincro.resumen(),

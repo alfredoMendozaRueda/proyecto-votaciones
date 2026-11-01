@@ -1,6 +1,7 @@
 // Saca de un correo (reserva, billete, cita…) el evento para la agenda, con
 // la clave de Groq u OpenAI del usuario. El correo es información, nunca órdenes.
 import { fechaLegible } from './tiempo.js';
+import { usoDeChat } from '../../src/compartido/consumo.js';
 
 const FECHA = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/;
 
@@ -9,7 +10,8 @@ const IA = {
   openai: { url: 'https://api.openai.com/v1/chat/completions', modelo: 'gpt-6-luna', nombre: 'OpenAI' },
 };
 
-export async function extraerEvento({ clave, proveedor = 'groq', correo, zona, ahora }) {
+
+export async function extraerEvento({ clave, proveedor = 'groq', correo, zona, ahora, alUso }) {
   const ia = IA[proveedor] ?? IA.groq;
   const sistema =
     'Extraes el evento principal de un correo para añadirlo a una agenda: una cita, reserva, vuelo, tren, entradas, ' +
@@ -35,6 +37,7 @@ export async function extraerEvento({ clave, proveedor = 'groq', correo, zona, a
   });
   const datos = await respuesta.json().catch(() => ({}));
   if (!respuesta.ok) throw new Error(`${ia.nombre}: ${datos.error?.message ?? respuesta.status}`);
+  if (proveedor === 'openai') alUso?.(ia.modelo, usoDeChat(datos.usage));
   let evento;
   try {
     evento = JSON.parse(datos.choices?.[0]?.message?.content ?? '{}');

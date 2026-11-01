@@ -62,6 +62,7 @@ export async function alertaEmpleo(n, { avisar = true, hacerFetch = fetch } = {}
   await n.marcar(ofertas.map((o) => `oferta:${o.id}`));
 
   let evaluadas = false;
+  const usos = [];
   // Con OpenAI (GPT-6 Luna) si su clave está en el servidor; si no, con Groq.
   const motor = await n.iaServidor();
   if (motor && alerta.perfil && ofertas.length) {
@@ -69,7 +70,7 @@ export async function alertaEmpleo(n, { avisar = true, hacerFetch = fetch } = {}
       const perfil = normalizarPerfil(JSON.parse(await descifrarTexto(alerta.perfil, n.env.CLAVE_CIFRADO)));
       const ia =
         motor.proveedor === 'openai'
-          ? (p) => tareaOpenAI({ apiKey: motor.clave, modelo: 'gpt-6-luna', fetch: hacerFetch, ...p })
+          ? (p) => tareaOpenAI({ apiKey: motor.clave, modelo: 'gpt-6-luna', fetch: hacerFetch, alUso: (m, u) => usos.push([m, u]), ...p })
           : (p) => tareaGroq({ apiKey: motor.clave, modelo: 'openai/gpt-oss-20b', fetch: hacerFetch, ...p });
       ofertas = await evaluarEncaje(ia, perfil, ofertas, { preferencias: alerta });
       evaluadas = true;
@@ -80,6 +81,7 @@ export async function alertaEmpleo(n, { avisar = true, hacerFetch = fetch } = {}
   const buenas = evaluadas ? ofertas.filter((o) => o.puerta !== 'no' && (o.encaje ?? 0) >= alerta.minEncaje) : ofertas;
   const ultimas = { fecha: n.ahora, evaluadas, errores: r.errores, ofertas: buenas.slice(0, 15).map((o) => ({ ...o, descripcion: o.descripcion.slice(0, 3000) })) };
   await n.poner('empleoUltimas', ultimas);
+  await n.anotarConsumo(usos).catch(() => {});
 
   if (avisar && buenas.length) {
     const [primera, segunda] = buenas;

@@ -384,6 +384,7 @@ async function atender(peticion, env) {
     else throw new ErrorHttp(400, 'Esa no parece una clave de OpenAI (sk-…).');
     return json({ ok: true });
   }
+  if (m === 'GET' && ruta === '/consumo') return json({ meses: (await n.ajustes()).consumoOpenAI ?? {} });
   if (m === 'GET' && ruta === '/automatizaciones') return json(await n.automatizaciones());
   if (m === 'POST' && ruta === '/automatizaciones') return guardarAutomatizacion(n, peticion);
   if (ruta.startsWith('/automatizaciones/')) {

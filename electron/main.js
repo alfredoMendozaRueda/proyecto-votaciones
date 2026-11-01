@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, Menu, nativeImage, Notification, screen, shell, Tray } from 'electron';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -31,7 +32,9 @@ import {
   coleccionEmpleo,
   coleccionAjustes,
   coleccionClaves,
+  coleccionConsumo,
 } from '../src/compartido/sincro.js';
+import { Consumo } from '../src/compartido/consumo.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 const URL_DESARROLLO = process.env.KITSUNE_DEV_URL;
@@ -52,6 +55,13 @@ const gmail = new Gmail(obtenerAjustes);
 // Sincronización con tus otros dispositivos: cada cambio guardado la avisa.
 let sincro = null;
 const tocado = () => sincro?.marcar();
+// Lo que se gasta en OpenAI desde este ordenador (y lo que llega de los demás).
+const consumo = new Consumo({
+  leer: () => leerObjeto('consumo'),
+  guardar: (d) => guardarDatos('consumo', d),
+  nombre: `Windows (${os.hostname()})`.slice(0, 60),
+  alCambiar: tocado,
+});
 const recordatorios = new Recordatorios({
   leer: () => leerDatos('recordatorios'),
   guardar: (lista) => {
@@ -111,6 +121,7 @@ sincro = new Sincronizador({
     empleo: coleccionEmpleo({ leer: leerEmpleo, guardar: guardarEmpleo }),
     ajustes: coleccionAjustes({ leer: () => obtenerAjustes(), guardar: (cambios) => guardarAjustes(cambios) }),
     claves: coleccionClaves({ leer: leerSecreto, guardar: guardarSecreto, borrar: borrarSecreto }),
+    consumo: coleccionConsumo({ leer: () => leerObjeto('consumo'), guardar: (d) => guardarDatos('consumo', d) }),
   },
   leerEstado: () => leerObjeto('sincro'),
   guardarEstado: (estado) => guardarDatos('sincro', estado ?? {}),
@@ -132,6 +143,7 @@ const estadoIA = () => {
 };
 
 const claude = new ConversacionClaude({
+  anotarUso: (modelo, uso) => consumo.anotar(modelo, uso),
   obtenerClave: async (proveedor) => leerSecreto(SECRETO_CLAVE[proveedorValido(proveedor)]),
   obtenerAjustes,
   gmail,
@@ -462,6 +474,10 @@ function registrarCanales() {
   });
   manejar('empleo:leer', () => leerEmpleo());
   manejar('empleo:guardar', (datos) => guardarEmpleo(datos));
+  manejar('consumo:resumen', async () => {
+    const servidorConsumo = leerSecreto('servidorToken') ? await Promise.resolve().then(() => clienteServidor().consumo()).catch(() => null) : null;
+    return consumo.resumen({ servidor: servidorConsumo?.meses ?? null });
+  });
   manejar('sincro:resumen', () => sincro.resumen());
   manejar('sincro:activar', () => sincro.activar());
   manejar('sincro:solicitar', () => sincro.solicitar());
