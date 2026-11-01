@@ -91,7 +91,12 @@ async function iaModo(n, { hacerFetch, usos, sinLuna = false }) {
       throw error;
     }
   };
-  return ({ nivel, ...p }) => conRespaldo(rutaIA(m.modo, p.web ? 'web' : nivel === 'final' ? 'final' : 'fondo', hay), (ia) => llamar(ia, p));
+  return ({ nivel, ...p }) => {
+    const ruta = rutaIA(m.modo, p.web ? 'web' : nivel === 'final' ? 'final' : 'fondo', hay);
+    // Buscar en internet con Groq no pasa a GPT-6 Luna si falla (0,01 $ cada vez): se sigue sin ello.
+    if (p.web && ruta[0] === 'groq') ruta[1] = null;
+    return conRespaldo(ruta, (ia) => llamar(ia, p));
+  };
 }
 
 const gastadoEsteMes = (a, ahora) => a.consumoOpenAI?.[mesDe(ahora)]?.usd ?? 0;

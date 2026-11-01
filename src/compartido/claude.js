@@ -1185,19 +1185,32 @@ export class ConversacionClaude {
         return verTiempo(entrada, this.opcionesCliente.fetch ?? fetch);
       case 'buscar_en_internet': {
         // La búsqueda puede ir por otra IA que el chat (en Eficiente, Groq: gratis).
+        // Si Groq falla, la hace GPT-6 Luna (0,01 $): la pediste tú. Queda en el registro de la IA.
         const ruta = await this.#ruta('web');
         const { resultado, fuentes } = await conRespaldo(
           ruta,
-          async (ia) =>
-            (ia === 'openai' ? buscarEnInternetOpenAI : buscarEnInternetGroq)({
-              alUso: this.anotarUso,
-              modelo: this.obtenerAjustes().modeloOpenAI,
-              apiKey: ia === this.proveedorTurno ? this.clienteTurno.apiKey : (await this.#cliente(ia)).apiKey,
-              consulta: entrada.consulta,
-              signal: this.controlador?.signal,
-              alEsperar: (segundos) => this.emitir({ tipo: 'esperando', segundos }),
-              fetch: this.opcionesCliente.fetch,
-            }),
+          async (ia) => {
+            const inicio = Date.now();
+            const modelo = ia === 'openai' ? this.obtenerAjustes().modeloOpenAI : 'openai/gpt-oss-20b';
+            const apuntar = (extra) =>
+              this.alRegistroIA({ etiqueta: 'buscar en internet (chat)', sobre: '', proveedor: ia, modelo, ms: Date.now() - inicio, sistema: '', usuario: entrada.consulta, ...extra });
+            try {
+              const r = await (ia === 'openai' ? buscarEnInternetOpenAI : buscarEnInternetGroq)({
+                alUso: this.anotarUso,
+                modelo: this.obtenerAjustes().modeloOpenAI,
+                apiKey: ia === this.proveedorTurno ? this.clienteTurno.apiKey : (await this.#cliente(ia)).apiKey,
+                consulta: entrada.consulta,
+                signal: this.controlador?.signal,
+                alEsperar: (segundos) => this.emitir({ tipo: 'esperando', segundos }),
+                fetch: this.opcionesCliente.fetch,
+              });
+              apuntar({ ok: true, respuesta: r.resultado });
+              return r;
+            } catch (error) {
+              apuntar({ ok: false, error: error.message });
+              throw error;
+            }
+          },
           { signal: this.controlador?.signal },
         );
         this.fuentesTurno.push(...fuentes);
@@ -1249,6 +1262,9 @@ export class ConversacionClaude {
   // etiqueta y sobre (ids de oferta…): para encontrarla luego en el registro de la IA.
   async tarea({ sistema, usuario, web = false, max = 8000, nivel = 'fondo', etiqueta = 'tarea', sobre = '' }) {
     const ruta = await this.#ruta(web ? 'web' : nivel === 'final' ? 'final' : 'fondo');
+    // Las búsquedas de fondo (investigar una empresa, buscar ofertas en la web) que tocan
+    // a Groq no pasan a GPT-6 Luna si Groq falla: cada una costaría 0,01 $ sin pedirla tú.
+    if (web && ruta[0] === 'groq') ruta[1] = null;
     const ajustes = this.obtenerAjustes();
     const hacer = async (ia) => {
       const modelo = ia === 'openai' ? ajustes.modeloOpenAI : ia === 'groq' ? (web ? 'openai/gpt-oss-120b' : ajustes.modeloGroq) : ajustes.modelo;

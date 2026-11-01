@@ -835,13 +835,14 @@ test('modos de IA en el servidor: Eficiente reparte entre Groq y GPT-6 Luna, Aho
     await revisar(env, nueve + 120_000);
     assert.deepEqual(pasos, ['puntuar:groq', 'redactar:groq', 'investigar:groq', 'revisar:luna']);
 
-    // Si Groq falla, lo hace Luna (y al revés).
+    // Si Groq falla, lo hace Luna (y al revés); menos buscar en internet, que costaría
+    // 0,01 $ por búsqueda: la candidatura sale sin investigar la empresa.
     pasos = [];
     groqCaido = true;
     const cola = [{ id: 'z', puesto: 'Otra', empresa: 'Zeta', descripcion: 'React' }];
     await env.DB.prepare("INSERT OR REPLACE INTO ajustes (clave, valor) VALUES ('empleoCola', ?)").bind(JSON.stringify(cola)).run();
     await revisar(env, nueve + 180_000);
-    assert.deepEqual(pasos, ['redactar:luna', 'investigar:luna', 'revisar:luna']);
+    assert.deepEqual(pasos, ['redactar:luna', 'revisar:luna']);
     groqCaido = false;
 
     // Ahorro: todo con Groq.
