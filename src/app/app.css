@@ -8933,3 +8933,23 @@ p.gastos__dia {
     animation: none;
   }
 }
+
+/* Ofertas sin nota: se dice por qué y se pueden puntuar. */
+.empleo-sin-nota {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: 6px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--kin) 30%, var(--linea-suave));
+  border-radius: 12px;
+  background: var(--kin-velo);
+  font-size: 13px;
+}
+
+.empleo-sin-nota p {
+  flex: 1 1 220px;
+  margin: 0;
+}

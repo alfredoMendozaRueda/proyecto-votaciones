@@ -874,6 +874,28 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
     verPestana('candidaturas');
   }
 
+  // Puntúa las ofertas que se quedaron sin nota (la IA falló o llegó a su límite).
+  let errorPuntuar = '';
+  async function puntuarFaltan() {
+    const faltan = datos.ofertas.filter((o) => o.encaje == null && o.puerta !== 'no');
+    if (!faltan.length || !datos.cv?.perfil) return;
+    progreso(`Puntuando ${faltan.length === 1 ? 'la oferta que falta' : `las ${faltan.length} ofertas que faltan`}…`);
+    errorPuntuar = '';
+    let puntuadas;
+    try {
+      puntuadas = await evaluarEncaje(ia, datos.cv.perfil, faltan, { preferencias: datos.preferencias, alFallar: (e) => (errorPuntuar = e.message) });
+    } catch (error) {
+      errorPuntuar = error.message;
+      pintarOfertas();
+      throw error;
+    }
+    const porId = new Map(puntuadas.map((o) => [o.id, o]));
+    const orden = { pasa: 0, aviso: 0, '': 0, no: 1 };
+    datos.ofertas = datos.ofertas.map((o) => porId.get(o.id) ?? o).sort((a, b) => orden[a.puerta] - orden[b.puerta] || (b.encaje ?? -1) - (a.encaje ?? -1));
+    await guardar();
+    pintarOfertas();
+  }
+
   async function buscar() {
     const { perfil } = datos.cv;
     const pasos = { portales: 'Buscando en LinkedIn y freehire…', fichas: 'Comprobando en LinkedIn cuáles son en remoto…', web: 'Buscando en InfoJobs, Indeed y webs de empresas…' };
@@ -884,10 +906,12 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
     datos.avisosBusqueda = avisos;
     pintarOfertas();
     progreso('Evaluando cada oferta: idioma, ubicación y cinco dimensiones…');
+    errorPuntuar = '';
     try {
-      datos.ofertas = await evaluarEncaje(ia, perfil, ofertas, { preferencias: datos.preferencias });
-    } catch {
-      // Sin puntuación también sirven.
+      datos.ofertas = await evaluarEncaje(ia, perfil, ofertas, { preferencias: datos.preferencias, alFallar: (e) => (errorPuntuar = e.message) });
+    } catch (error) {
+      // Sin puntuación también sirven: se dice, y se pueden puntuar después.
+      errorPuntuar = error.message;
     }
     await guardar();
     pintarOfertas();
@@ -976,10 +1000,21 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
           ? `<div class="filtros filtros--origen" role="group" aria-label="Filtrar ofertas por procedencia">${boton('', 'Todas', datos.ofertas.length)}${origenes.map(([nombre, n]) => boton(nombre, nombre, n)).join('')}</div>`
           : ''
       }
+      ${(() => {
+        const sinNota = datos.ofertas.filter((o) => o.encaje == null && o.puerta !== 'no').length;
+        if (!sinNota) return '';
+        return `<div class="empleo-sin-nota" role="status">
+          <p><strong>${sinNota === datos.ofertas.length ? 'Ninguna oferta tiene nota todavía' : sinNota === 1 ? '1 oferta sin nota' : `${sinNota} ofertas sin nota`}</strong>${
+            errorPuntuar ? `: ${escapar(errorPuntuar)}` : ': la IA no llegó a puntuarlas.'
+          }</p>
+          <button type="button" class="boton" data-puntuar data-bloquear>${icono('chispa', 15)} Puntuar las que faltan</button>
+        </div>`;
+      })()}
       ${visibles.map(tarjetaOferta).join('')}
       <p class="ajuste__ayuda apartado__nota">${
         datos.avisosBusqueda?.length ? `${escapar(datos.avisosBusqueda.join(' '))} ` : ''
       }Ofertas de LinkedIn, freehire (que reúne InfoJobs, WhatJobs, Factorial…) y la búsqueda web de la IA. Las de la web solo llevan su enlace si la IA visitó esa página; si no, «Buscar la oferta» te la busca. Ábrela antes de enviar nada.</p>`;
+    seccion.querySelector('[data-puntuar]')?.addEventListener('click', () => tarea(puntuarFaltan));
     seccion.querySelectorAll('[data-origen]').forEach((b) =>
       b.addEventListener('click', () => {
         filtroOrigen = b.dataset.origen;

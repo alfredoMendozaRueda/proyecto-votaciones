@@ -422,3 +422,50 @@ test('LinkedIn: la ficha ligera saca la descripción sin analizar toda la págin
   assert.equal(fichaLigeraLinkedIn('<span class="closed-job__flavor">x</span>').abierta, false);
   assert.equal(fichaLigeraLinkedIn('<p>nada</p>').descripcion, '');
 });
+
+test('encaje: «sin nota» nunca se convierte en 0, y una tanda que falla no tira las demás', async () => {
+  const { normalizarOferta } = await import('../src/compartido/empleo.js');
+  const base = (n) => normalizarOferta({ id: `li-${4000000000 + n}`, puesto: `Puesto ${n}`, empresa: `E${n}`, url: `https://www.linkedin.com/jobs/view/${4000000000 + n}` });
+  // Lo que pasaba: una oferta sin puntuar se guardaba con encaje null y al volver a leerla salía 0.
+  const sinNota = base(1);
+  assert.equal(sinNota.encaje, null);
+  assert.equal(normalizarOferta(JSON.parse(JSON.stringify(sinNota))).encaje, null, 'guardar y leer no la convierte en 0');
+  // Las ya guardadas con ese 0 falso (sin dimensiones) vuelven a «sin nota»; una nota real se queda.
+  assert.equal(normalizarOferta({ ...sinNota, encaje: 0 }).encaje, null);
+  assert.equal(normalizarOferta({ ...sinNota, encaje: 72, dimensiones: { tecnica: 80, experiencia: 70, cultura: 60, carrera: 70 } }).encaje, 72);
+  assert.equal(normalizarOferta({ ...sinNota, encaje: 0, puerta: 'no', veredicto: 'No cumple un requisito' }).encaje, 0, 'si suspende una puerta, el 0 vale');
+
+  const ofertas = Array.from({ length: 10 }, (_, i) => base(i + 10));
+  const nota = (o, t) => ({ id: o.id, puerta: 'pasa', tecnica: t, experiencia: 60, cultura: 60, carrera: 70 });
+  // La segunda tanda falla la primera vez (límite por minuto) y a la segunda va bien.
+  let llamadas = 0;
+  const ia = async ({ usuario }) => {
+    llamadas++;
+    const grupo = ofertas.filter((o) => usuario.includes(`id="${o.id}"`));
+    if (grupo[0] === ofertas[4] && llamadas === 2) throw new Error('Groq va al límite gratuito');
+    return { texto: JSON.stringify({ evaluaciones: grupo.map((o) => nota(o, 80)) }) };
+  };
+  const todas = await evaluarEncaje(ia, PERFIL, ofertas);
+  assert.equal(llamadas, 4, '3 tandas de 4 y un reintento');
+  assert.ok(todas.every((o) => o.encaje === 69));
+
+  // Una tanda falla siempre: las demás conservan su nota y se avisa de cuántas faltan.
+  let aviso = null;
+  const iaMala = async ({ usuario }) => {
+    const grupo = ofertas.filter((o) => usuario.includes(`id="${o.id}"`));
+    if (grupo[0] === ofertas[8]) throw new Error('Request too large');
+    return { texto: JSON.stringify({ evaluaciones: grupo.map((o) => nota(o, 90)) }) };
+  };
+  const parcial = await evaluarEncaje(iaMala, PERFIL, ofertas, { alFallar: (e, n) => (aviso = [e.message, n]) });
+  assert.deepEqual(aviso, ['Request too large', 2]);
+  assert.equal(parcial.filter((o) => o.encaje == null).length, 2);
+  // Si no se puede puntuar ninguna, se dice (no salen todas a 0).
+  await assert.rejects(evaluarEncaje(async () => { throw new Error('sin red'); }, PERFIL, ofertas), /sin red/);
+
+  // La IA copia la plantilla con todo a 0: eso no es una nota.
+  const ceros = async ({ usuario }) => ({ texto: JSON.stringify({ evaluaciones: ofertas.filter((o) => usuario.includes(o.id)).map((o) => ({ id: o.id, puerta: 'pasa', tecnica: 0, experiencia: 0, cultura: 0, carrera: 0 })) }) });
+  await assert.rejects(evaluarEncaje(ceros, PERFIL, ofertas.slice(0, 4)));
+  // Ids cambiados por la IA: se casan por orden dentro de la tanda.
+  const idsRaros = async ({ usuario }) => ({ texto: JSON.stringify({ evaluaciones: ofertas.filter((o) => usuario.includes(o.id)).map((o, i) => ({ ...nota(o, 80), id: `oferta-${i + 1}` })) }) });
+  assert.ok((await evaluarEncaje(idsRaros, PERFIL, ofertas.slice(0, 4))).every((o) => o.encaje === 69));
+});

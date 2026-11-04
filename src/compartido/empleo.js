@@ -46,10 +46,21 @@ export function extraerJson(texto) {
 
 const cadena = (v, max = 300) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : typeof v === 'number' ? String(v) : '');
 const lista = (v, max = 30, largo = 300) => (Array.isArray(v) ? v.map((x) => cadena(x, largo)).filter(Boolean).slice(0, max) : []);
+// Ojo: Number(null), Number('') y Number(false) dan 0; aquí «sin dato» es null, no 0.
 const numero = (v, min, max) => {
+  if (v === null || v === undefined || v === '' || typeof v === 'boolean' || typeof v === 'object') return null;
   const n = Math.round(Number(v));
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : null;
 };
+const DIMENSIONES = ['tecnica', 'experiencia', 'cultura', 'carrera'];
+// Una puntuación que no es tal: todo a 0 sin haber suspendido una puerta (la IA
+// copió la plantilla), o un 0 sin dimensiones (antes «sin puntuar» se guardaba así).
+function puntuacionReal(encaje, dimensiones, puerta) {
+  if (encaje == null) return null;
+  const valores = dimensiones ? DIMENSIONES.map((k) => dimensiones[k]).filter((v) => v != null) : [];
+  if (encaje === 0 && puerta !== 'no' && (!valores.length || valores.every((v) => v === 0))) return null;
+  return encaje;
+}
 const urlValida = (u) => {
   try {
     const url = new URL(String(u ?? '').trim());
@@ -270,13 +281,13 @@ export function normalizarOferta(o = {}) {
     resumen: cadena(o.resumen, 600),
     requisitos: lista(o.requisitos, 15, 200),
     descripcion: typeof o.descripcion === 'string' ? o.descripcion.trim().slice(0, 12000) : '',
-    encaje: numero(o.encaje, 0, 100),
-    veredicto: cadena(o.veredicto, 40),
-    puerta: ['pasa', 'aviso', 'no'].includes(o.puerta) ? o.puerta : '',
+    ...(() => {
+      const puerta = ['pasa', 'aviso', 'no'].includes(o.puerta) ? o.puerta : '';
+      const dimensiones = o.dimensiones && typeof o.dimensiones === 'object' ? Object.fromEntries(DIMENSIONES.map((k) => [k, numero(o.dimensiones[k], 0, 100)])) : null;
+      const encaje = puntuacionReal(numero(o.encaje, 0, 100), dimensiones, puerta);
+      return { encaje, veredicto: encaje == null && puerta !== 'no' ? '' : cadena(o.veredicto, 40), puerta, dimensiones: encaje == null ? null : dimensiones };
+    })(),
     notaPuerta: cadena(o.notaPuerta, 300),
-    dimensiones: o.dimensiones && typeof o.dimensiones === 'object'
-      ? Object.fromEntries(['tecnica', 'experiencia', 'cultura', 'carrera'].map((k) => [k, numero(o.dimensiones[k], 0, 100)]))
-      : null,
     motivos: lista(o.motivos, 5, 200),
     faltan: lista(o.faltan, 5, 200),
   };
@@ -420,17 +431,23 @@ const SISTEMA_EVALUACION =
   '"experiencia" (por la función y el tipo de trabajo, no por el título literal), "cultura" (lo que se sabe del equipo y la empresa), ' +
   '"carrera" (si le hace avanzar según su trayectoria y lo que busca).\n' +
   '3) "motivos": por qué encaja; "faltan": huecos reales. Frases cortas, sin inventar nada del candidato.\n' +
-  'Devuelve SOLO JSON: {"evaluaciones":[{"id":"","puerta":"pasa | aviso | no","notaPuerta":"","tecnica":0,"experiencia":0,"cultura":0,"carrera":0,"motivos":[""],"faltan":[""]}]}. ' +
+  'Puntúa SIEMPRE las cuatro dimensiones con números enteros reales (no 0 por defecto): si a la oferta le falta información, ' +
+  'puntúa con lo que haya (puesto, empresa, requisitos) y dilo en "faltan". Copia cada "id" exactamente como viene.\n' +
+  'Devuelve SOLO JSON: {"evaluaciones":[{"id":"<id de la oferta>","puerta":"pasa | aviso | no","notaPuerta":"","tecnica":<0-100>,"experiencia":<0-100>,"cultura":<0-100>,"carrera":<0-100>,"motivos":[""],"faltan":[""]}]}. ' +
   NO_INSTRUCCIONES;
 
-// Puntúa las ofertas (de 6 en 6, para no pasar los límites de la IA gratuita)
-// y las devuelve ordenadas: las que no pasan una puerta, al final.
-export async function evaluarEncaje(ia, perfil, ofertas, { preferencias = {} } = {}) {
+// Puntúa las ofertas de 4 en 4 (cada tanda, corta: la IA gratuita tiene un límite de
+// tokens por minuto) y las devuelve ordenadas: las que no pasan una puerta, al final.
+// Si una tanda falla, las demás se quedan con su nota y esa se reintenta una vez al
+// final; las que sigan sin nota quedan «sin puntuar» (encaje null). Solo si no se
+// ha podido puntuar ninguna, lanza el error. alFallar(error, n): cuántas quedaron sin nota.
+export async function evaluarEncaje(ia, perfil, ofertas, { preferencias = {}, alFallar = () => {} } = {}) {
   if (!ofertas.length) return [];
   const pref = normalizarPreferencias(preferencias);
   const evaluaciones = new Map();
-  for (let i = 0; i < ofertas.length; i += 6) {
-    const grupo = ofertas.slice(i, i + 6);
+  const tandas = [];
+  for (let i = 0; i < ofertas.length; i += 4) tandas.push(ofertas.slice(i, i + 4));
+  const puntuar = async (grupo) => {
     const { texto } = await ia({
       etiqueta: 'puntuar ofertas',
       sobre: grupo.map((o) => o.id).join(' '),
@@ -438,24 +455,53 @@ export async function evaluarEncaje(ia, perfil, ofertas, { preferencias = {} } =
       usuario:
         `<perfil>\n${perfilBreve(perfil)}\n</perfil>\n<busca>\n${textoPreferencias(pref, perfil)}\n</busca>\n` +
         grupo
-          .map((o) => `<oferta id="${o.id}">\n${o.puesto} · ${o.empresa} · ${o.ubicacion} ${o.modalidad}\n${o.resumen}\n${o.requisitos.length ? `Requisitos: ${o.requisitos.join('; ')}\n` : ''}${o.descripcion.slice(0, 1200)}\n</oferta>`)
+          .map((o) => `<oferta id="${o.id}">\n${o.puesto} · ${o.empresa} · ${o.ubicacion} ${o.modalidad}\n${o.resumen}\n${o.requisitos.length ? `Requisitos: ${o.requisitos.join('; ')}\n` : ''}${o.descripcion.slice(0, 900)}\n</oferta>`)
           .join('\n'),
-      max: 4000,
+      max: 3000,
     });
     const datos = extraerJson(texto);
-    for (const e of Array.isArray(datos) ? datos : datos.evaluaciones ?? []) evaluaciones.set(String(e?.id), e);
+    const lista = Array.isArray(datos) ? datos : datos.evaluaciones ?? [];
+    // Por si la IA cambia algo del id: se acepta también por orden dentro de la tanda.
+    lista.forEach((e, i) => {
+      const id = String(e?.id ?? '');
+      const o = grupo.find((x) => x.id === id) ?? (grupo.length === lista.length ? grupo[i] : null);
+      if (o) evaluaciones.set(o.id, e);
+    });
+  };
+  let fallo = null;
+  const fallidas = [];
+  for (const grupo of tandas) {
+    try {
+      await puntuar(grupo);
+    } catch (error) {
+      fallo ??= error;
+      fallidas.push(grupo);
+    }
+  }
+  // Una segunda oportunidad para las tandas que fallaron (un límite por minuto, un JSON cortado…).
+  for (const grupo of fallidas) {
+    try {
+      await puntuar(grupo);
+    } catch (error) {
+      fallo = error;
+    }
   }
   const orden = { pasa: 0, aviso: 0, '': 0, no: 1 };
-  return ofertas
+  const resultado = ofertas
     .map((o) => {
       const e = evaluaciones.get(o.id);
       if (!e) return o;
-      const dimensiones = { tecnica: e.tecnica, experiencia: e.experiencia, cultura: e.cultura, carrera: e.carrera };
-      const encaje = encajePonderado(dimensiones) ?? numero(e.encaje, 0, 100);
+      const dimensiones = Object.fromEntries(DIMENSIONES.map((k) => [k, numero(e[k], 0, 100)]));
       const puerta = ['pasa', 'aviso', 'no'].includes(e.puerta) ? e.puerta : 'pasa';
+      const encaje = puntuacionReal(encajePonderado(dimensiones) ?? numero(e.encaje, 0, 100), dimensiones, puerta);
+      if (encaje == null && puerta !== 'no') return o;
       return normalizarOferta({ ...o, encaje, dimensiones, puerta, notaPuerta: e.notaPuerta, veredicto: veredicto(encaje, puerta), motivos: e.motivos, faltan: e.faltan });
     })
     .sort((a, b) => orden[a.puerta] - orden[b.puerta] || (b.encaje ?? -1) - (a.encaje ?? -1));
+  const sinNota = resultado.filter((o) => o.encaje == null && o.puerta !== 'no').length;
+  if (sinNota === ofertas.length) throw fallo ?? new Error('La IA no ha devuelto las puntuaciones. Vuelve a intentarlo.');
+  if (sinNota) alFallar(fallo ?? new Error('La IA no ha puntuado algunas ofertas.'), sinNota);
+  return resultado;
 }
 
 // Una oferta que trae el usuario: un enlace (se abre con la búsqueda web) o el texto pegado.
