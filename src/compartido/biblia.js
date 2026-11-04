@@ -505,12 +505,26 @@ export function racha(datos, hoy = fechaISO()) {
   return n;
 }
 
+// Desde cuándo usas el apartado: el inicio de tu primer plan, el día que lo creaste
+// o el primer día que marcaste algo (lo que sea antes). null si aún nada.
+export function empezaste(datos) {
+  const candidatos = [
+    ...datos.planes.map((p) => p.lecturas[0]?.fecha),
+    ...datos.planes.filter((p) => p.creado).map((p) => fechaISO(new Date(p.creado))),
+    ...Object.keys(datos.dias),
+  ].filter(fechaValida);
+  return candidatos.length ? candidatos.sort()[0] : null;
+}
+
 // Un mes («AAAA-MM») entero: qué hiciste cada día y los totales.
+// Los días «que cuentan» van desde que empezaste hasta ayer; hoy, solo si ya lo
+// marcaste (el día no ha acabado): quien empieza hoy no va «0 de 4».
 export function resumenMes(datos, mes, hoy = fechaISO()) {
   const [a, m] = mes.split('-').map(Number);
   const total = new Date(a, m, 0).getDate();
   const fechas = Array.from({ length: total }, (_, i) => `${mes}-${dos(i + 1)}`);
-  const hasta = fechas.filter((f) => f <= hoy);
+  const inicio = empezaste(datos);
+  const hasta = fechas.filter((f) => inicio && f >= inicio && (f < hoy || (f === hoy && diaHecho(datos, f))));
   const dia = (f) => datos.dias[f];
   const capsLeidos = datos.planes.flatMap((p) => p.lecturas.filter((l) => p.hechas[l.fecha]?.startsWith(mes)).flatMap((l) => l.caps));
   const extras = datos.casillas.map((c) => ({ ...c, dias: fechas.filter((f) => dia(f)?.extra[c.id]).length }));
@@ -524,7 +538,10 @@ export function resumenMes(datos, mes, hoy = fechaISO()) {
       hecho: diaHecho(datos, f),
       tocaba: lecturasDelDia(datos, f).length > 0,
       futuro: f > hoy,
+      // Antes de empezar a usar el apartado (no cuenta).
+      antes: !inicio || f < inicio,
     })),
+    inicio,
     diasHechos: hasta.filter((f) => diaHecho(datos, f)).length,
     diasHastaHoy: hasta.length,
     diasLeidos: fechas.filter((f) => dia(f)?.leido).length,

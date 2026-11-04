@@ -263,7 +263,7 @@ export function crearBiblia({ contenedor, api, alCambiar = () => {} }) {
         <p class="gastos__dia"><span>Versículo del día</span><span>RVR1960</span></p>
         ${enlace(v.enlace, `<span class="biblia__cita">${escapar(v.nombre)}</span><span class="biblia__tema">${escapar(v.tema)}</span><span class="biblia__leer">Leer en YouVersion ${icono('enlace', 12)}</span>`, 'biblia__versiculo')}
       </section>
-      <p class="biblia__racha">${r ? `<strong>${r === 1 ? '1 día' : `${r} días`}</strong> ${r === 1 ? 'seguido' : 'seguidos'} · ` : ''}${m.diasHechos} de ${m.diasHastaHoy} días este mes</p>`;
+      <p class="biblia__racha">${r ? `<strong>${r === 1 ? '1 día' : `${r} días`}</strong> ${r === 1 ? 'seguido' : 'seguidos'} · ` : ''}${m.diasHastaHoy ? `${m.diasHechos} de ${m.diasHastaHoy} ${m.diasHastaHoy === 1 ? 'día' : 'días'} este mes` : 'Marca lo que hagas hoy y empieza tu racha'}</p>`;
   }
 
   // ---------- Cronómetro ----------
@@ -514,7 +514,7 @@ export function crearBiblia({ contenedor, api, alCambiar = () => {} }) {
     const primero = diaSemana(`${mes}-01`);
     const huecos = Array.from({ length: primero - 1 }, () => '<span class="biblia__celda biblia__celda--vacia" aria-hidden="true"></span>');
     const celdas = r.dias.map((x) => {
-      const clases = ['biblia__celda', x.hecho ? 'biblia__celda--hecha' : '', x.fecha === hoy ? 'biblia__celda--hoy' : '', x.futuro ? 'biblia__celda--futura' : '', x.tocaba && !x.leido && !x.futuro ? 'biblia__celda--falta' : ''].filter(Boolean).join(' ');
+      const clases = ['biblia__celda', x.hecho ? 'biblia__celda--hecha' : '', x.fecha === hoy ? 'biblia__celda--hoy' : '', x.futuro ? 'biblia__celda--futura' : '', x.antes && !x.futuro ? 'biblia__celda--antes' : '', x.tocaba && !x.leido && x.fecha < hoy ? 'biblia__celda--falta' : ''].filter(Boolean).join(' ');
       const etiqueta = `${fechaLarga(x.fecha, hoy)}: ${[x.leido ? 'leído' : '', x.orado ? 'orado' : '', x.extra ? `${x.extra} más` : ''].filter(Boolean).join(', ') || (x.futuro ? 'aún no' : 'nada marcado')}`;
       return `<button type="button" class="${clases}" data-ir-dia="${x.fecha}" aria-label="${escapar(etiqueta)}" title="${escapar(etiqueta)}">
         <span class="biblia__num">${Number(x.fecha.slice(8))}</span>
@@ -523,7 +523,16 @@ export function crearBiblia({ contenedor, api, alCambiar = () => {} }) {
     });
     const actual = mes === hoy.slice(0, 7);
     const pasado = mes < hoy.slice(0, 7);
-    const base = actual ? r.diasHastaHoy : pasado ? r.dias.length : 0;
+    // Lo que cuenta: desde que empezaste; hoy, solo si ya lo marcaste.
+    const base = r.diasHastaHoy;
+    const cifra =
+      !actual && !pasado
+        ? '<p class="gastos__total biblia__cifra-texto">Aún no ha empezado</p>'
+        : base
+        ? `<p class="gastos__total">${r.diasHechos}<span class="biblia__de"> de ${base} ${base === 1 ? 'día' : 'días'}</span></p>`
+        : actual && r.inicio === hoy
+        ? '<p class="gastos__total biblia__cifra-texto">Empiezas hoy</p>'
+        : `<p class="gastos__total biblia__cifra-texto">${actual ? 'Hoy cuenta en cuanto marques algo' : 'Aún no usabas la lectura'}</p>`;
     return `
       <header class="gastos__mes">
         <button type="button" class="icono-boton" data-mover-mes="-1" aria-label="Mes anterior">${icono('volver', 18)}</button>
@@ -531,8 +540,8 @@ export function crearBiblia({ contenedor, api, alCambiar = () => {} }) {
         <button type="button" class="icono-boton gastos__siguiente" data-mover-mes="1" aria-label="Mes siguiente">${icono('volver', 18)}</button>
       </header>
       <section class="gastos__cifra biblia__cifra">
-        <p class="gastos__etiqueta">${actual ? 'este mes' : pasado ? 'ese mes' : 'aún no ha empezado'}</p>
-        <p class="gastos__total">${r.diasHechos}<span class="biblia__de"> de ${base} días</span></p>
+        <p class="gastos__etiqueta">${actual ? 'este mes' : pasado ? 'ese mes' : 'ese mes'}</p>
+        ${cifra}
         <p class="gastos__detalle">${[actual && racha(datos, hoy) ? (racha(datos, hoy) === 1 ? '1 día seguido' : `${racha(datos, hoy)} días seguidos`) : '', `leíste ${r.diasLeidos} ${r.diasLeidos === 1 ? 'día' : 'días'}`, `oraste ${r.diasOrados}`].filter(Boolean).join(' · ')}</p>
       </section>
       <div class="biblia__calendario" role="grid" aria-label="${escapar(nombreMes(mes))}">

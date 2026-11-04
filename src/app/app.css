@@ -8781,3 +8781,12 @@ p.gastos__dia {
   order: 3;
   padding-bottom: 0;
 }
+
+.biblia__celda--antes {
+  background: transparent;
+  opacity: 0.4;
+}
+
+.biblia__cifra-texto {
+  font-size: 24px;
+}

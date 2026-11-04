@@ -290,3 +290,25 @@ test('biblia en el chat: «ya he leído y orado» llama a marcar_biblia y avisa 
   assert.ok(gruposParaGroq(['¿qué me toca leer hoy?']).has('biblia'));
   assert.ok(!gruposParaGroq(['¿qué tiempo hace mañana?']).has('biblia'));
 });
+
+test('biblia: quien empieza hoy no va «0 de 4»: cuenta desde que empezaste, y hoy solo si ya lo marcaste', () => {
+  const hoy = '2026-11-04';
+  let d = crearPlanDePlantilla(normalizarBiblia({}), { plantilla: 'anio-orden', inicio: hoy }, new Date(2026, 10, 4, 18, 0).getTime()).datos;
+  let m = resumenMes(d, '2026-11', hoy);
+  assert.equal(m.inicio, hoy);
+  assert.equal(m.diasHastaHoy, 0, 'hoy aún no ha acabado');
+  assert.equal(m.diasHechos, 0);
+  assert.ok(m.dias.slice(0, 3).every((x) => x.antes), 'los días de antes no cuentan');
+  assert.equal(m.dias[3].antes, false);
+  d = marcarOrado(d, hoy);
+  m = resumenMes(d, '2026-11', hoy);
+  assert.deepEqual([m.diasHechos, m.diasHastaHoy], [1, 1]);
+  // Al día siguiente, sin marcar aún: 1 de 1 (ayer contó; hoy, cuando marques).
+  assert.deepEqual([resumenMes(d, '2026-11', '2026-11-05').diasHechos, resumenMes(d, '2026-11', '2026-11-05').diasHastaHoy], [1, 1]);
+  // Y si un día pasó sin nada, ya cuenta: 1 de 2.
+  assert.deepEqual([resumenMes(d, '2026-11', '2026-11-06').diasHechos, resumenMes(d, '2026-11', '2026-11-06').diasHastaHoy], [1, 2]);
+  // Un plan empezado en el pasado (lo elegiste así) cuenta desde su inicio.
+  const atras = crearPlanDePlantilla(normalizarBiblia({}), { plantilla: 'nt-90', inicio: '2026-11-01' }, new Date(2026, 10, 4).getTime()).datos;
+  assert.equal(resumenMes(atras, '2026-11', hoy).diasHastaHoy, 3);
+  assert.equal(resumenMes(normalizarBiblia({}), '2026-11', hoy).inicio, null);
+});
