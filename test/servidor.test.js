@@ -1034,3 +1034,67 @@ test('sincronización de gastos: el efectivo y los traspasos llegan al otro y un
   await nuevo.sincro.sincronizar();
   assert.equal(nuevo.datos.movimientos.find((m) => m.id === 'gcafe01').cuenta, 'banco');
 });
+
+test('sincronización de la lectura bíblica: marcar en el móvil y en el ordenador el mismo día no se pisa', async () => {
+  const env = entorno();
+  const { token } = await vincular(env);
+  const { codigo } = await (await pedir(env, '/codigo', { metodo: 'POST', token })).json();
+  const { token: tokenPc } = await (await pedir(env, '/canjear', { metodo: 'POST', cuerpo: { codigo, nombre: 'PC' } })).json();
+  internet();
+  const { coleccionBiblia } = await import('../src/compartido/sincro.js');
+  const b = await import('../src/compartido/biblia.js');
+  const crear = (t) => {
+    const d = { datos: null, estado: null, llave: null };
+    const almacen = { leer: async () => d.datos && structuredClone(d.datos), guardar: async (x) => (d.datos = structuredClone(x)), normalizar: b.normalizarBiblia };
+    d.sincro = new Sincronizador({
+      cliente: async () => new ClienteServidor({ url: 'https://kitsune.ejemplo.workers.dev', token: t, fetch: (u, init) => servidor.fetch(new Request(u, init), env) }),
+      colecciones: { biblia: coleccionBiblia(almacen) },
+      leerEstado: async () => d.estado,
+      guardarEstado: async (e) => (d.estado = e && structuredClone(e)),
+      leerLlave: async () => d.llave,
+      guardarLlave: async (l) => (d.llave = l),
+      borrarLlave: async () => (d.llave = null),
+    });
+    return d;
+  };
+  const movil = crear(token);
+  const pc = crear(tokenPc);
+  const HOY = '2026-11-14';
+  movil.datos = b.crearPlanDePlantilla(b.normalizarBiblia({}), { plantilla: 'evangelios-40', inicio: HOY }).datos;
+  await movil.sincro.activar();
+  await pc.sincro.solicitar();
+  const esperando = pc.sincro.esperar();
+  const [s] = (await movil.sincro.resumen()).solicitudes;
+  await movil.sincro.aprobar(s.id, s.publica);
+  await esperando;
+  assert.equal(pc.datos.planes[0].lecturas.length, 40);
+  // En el móvil lee; en el ordenador marca que ha orado y 10 minutos. Y otro día distinto.
+  const id = movil.datos.planes[0].id;
+  movil.datos = b.marcarLectura(movil.datos, id, HOY, true, HOY);
+  pc.datos = b.sumarMinutos(b.marcarOrado(pc.datos, '2026-11-13'), '2026-11-13', 'oracion', 10);
+  for (let i = 0; i < 2; i++) for (const d of [movil, pc]) await d.sincro.sincronizar();
+  for (const d of [movil, pc]) {
+    assert.equal(d.datos.planes[0].hechas[HOY], HOY);
+    assert.equal(d.datos.dias[HOY].leido, true);
+    assert.equal(d.datos.dias['2026-11-13'].orado, true);
+    assert.equal(d.datos.dias['2026-11-13'].minOracion, 10);
+    assert.equal((await d.sincro.resumen()).pendientes, 0);
+  }
+  // Nada viaja en claro.
+  const todo = (await env.DB.prepare('SELECT datos FROM sincro').all()).results.map((f) => f.datos ?? '').join(' ');
+  assert.ok(!todo.includes('Evangelios') && !todo.includes('MAT.1'));
+
+  // Los avisos llegan al servidor aparte de los recordatorios y se sustituyen en cada envío.
+  const ahora = Date.now();
+  const lista = [
+    { id: 'b20991114m', cuando: ahora + 3_600_000, texto: 'Hoy toca leer Mateo 1–2' },
+    { id: 'b20991114n', cuando: ahora + 7_200_000, texto: 'Te queda leer Mateo 1–2 y orar' },
+    { id: 'malo', cuando: ahora, texto: 'x' },
+  ];
+  assert.equal((await (await pedir(env, '/biblia/avisos', { metodo: 'PUT', token, cuerpo: { lista } })).json()).total, 2);
+  await pedir(env, '/biblia/avisos', { metodo: 'PUT', token, cuerpo: { lista: lista.slice(0, 1) } });
+  const filas = (await env.DB.prepare("SELECT id FROM recordatorios WHERE origen = 'biblia'").all()).results.map((f) => f.id);
+  assert.deepEqual(filas, ['b20991114m']);
+  const visibles = await (await pedir(env, '/recordatorios', { token })).json();
+  assert.ok(!visibles.some((r) => r.id.startsWith('b2099')), 'no salen en tu lista de recordatorios');
+});

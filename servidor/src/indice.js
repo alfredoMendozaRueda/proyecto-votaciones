@@ -278,6 +278,29 @@ async function sincronizarRecordatorios(n, peticion) {
   return json({ ok: true, total: limpia.length });
 }
 
+// Lectura bíblica: los avisos de los próximos días (mañana: lo que toca; noche: lo que falta).
+// Van aparte de los recordatorios (origen «biblia»): cada envío sustituye a los anteriores.
+async function avisosBiblia(n, peticion) {
+  const { lista } = await cuerpo(peticion);
+  if (!Array.isArray(lista) || lista.length > 60) throw new ErrorHttp(400, 'Lista no válida.');
+  const limpia = lista
+    .filter((r) => r && typeof r.id === 'string' && /^b\d{8}[mn]$/.test(r.id) && Number.isFinite(r.cuando) && typeof r.texto === 'string' && r.texto.trim())
+    .map((r) => ({ id: r.id, texto: r.texto.slice(0, 200), cuando: r.cuando }));
+  const { results } = await n.db.prepare("SELECT id FROM recordatorios WHERE origen = 'biblia' AND avisado = 1").all();
+  const avisados = new Set(results.map((r) => r.id));
+  await n.db.batch([
+    n.db.prepare("DELETE FROM recordatorios WHERE origen = 'biblia' AND (avisado = 0 OR cuando < ?)").bind(n.ahora - 2 * 86_400_000),
+    ...limpia
+      .filter((r) => !avisados.has(r.id))
+      .map((r) =>
+        n.db
+          .prepare("INSERT INTO recordatorios (id, texto, cuando, avisado, origen) VALUES (?, ?, ?, ?, 'biblia') ON CONFLICT(id) DO UPDATE SET texto = excluded.texto, cuando = excluded.cuando, avisado = excluded.avisado")
+          .bind(r.id, r.texto, r.cuando, r.cuando < n.ahora - 60_000 ? 1 : 0),
+      ),
+  ]);
+  return json({ ok: true, total: limpia.length });
+}
+
 // ---------- Automatizaciones ----------
 
 async function guardarAutomatizacion(n, peticion, id = null) {
@@ -352,8 +375,9 @@ async function atender(peticion, env) {
     return json(await resumenDelDia(n, partesLocales(n.ahora, zona), zona, Boolean(a.google && !a.google.caducado)));
   }
   if (m === 'PUT' && ruta === '/recordatorios') return sincronizarRecordatorios(n, peticion);
+  if (m === 'PUT' && ruta === '/biblia/avisos') return avisosBiblia(n, peticion);
   if (m === 'GET' && ruta === '/recordatorios') {
-    const { results } = await n.db.prepare('SELECT id, texto, cuando, origen FROM recordatorios WHERE avisado = 0 ORDER BY cuando').all();
+    const { results } = await n.db.prepare("SELECT id, texto, cuando, origen FROM recordatorios WHERE avisado = 0 AND origen != 'biblia' ORDER BY cuando").all();
     return json(results);
   }
   if (m === 'DELETE' && ruta.startsWith('/recordatorios/')) {

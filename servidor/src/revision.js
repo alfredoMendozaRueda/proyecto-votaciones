@@ -85,9 +85,12 @@ async function fallo(n, error) {
 // ---------- Recordatorios ----------
 
 async function recordatorios(n) {
-  const { results } = await n.db.prepare('SELECT id, texto FROM recordatorios WHERE avisado = 0 AND cuando <= ? ORDER BY cuando LIMIT 20').bind(n.ahora).all();
+  const { results } = await n.db.prepare('SELECT id, texto, origen FROM recordatorios WHERE avisado = 0 AND cuando <= ? ORDER BY cuando LIMIT 20').bind(n.ahora).all();
   for (const r of results) {
-    await n.notificar({ ...aviso(r.texto), url: './?recordatorios', etiqueta: `r-${r.id}` });
+    // Los de la lectura bíblica abren su apartado.
+    if (r.origen === 'biblia') {
+      await n.notificar({ ...aviso(r.texto), url: './?biblia', etiqueta: `b-${r.id.slice(-1)}` });
+    } else await n.notificar({ ...aviso(r.texto), url: './?recordatorios', etiqueta: `r-${r.id}` });
     await n.db.prepare('UPDATE recordatorios SET avisado = 1 WHERE id = ?').bind(r.id).run();
   }
 }
@@ -131,7 +134,7 @@ export async function resumenDelDia(n, local, zona, conGoogle) {
     const { mensajes } = await gmail.listar({ filtro: 'no-leidos', consulta: 'newer_than:2d', maximo: 20 });
     if (mensajes.length) partes.push(`${mensajes.length === 20 ? 'más de 20' : mensajes.length} ${mensajes.length === 1 ? 'correo sin leer' : 'correos sin leer'}`);
   }
-  const { results } = await n.db.prepare('SELECT COUNT(*) AS total FROM recordatorios WHERE avisado = 0 AND cuando <= ?').bind(finDelDia).all();
+  const { results } = await n.db.prepare("SELECT COUNT(*) AS total FROM recordatorios WHERE avisado = 0 AND origen != 'biblia' AND cuando <= ?").bind(finDelDia).all();
   const pendientes = results[0]?.total ?? 0;
   if (pendientes) partes.push(`${pendientes} ${pendientes === 1 ? 'recordatorio' : 'recordatorios'}`);
   const saludo = local.minutos < 13 * 60 ? 'Buenos días' : local.minutos < 20 * 60 ? 'Buenas tardes' : 'Buenas noches';

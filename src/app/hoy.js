@@ -6,6 +6,7 @@ import { icono } from './iconos.js';
 import { normalizarDatosEmpleo } from '../compartido/empleo.js';
 import { INFO_MODOS, normalizarModo } from '../compartido/modos.js';
 import { normalizarGastos, resumenMes, proximosFijos, euros, fechaISO, mesDe, nombreMes, sumarDias } from '../compartido/gastos.js';
+import { normalizarBiblia, lecturasDelDia, textoLectura, minutosDe, racha, marcarCasilla } from '../compartido/biblia.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const hora = (ms) => new Date(ms).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -32,7 +33,7 @@ function cuando(ms, { todoElDia = false } = {}) {
   return todoElDia ? nombre : `${nombre} a las ${hora(ms)}`;
 }
 
-export function crearHoy({ contenedor, api, ir, preguntar, abrirAjustes, instalacion = null, alEmpleo = () => {} }) {
+export function crearHoy({ contenedor, api, ir, preguntar, abrirAjustes, instalacion = null, alEmpleo = () => {}, alBiblia = () => {} }) {
   let pintando = 0;
 
   // Cada tarjeta se calcula por su cuenta: si una falla, las demás salen igual.
@@ -82,6 +83,47 @@ export function crearHoy({ contenedor, api, ir, preguntar, abrirAjustes, instala
     const dos = ia?.claves?.groq && ia?.claves?.openai && ajustes?.proveedor !== 'claude';
     if (!r.total.usd && !dos && ajustes?.proveedor !== 'openai') return null;
     return { usd: r.total.usd, detalle: dos ? `modo ${INFO_MODOS[normalizarModo(ajustes.modoIA)].nombre}` : ajustes?.proveedor === 'openai' ? 'GPT-6 Luna' : '' };
+  }
+
+  // Lectura bíblica: lo que toca hoy y las dos casillas, para marcarlas sin abrir el apartado.
+  async function datosBiblia() {
+    if (!api.biblia) return null;
+    const datos = normalizarBiblia((await seguro(api.biblia.leer())) ?? {});
+    const hoy = fechaISO();
+    if (!datos.planes.some((p) => !p.archivado) && !Object.keys(datos.dias).length) return { vacio: true };
+    return { tocan: lecturasDelDia(datos, hoy), dia: datos.dias[hoy], racha: racha(datos, hoy) };
+  }
+
+  function tarjetaBiblia(b) {
+    if (!b) return '';
+    if (b.vacio) return tarjeta({ ir: 'biblia', icono: 'libro', etiqueta: 'lectura bíblica', valor: 'Empieza un plan de lectura', detalle: 'La Biblia en un año, el Nuevo Testamento en 90 días… a tu ritmo' });
+    const caps = b.tocan.flatMap((x) => x.lectura.caps);
+    const hecha = b.tocan.length && b.tocan.every((x) => x.hecha);
+    const valor = b.tocan.length ? textoLectura(caps) : 'Hoy no toca lectura';
+    const detalle = [b.tocan.length && !hecha ? `unos ${minutosDe(caps)} min` : hecha ? 'leída' : '', b.racha > 1 ? `${b.racha} días seguidos` : ''].filter(Boolean).join(' · ');
+    const casilla = (id, nombre, si) => `<button type="button" class="hoy-biblia__casilla" data-biblia="${id}" aria-pressed="${si}">${icono(si ? 'hecho' : id === 'leido' ? 'libro' : 'chispa', 14)} ${nombre}</button>`;
+    return `
+      <div class="hoy-tarjeta hoy-biblia${hecha ? ' hoy-biblia--hecha' : ''}">
+        <button type="button" class="hoy-biblia__ir" data-ir="biblia">
+          <span class="hoy-tarjeta__etiqueta">${icono('libro', 14)}${b.tocan.length ? 'hoy toca leer' : 'lectura bíblica'}</span>
+          <span class="hoy-tarjeta__valor">${escapar(valor)}</span>
+          ${detalle ? `<span class="hoy-tarjeta__detalle">${escapar(detalle)}</span>` : ''}
+        </button>
+        <div class="hoy-biblia__casillas" role="group" aria-label="Lo de hoy">
+          ${casilla('leido', 'He leído', Boolean(b.dia?.leido))}
+          ${casilla('orado', 'He orado', Boolean(b.dia?.orado))}
+        </div>
+      </div>`;
+  }
+
+  async function marcarBiblia(id) {
+    const datos = normalizarBiblia((await seguro(api.biblia.leer())) ?? {});
+    const hoy = fechaISO();
+    const ahora = id === 'leido' ? Boolean(datos.dias[hoy]?.leido) : Boolean(datos.dias[hoy]?.orado);
+    await api.biblia.guardar(marcarCasilla(datos, hoy, id, !ahora));
+    alBiblia();
+    const caja = contenedor.querySelector('#hoy-biblia');
+    if (caja) caja.innerHTML = tarjetaBiblia(await datosBiblia());
   }
 
   async function datosGastos() {
@@ -200,6 +242,7 @@ export function crearHoy({ contenedor, api, ir, preguntar, abrirAjustes, instala
           </header>
           <div id="hoy-empleo"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div>
           <div id="hoy-agenda"><div class="hoy-dos"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div></div>
+          <div id="hoy-biblia"></div>
           <div id="hoy-correo"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div>
           <div id="hoy-gastos"></div>
           <div id="hoy-gasto"></div>
@@ -232,12 +275,14 @@ export function crearHoy({ contenedor, api, ir, preguntar, abrirAjustes, instala
       datosCorreo().then((c) => poner('hoy-correo', tarjetaCorreo(c))),
       datosGasto().then((g) => poner('hoy-gasto', tarjetaGasto(g))),
       datosGastos().then((g) => poner('hoy-gastos', tarjetaGastos(g))),
+      datosBiblia().then((b) => poner('hoy-biblia', tarjetaBiblia(b))),
     ]);
   }
 
   async function alPulsar(e) {
-    const boton = e.target.closest('[data-ir], [data-accion]');
+    const boton = e.target.closest('[data-ir], [data-accion], [data-biblia]');
     if (!boton) return;
+    if (boton.dataset.biblia) return marcarBiblia(boton.dataset.biblia).catch(() => {});
     if (boton.dataset.ir) return ir(boton.dataset.ir);
     switch (boton.dataset.accion) {
       case 'preparar':

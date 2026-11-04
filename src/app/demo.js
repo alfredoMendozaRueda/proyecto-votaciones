@@ -2,6 +2,7 @@
 // con correos y respuestas inventados. Se usa al abrir la app en un navegador.
 import { PLANTILLAS, normalizarAutomatizacion } from '../compartido/automatizaciones.js';
 import { crearPeticion, COLECCIONES_SINCRO } from '../compartido/sincro.js';
+import * as biblia from '../compartido/biblia.js';
 
 const MINUTO = 60 * 1000;
 const HORA = 60 * MINUTO;
@@ -562,10 +563,29 @@ export function crearDemo() {
       },
       async tarea({ sistema, usuario }) {
         await new Promise((r) => setTimeout(r, 700));
+        if (/lectura bíblica/.test(sistema)) {
+          return {
+            texto:
+              '¿Qué quiere enseñar Jesús a Nicodemo al hablarle de nacer de nuevo?\n' +
+              '¿En qué parte de tu día de hoy necesitas confiar en lugar de entenderlo todo?\n' +
+              '¿Qué le quieres decir a Dios después de leer que amó tanto al mundo?',
+            fuentes: [],
+          };
+        }
         const r = respuestaEmpleoDemo(sistema, usuario);
         return { texto: typeof r === 'string' ? r : JSON.stringify(r), fuentes: [] };
       },
     },
+    // Lectura bíblica de ejemplo: un plan de un año a mitad de camino (con dos días atrasados).
+    biblia: (() => {
+      let guardado = JSON.stringify(bibliaDemo());
+      return {
+        leer: async () => JSON.parse(guardado),
+        guardar: async (datos) => {
+          guardado = JSON.stringify(datos);
+        },
+      };
+    })(),
     // Gastos de ejemplo: fijos de casa y unos meses de gastos del día a día.
     gastos: (() => {
       let guardado = JSON.stringify(gastosDemo());
@@ -1033,4 +1053,26 @@ function gastosDemo(ahora = new Date()) {
   ];
   // Lo que hay hoy en el banco y en la cartera.
   return { movimientos, fijos, traspasos, presupuesto: 160000, saldo: { centimos: 324050, fecha: fecha(ahora) }, saldoEfectivo: { centimos: 4500, fecha: fecha(ahora) } };
+}
+
+// Un plan de un año empezado hace 40 días: leído casi todo (faltan los dos últimos días),
+// oración casi a diario, el ayuno los viernes y algo de tiempo apuntado.
+function bibliaDemo(hoy = biblia.fechaISO()) {
+  const inicio = biblia.sumarDias(hoy, -40);
+  let d = biblia.normalizarBiblia({ casillas: [{ id: 'cayuno01', nombre: 'Ayuno' }] });
+  d = biblia.crearPlanDePlantilla(d, { plantilla: 'anio-mixta', inicio }, Date.now() - 40 * DIA).datos;
+  d = biblia.crearPlanPropio(d, { libros: ['ROM'], nombre: 'Romanos con el grupo', inicio: biblia.sumarDias(hoy, -6), fin: biblia.sumarDias(hoy, 12), dias: [1, 3, 5] }).datos;
+  const [anio, romanos] = d.planes;
+  for (let i = 40; i >= 3; i--) {
+    const f = biblia.sumarDias(hoy, -i);
+    if (i !== 17) d = biblia.marcarLectura(d, anio.id, f, true, f);
+    if (i % 6 !== 0) d = biblia.marcarOrado(d, f);
+    if (i % 4 === 0) d = biblia.sumarMinutos(d, f, 'oracion', 10 + (i % 3) * 5);
+    if (biblia.diaSemana(f) === 5) d = biblia.marcarCasilla(d, f, 'cayuno01', true);
+  }
+  // El día que se saltó la lectura, la leyó al siguiente.
+  d = biblia.marcarLectura(d, anio.id, biblia.sumarDias(hoy, -17), true, biblia.sumarDias(hoy, -16));
+  for (const l of romanos.lecturas.filter((x) => x.fecha < hoy)) d = biblia.marcarLectura(d, romanos.id, l.fecha, true, l.fecha);
+  d = biblia.sumarMinutos(d, biblia.sumarDias(hoy, -3), 'lectura', 18);
+  return d;
 }

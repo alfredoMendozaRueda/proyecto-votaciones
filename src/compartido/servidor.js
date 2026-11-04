@@ -75,6 +75,11 @@ export class ClienteServidor {
     return this.pedir('/recordatorios', { metodo: 'PUT', cuerpo: { lista, ...(borrados ? { borrados } : {}) } });
   }
 
+  // Los avisos de la lectura bíblica de los próximos días (sustituyen a los anteriores).
+  bibliaAvisos(lista) {
+    return this.pedir('/biblia/avisos', { metodo: 'PUT', cuerpo: { lista } });
+  }
+
   avisos(avisos) {
     return this.pedir('/avisos', { metodo: 'PUT', cuerpo: { avisos } });
   }

@@ -104,6 +104,14 @@ export function crearBuscador({ dialogo, api, ir, abrirAjustes, abrirConversacio
             { icono: 'pulso', titulo: 'Resumen de gastos', detalle: 'Por categorías, presupuesto y exportar', hacer: () => ir('gastos', { pestana: 'resumen' }), claves: 'resumen gastos categorias presupuesto exportar csv excel' },
           ]
         : []),
+      ...(api.biblia
+        ? [
+            { icono: 'libro', titulo: 'Biblia', detalle: 'Lo que toca leer hoy', hacer: () => ir('biblia', { pestana: 'hoy' }), claves: 'biblia lectura leer hoy orar oracion devocional versiculo' },
+            { icono: 'libro', titulo: 'Planes de lectura', detalle: 'Biblia', hacer: () => ir('biblia', { pestana: 'planes' }), claves: 'plan planes lectura biblia año evangelios nuevo testamento avisos' },
+            { icono: 'nueva', titulo: 'Nuevo plan de lectura', detalle: 'Biblia', hacer: () => ir('biblia', { nuevo: true }), claves: 'nuevo plan lectura biblia empezar' },
+            { icono: 'calendario', titulo: 'Mi mes de lectura', detalle: 'Biblia › calendario y resumen', hacer: () => ir('biblia', { pestana: 'mes' }), claves: 'mes calendario racha resumen lectura oracion biblia' },
+          ]
+        : []),
       { icono: 'nueva', titulo: 'Nuevo recordatorio', detalle: 'Agenda › Avisos', hacer: () => ir('recordatorios', { nuevo: true }), claves: 'nuevo recordatorio aviso recuerdame' },
       { icono: 'chispa', titulo: 'Buscar y preparar candidaturas', detalle: 'Empleo', hacer: () => ir('empleo', { buscarYPreparar: true }), claves: 'buscar preparar candidaturas ofertas' },
       { icono: 'conversacion', titulo: 'Nueva conversación', detalle: 'La actual queda guardada', hacer: nuevaConversacion, claves: 'nueva conversacion chat' },
@@ -112,7 +120,7 @@ export function crearBuscador({ dialogo, api, ir, abrirAjustes, abrirConversacio
       { icono: 'ajustes', titulo: 'Ajustes', detalle: 'Todos los temas', hacer: () => abrirAjustes(null), claves: 'ajustes configuracion opciones' },
     ];
     if (!palabras.length) {
-      const inicio = ['Hoy', 'Chat', 'Correo', 'Agenda', 'Empleo', 'Gastos', 'Nuevo recordatorio', 'Apuntar gasto', 'Buscar y preparar candidaturas'];
+      const inicio = ['Hoy', 'Chat', 'Correo', 'Agenda', 'Empleo', 'Gastos', 'Biblia', 'Nuevo recordatorio', 'Apuntar gasto', 'Buscar y preparar candidaturas'];
       return [['Ir a', inicio.map((t) => apartados.find((a) => a.titulo === t)).filter(Boolean)]];
     }
     const resultado = [];

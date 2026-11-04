@@ -25,6 +25,7 @@ import { servidor, sincronizarRecordatorios, automatizacionesChat, clienteServid
 import { aviso } from '../src/compartido/notificaciones.js';
 import { normalizarDatosEmpleo } from '../src/compartido/empleo.js';
 import { crearAlmacenGastos, normalizarGastos } from '../src/compartido/gastos.js';
+import { crearAlmacenBiblia, normalizarBiblia, avisosBiblia } from '../src/compartido/biblia.js';
 import { hablarVoiceStudio, vocesVoiceStudio } from './voicestudio.js';
 import { transcribirGroq } from '../src/compartido/dictado.js';
 import {
@@ -34,6 +35,7 @@ import {
   coleccionEmpleo,
   coleccionGastos,
   coleccionCuentas,
+  coleccionBiblia,
   coleccionAjustes,
   coleccionClaves,
   coleccionConsumo,
@@ -71,6 +73,33 @@ const gastos = crearAlmacenGastos({
   },
   guardar: async (datos) => guardarSecreto('gastos', JSON.stringify(datos)),
   alCambiar: () => tocado(),
+});
+// Lectura bíblica: cifrada. Cada cambio rehace en el servidor los avisos al móvil de los próximos días.
+const leerBiblia = async () => {
+  try {
+    return JSON.parse(leerSecreto('biblia') ?? 'null');
+  } catch {
+    return null;
+  }
+};
+let temporizadorBiblia = null;
+function avisarBiblia(espera = 800) {
+  clearTimeout(temporizadorBiblia);
+  temporizadorBiblia = setTimeout(async () => {
+    try {
+      await clienteServidor().bibliaAvisos(avisosBiblia(await biblia.leer()));
+    } catch {
+      // Sin vincular o sin red: en el siguiente cambio.
+    }
+  }, espera);
+}
+const biblia = crearAlmacenBiblia({
+  leer: leerBiblia,
+  guardar: async (datos) => guardarSecreto('biblia', JSON.stringify(datos)),
+  alCambiar: () => {
+    tocado();
+    avisarBiblia();
+  },
 });
 // Lo que se gasta en OpenAI desde este ordenador (y lo que llega de los demás).
 const consumo = new Consumo({
@@ -138,6 +167,7 @@ sincro = new Sincronizador({
     empleo: coleccionEmpleo({ leer: leerEmpleo, guardar: guardarEmpleo }),
     gastos: coleccionGastos({ leer: () => gastos.leer(), guardar: (d) => guardarSecreto('gastos', JSON.stringify(d)), normalizar: normalizarGastos }),
     cuentas: coleccionCuentas({ leer: () => gastos.leer(), guardar: (d) => guardarSecreto('gastos', JSON.stringify(d)), normalizar: normalizarGastos }),
+    biblia: coleccionBiblia({ leer: leerBiblia, guardar: async (d) => guardarSecreto('biblia', JSON.stringify(d)), normalizar: normalizarBiblia, despues: () => avisarBiblia() }),
     ajustes: coleccionAjustes({ leer: () => obtenerAjustes(), guardar: (cambios) => guardarAjustes(cambios) }),
     claves: coleccionClaves({ leer: leerSecreto, guardar: guardarSecreto, borrar: borrarSecreto }),
     consumo: coleccionConsumo({ leer: () => leerObjeto('consumo'), guardar: (d) => guardarDatos('consumo', d) }),
@@ -178,6 +208,7 @@ const claude = new ConversacionClaude({
   },
   recordatorios,
   gastos,
+  biblia,
   memoria,
   automatizaciones: automatizacionesChat,
   emitir: (evento) => ventana?.webContents.send('claude:evento', evento),
@@ -192,7 +223,10 @@ function eventoValido(e) {
   const lugar = texto(e.lugar, 200);
   const descripcion = texto(e.descripcion, 2000);
   if (lugar === null || descripcion === null) return null;
-  return { titulo: e.titulo.trim(), inicio: e.inicio, fin: e.fin, todoElDia: e.todoElDia ?? false, lugar, descripcion };
+  // Repetir cada semana unos días (el hueco de la lectura bíblica).
+  const dias = e.repetir?.dias;
+  if (e.repetir !== undefined && e.repetir !== null && !(Array.isArray(dias) && dias.length <= 7 && dias.every((d) => Number.isInteger(d) && d >= 1 && d <= 7))) return null;
+  return { titulo: e.titulo.trim(), inicio: e.inicio, fin: e.fin, todoElDia: e.todoElDia ?? false, lugar, descripcion, ...(dias?.length ? { repetir: { dias } } : {}) };
 }
 
 function exigirCalendario() {
@@ -501,6 +535,8 @@ function registrarCanales() {
   manejar('empleo:guardar', (datos) => guardarEmpleo(datos));
   manejar('gastos:leer', () => gastos.leer());
   manejar('gastos:guardar', (datos) => gastos.guardar(datos));
+  manejar('biblia:leer', () => biblia.leer());
+  manejar('biblia:guardar', (datos) => biblia.guardar(datos));
   manejar('consumo:resumen', async () => {
     const servidorConsumo = leerSecreto('servidorToken') ? await Promise.resolve().then(() => clienteServidor().consumo()).catch(() => null) : null;
     return consumo.resumen({ servidor: servidorConsumo?.meses ?? null });
@@ -600,6 +636,9 @@ if (!app.requestSingleInstanceLock()) {
     // Sincronización: al abrir y cada pocos minutos.
     sincro.marcar(3000);
     setInterval(() => sincro.marcar(0), 3 * 60_000);
+    // Los avisos de la lectura bíblica cubren dos semanas: se rehacen al abrir y cada pocas horas.
+    avisarBiblia(8000);
+    setInterval(() => avisarBiblia(0), 6 * 3_600_000);
     // Si la última conversación es de hace poco, se sigue con ella.
     conversaciones.reciente().then(async (ultima) => {
       const datos = ultima && (await conversaciones.cargar(ultima.id));

@@ -71,13 +71,18 @@ export class ClienteCalendario {
   }
 
   // inicio y fin en milisegundos. Si es de todo el día, se guarda como fechas.
-  async crear({ titulo, inicio, fin, todoElDia = false, lugar = '', descripcion = '' }) {
+  // Con «repetir» ({ dias: [1 = lunes … 7 = domingo] }), se repite cada semana esos días.
+  async crear({ titulo, inicio, fin, todoElDia = false, lugar = '', descripcion = '', repetir = null }) {
+    const zona = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const dias = repetir && Array.isArray(repetir.dias) ? [...new Set(repetir.dias.filter((d) => Number.isInteger(d) && d >= 1 && d <= 7))].sort() : [];
     const cuerpo = {
       summary: titulo,
       ...(lugar ? { location: lugar } : {}),
       ...(descripcion ? { description: descripcion } : {}),
-      start: todoElDia ? { date: fechaLocal(inicio) } : { dateTime: new Date(inicio).toISOString() },
-      end: todoElDia ? { date: fechaLocal(Math.max(fin, inicio + DIA)) } : { dateTime: new Date(fin).toISOString() },
+      // Los que se repiten necesitan la zona horaria (si no, Google los rechaza).
+      start: todoElDia ? { date: fechaLocal(inicio) } : { dateTime: new Date(inicio).toISOString(), ...(dias.length ? { timeZone: zona } : {}) },
+      end: todoElDia ? { date: fechaLocal(Math.max(fin, inicio + DIA)) } : { dateTime: new Date(fin).toISOString(), ...(dias.length ? { timeZone: zona } : {}) },
+      ...(dias.length ? { recurrence: [`RRULE:FREQ=WEEKLY;BYDAY=${dias.map((d) => ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'][d - 1]).join(',')}`] } : {}),
     };
     return convertir(await this.api('', { method: 'POST', body: JSON.stringify(cuerpo) }));
   }

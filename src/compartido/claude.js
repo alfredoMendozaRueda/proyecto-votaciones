@@ -287,6 +287,37 @@ HERRAMIENTAS_GASTOS.push(
   },
 );
 
+const HERRAMIENTAS_BIBLIA = [
+  {
+    name: 'marcar_biblia',
+    description:
+      'Marca en su lectura bíblica lo que ha hecho un día: "ya he leído" → que=["leido"] (también marca la lectura de ' +
+      'su plan de ese día), "he orado" → que=["orado"], o una de sus casillas propias por su nombre (como "Ayuno"). ' +
+      'Con si=false se desmarca. Puede llevar el tiempo: "he orado 15 minutos" → minutos_oracion=15.',
+    eager_input_streaming: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        que: { type: 'array', items: { type: 'string' }, description: '"leido", "orado" o el nombre de una casilla suya.' },
+        fecha: { type: 'string', description: 'AAAA-MM-DD. Si no lo dice, hoy; "ayer", calcúlalo con la fecha local de su mensaje.' },
+        si: { type: 'boolean', description: 'false para desmarcar. Por defecto, true.' },
+        minutos_lectura: { type: 'integer', description: 'Minutos que ha leído (se suman a los de ese día).' },
+        minutos_oracion: { type: 'integer', description: 'Minutos que ha orado (se suman a los de ese día).' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'ver_biblia',
+    description:
+      'Devuelve su lectura bíblica (Reina-Valera 1960): lo que toca leer hoy en sus planes, lo que ha marcado hoy, su ' +
+      'racha, cómo va cada plan (porcentaje, atrasos, cuándo acaba), el resumen del mes y el versículo del día. Úsala para ' +
+      '"¿qué me toca leer hoy?", "¿cómo voy con el plan?", "¿cuántos días he orado este mes?".',
+    eager_input_streaming: true,
+    input_schema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+];
+
 const HERRAMIENTAS_MEMORIA = [
   {
     name: 'recordar',
@@ -548,6 +579,21 @@ function validarEntrada(nombre, entrada) {
     }
     case 'ver_gastos':
       return entrada.mes === undefined || mesValido(entrada.mes) ? { mes: entrada.mes } : null;
+    case 'marcar_biblia': {
+      const que = Array.isArray(entrada.que) ? entrada.que.filter((q) => typeof q === 'string' && q.trim()).map((q) => q.trim().slice(0, 40)) : [];
+      const minutos = (m) => m === undefined || (Number.isInteger(m) && m > 0 && m <= 600);
+      if (que.length > 10 || (!que.length && !entrada.minutos_lectura && !entrada.minutos_oracion)) return null;
+      if (entrada.fecha !== undefined && !fechaValida(entrada.fecha)) return null;
+      if (!minutos(entrada.minutos_lectura) || !minutos(entrada.minutos_oracion) || (entrada.si !== undefined && typeof entrada.si !== 'boolean')) return null;
+      // «leído», «Leído», «lectura» → leido; «oración» → orado.
+      const normal = que.map((q) => {
+        const t = q.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        return /^(leido|lectura|leer)$/.test(t) ? 'leido' : /^(orado|oracion|orar)$/.test(t) ? 'orado' : q;
+      });
+      return { que: [...new Set(normal)], fecha: entrada.fecha, si: entrada.si, minutos_lectura: entrada.minutos_lectura, minutos_oracion: entrada.minutos_oracion };
+    }
+    case 'ver_biblia':
+      return {};
     case 'poner_saldo': {
       const importe = Number(entrada.importe);
       if (!Number.isFinite(importe) || Math.abs(importe) > 1_000_000) return null;
@@ -610,6 +656,7 @@ function resumenPermisos(ajustes, servicios) {
     Agenda: servicios.calendario,
     Avisos: servicios.conRecordatorios,
     Gastos: servicios.gastos,
+    'Lectura bíblica': servicios.biblia,
     Memoria: servicios.memoria,
     Automatizaciones: servicios.automatizaciones,
   };
@@ -641,6 +688,7 @@ const GRUPO_DE = {
   ver_agenda: 'agenda', crear_evento: 'agenda', modificar_evento: 'agenda', borrar_evento: 'agenda',
   crear_recordatorio: 'recordatorios', ver_recordatorios: 'recordatorios', borrar_recordatorio: 'recordatorios',
   apuntar_gasto: 'gastos', ver_gastos: 'gastos', poner_saldo: 'gastos', mover_dinero: 'gastos',
+  marcar_biblia: 'biblia', ver_biblia: 'biblia',
   recordar: 'memoria', olvidar: 'memoria',
   crear_automatizacion: 'automatizaciones', ver_automatizaciones: 'automatizaciones',
   ver_tiempo: 'tiempo',
@@ -653,6 +701,7 @@ const PISTAS = {
   memoria: /recuerda que|apunta que|olvida|sabes de mi|que sabes|me llamo|\bsoy\b|me gusta|no me gusta|prefiero|mi (mujer|marido|pareja|novi[oa]|madre|padre|hij[oa]|herman[oa]|perro|gato|jefe)/,
   automatizaciones: /automatiz|cada vez que|siempre que|a partir de ahora|todos los dias|cada dia|cada manana|cada semana|regla|flujo|workflow/,
   gastos: /gast[oeaé]|gaste\b|pague|pagado|pagar|euros?\b|€|\d\s*eur\b|presupuesto|cuanto llevo|suscripci|alquiler|hipoteca|cuesta al mes|me cobra|cobran|nomina|sueldo|salario|ingres|ahorr|saldo|cobr[eéo]|bizum|paga extra|tengo \d|me quedan|en (la|mi) cuenta|banco|me han dado|me han devuelto|efectivo|metalico|cajero|cartera|he sacado|saque/,
+  biblia: /biblia|biblic|lectura|\bleid[oa]\b|he leido|ya lei|orad[oa]|\borar\b|ore\b|oracion|rezad|rezar|devocional|versiculo|capitulo|evangelio|salmo|proverbio|plan de lectura|\bplan\b|ayun|racha|me toca leer/,
   tiempo: /tiempo|llov|llue|lluvia|tormenta|temperatura|calor|frio|clima|paraguas|nieve|viento|grados|\bsol\b/,
   web: /busca|internet|noticia|precio|quien (es|fue|gano)|gano|cuanto cuesta|resultado|ultima hora|actualidad|\bweb\b|google|partido|cotiza|bolsa|estreno|que paso/,
   pulso: /pulso|resumen del dia|mi dia\b|que hay de nuevo|novedades/,
@@ -677,7 +726,7 @@ export function herramientasParaGroq(herramientas, grupos) {
 }
 
 // Con Groq algunas partes se omiten (null) cuando su herramienta no va en la petición.
-function promptSistema({ ajustes, correo, calendario, conRecordatorios, conGastos = false, memoria, busqueda, automatizaciones, pulso = true, permisos = null, recordar = true, tiempo = true }) {
+function promptSistema({ ajustes, correo, calendario, conRecordatorios, conGastos = false, conBiblia = false, memoria, busqueda, automatizaciones, pulso = true, permisos = null, recordar = true, tiempo = true }) {
   return [
     'Eres Kitsune, el asistente personal del usuario: un zorro de nueve colas que vive en su escritorio o en su móvil ' +
       'y habla con él en un diálogo pequeño que aparece encima de ti.',
@@ -701,12 +750,18 @@ function promptSistema({ ajustes, correo, calendario, conRecordatorios, conGasto
         'ver_gastos (trae la previsión de los próximos meses). Al apuntar, confírmalo en una frase: «Apunto un gasto de 30 €», ' +
         '«Sumo 1.850 € de nómina», «Tu saldo: 2.300 €», «Pasan 50 € del banco al efectivo»; si es fijo, di cada cuánto; si la respuesta trae una nota, cuéntala.'
       : '',
+    conBiblia
+      ? 'Acompañas su lectura bíblica (apartado Biblia, versión Reina-Valera 1960). Si dice que ya ha leído u orado, márcalo ' +
+        'con marcar_biblia («ya he leído y orado» → que=["leido","orado"]) y confírmalo en una frase; para lo que le toca hoy ' +
+        'o cómo va, usa ver_biblia. No cites el texto de la RVR1960 de memoria: di la cita (p. ej. Juan 3:16) y que la ' +
+        'puede leer en el apartado. Con respeto y sin sermonear; si te pide explicar un pasaje, hazlo con sencillez.'
+      : '',
     automatizaciones
       ? 'Puedes crear automatizaciones con crear_automatizacion: avisos y acciones que el servidor de Kitsune hace solo, ' +
         'aunque la app esté cerrada (al llegar ciertos correos, antes de las citas o a una hora). Para algo puntual usa un ' +
         'recordatorio; para «cada vez que…» o «a partir de ahora…», una automatización.'
       : '',
-    resumenPermisos(ajustes, permisos ?? { correo: correo.conectado, calendario, conRecordatorios, gastos: conGastos, memoria: Boolean(memoria), automatizaciones }),
+    resumenPermisos(ajustes, permisos ?? { correo: correo.conectado, calendario, conRecordatorios, gastos: conGastos, biblia: conBiblia, memoria: Boolean(memoria), automatizaciones }),
     tiempo ? 'Para el tiempo de un lugar usa ver_tiempo. Si no sabes de qué lugar se trata, mira tu memoria o pregúntaselo.' : '',
     busqueda === null
       ? ''
@@ -783,6 +838,7 @@ export class ConversacionClaude {
     calendario = null,
     recordatorios = null,
     gastos = null,
+    biblia = null,
     memoria = null,
     automatizaciones = null,
     emitir,
@@ -798,6 +854,7 @@ export class ConversacionClaude {
     this.calendario = calendario;
     this.recordatorios = recordatorios;
     this.gastos = gastos;
+    this.biblia = biblia;
     this.memoria = memoria;
     this.automatizaciones = automatizaciones;
     this.emitir = emitir;
@@ -882,12 +939,14 @@ export class ConversacionClaude {
     const conCalendario = Boolean(calendario.conectado);
     const conRecordatorios = Boolean(this.recordatorios);
     const conGastos = Boolean(this.gastos);
+    const conBiblia = Boolean(this.biblia);
     const busqueda = Boolean(ajustes.busquedaWeb);
     const herramientas = [
       ...(correo.conectado ? HERRAMIENTAS_CORREO : []),
       ...(conCalendario ? HERRAMIENTAS_CALENDARIO : []),
       ...(conRecordatorios ? HERRAMIENTAS_RECORDATORIOS : []),
       ...(conGastos ? HERRAMIENTAS_GASTOS : []),
+      ...(conBiblia ? HERRAMIENTAS_BIBLIA : []),
       ...(memoria ? HERRAMIENTAS_MEMORIA : []),
       ...(automatizaciones ? HERRAMIENTAS_AUTOMATIZACION : []),
       HERRAMIENTA_TIEMPO,
@@ -895,7 +954,7 @@ export class ConversacionClaude {
       // Lo que el usuario no permite ni se ofrece.
     ].filter((h) => nivelHerramienta(ajustes, h.name) !== 'no');
     if (proveedor !== 'groq') {
-      const sistema = promptSistema({ ajustes, correo, calendario: conCalendario, conRecordatorios, conGastos, memoria, busqueda, automatizaciones });
+      const sistema = promptSistema({ ajustes, correo, calendario: conCalendario, conRecordatorios, conGastos, conBiblia, memoria, busqueda, automatizaciones });
       return { sistema, herramientas };
     }
     // Groq: solo los grupos que encajan con este mensaje y el anterior.
@@ -911,13 +970,14 @@ export class ConversacionClaude {
       calendario: conCalendario && tiene('agenda'),
       conRecordatorios: tiene('recordatorios'),
       conGastos: tiene('gastos'),
+      conBiblia: tiene('biblia'),
       memoria,
       recordar: tiene('memoria'),
       tiempo: tiene('tiempo'),
       busqueda: tiene('web') ? true : busqueda ? null : false,
       automatizaciones: automatizaciones && tiene('automatizaciones'),
       pulso: grupos.has('pulso'),
-      permisos: { correo: correo.conectado && tiene('correo'), calendario: conCalendario && tiene('agenda'), conRecordatorios: tiene('recordatorios'), gastos: tiene('gastos'), memoria: tiene('memoria'), automatizaciones: tiene('automatizaciones') },
+      permisos: { correo: correo.conectado && tiene('correo'), calendario: conCalendario && tiene('agenda'), conRecordatorios: tiene('recordatorios'), gastos: tiene('gastos'), biblia: tiene('biblia'), memoria: tiene('memoria'), automatizaciones: tiene('automatizaciones') },
     });
     return { sistema, herramientas: elegidas };
   }
@@ -1212,6 +1272,14 @@ export class ConversacionClaude {
           tipo: 'gasto', icono: 'cartera', pregunta: '¿Lo apunto?', titulo: `${conceptoTraspaso(e.de)} · ${euros(Math.round(e.importe * 100))}`,
           detalle: `${nombreCuenta(e.de)} → ${nombreCuenta(e.de === 'banco' ? 'efectivo' : 'banco')}${e.fecha ? `, el ${e.fecha}` : ', hoy'}. No es gasto ni ingreso.`, boton: 'Apuntar', hecho: 'Apuntado',
         };
+      case 'marcar_biblia': {
+        const nombres = e.que.map((q) => (q === 'leido' ? 'He leído' : q === 'orado' ? 'He orado' : q));
+        const tiempo = [e.minutos_lectura ? `${e.minutos_lectura} min de lectura` : '', e.minutos_oracion ? `${e.minutos_oracion} min de oración` : ''].filter(Boolean).join(' · ');
+        return {
+          tipo: 'biblia', icono: 'libro', pregunta: e.si === false ? '¿Lo desmarco?' : '¿Lo marco?', titulo: nombres.join(' · ') || tiempo,
+          detalle: [e.fecha ?? 'Hoy', nombres.length ? tiempo : ''].filter(Boolean).join(' · '), boton: e.si === false ? 'Desmarcar' : 'Marcar', hecho: 'Hecho',
+        };
+      }
       case 'apuntar_gasto':
         return {
           tipo: 'gasto', icono: 'cartera', pregunta: `¿Apunto este ${e.ingreso ? 'ingreso' : 'gasto'}${e.frecuencia ? ' fijo' : ''}?`,
@@ -1333,6 +1401,13 @@ export class ConversacionClaude {
         this.emitir({ tipo: 'gasto', gasto });
         return gasto;
       }
+      case 'marcar_biblia': {
+        const marcado = await this.biblia.marcar(entrada);
+        this.emitir({ tipo: 'biblia', marcado });
+        return marcado;
+      }
+      case 'ver_biblia':
+        return this.biblia.resumen();
       case 'ver_recordatorios':
         return (await this.recordatorios.listar()).map((r) => ({ id: r.id, texto: r.texto, cuando: fechaLocal(r.cuando) }));
       case 'borrar_recordatorio':

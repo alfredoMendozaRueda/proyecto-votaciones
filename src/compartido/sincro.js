@@ -21,10 +21,11 @@ export const COLECCIONES_SINCRO = [
   ['claves', 'Claves de la IA'],
   ['consumo', 'Gasto de la IA'],
   ['gastos', 'Gastos'],
+  ['biblia', 'Lectura bíblica'],
 ];
 // Colecciones que llegaron después: en los dispositivos que ya sincronizaban se
 // activan solas una vez (y se baja todo, por si otro dispositivo ya las subió).
-const COLECCIONES_NUEVAS = ['gastos', 'cuentas'];
+const COLECCIONES_NUEVAS = ['gastos', 'cuentas', 'biblia'];
 // Colecciones que no se eligen aparte: van con otra (si se sincroniza Gastos, también
 // su efectivo y sus traspasos). Las versiones anteriores no las conocen y las dejan en paz.
 const ACOMPANANTES = { gastos: ['cuentas'] };
@@ -360,6 +361,55 @@ export function coleccionCuentas({ leer, guardar, normalizar = (d) => d, despues
         else pendiente.delete(id);
       }
       await guardar(normalizar({ ...d, saldoEfectivo, traspasos: [...traspasos.values()], movimientos, fijos, efectivoPendiente: [...pendiente] }));
+      await despues?.();
+    },
+  };
+}
+
+// Lectura bíblica: cada plan, cada lectura hecha y cada día van aparte, para que
+// marcar en el móvil y en el ordenador el mismo día no se pisen.
+export function coleccionBiblia({ leer, guardar, normalizar = (d) => d, despues }) {
+  return {
+    async leer() {
+      const d = await leer();
+      const mapa = new Map();
+      if (!d || typeof d !== 'object') return mapa;
+      const poner = (id, v) => mapa.set(id, { firma: comoTexto(v), valor: comoTexto(v) });
+      poner('base', { casillas: d.casillas ?? [], ajustes: d.ajustes ?? {}, agenda: d.agenda ?? null });
+      for (const p of d.planes ?? []) {
+        if (!p?.id) continue;
+        const { hechas, ...plan } = p;
+        poner(`p:${p.id}`, plan);
+        for (const [fecha, cuando] of Object.entries(hechas ?? {})) poner(`h:${p.id}:${fecha}`, cuando);
+      }
+      for (const [fecha, dia] of Object.entries(d.dias ?? {})) poner(`d:${fecha}`, dia);
+      return mapa;
+    },
+    firma: (v) => v,
+    async aplicar(cambios) {
+      const d = (await leer()) ?? {};
+      let base = { casillas: d.casillas ?? [], ajustes: d.ajustes ?? {}, agenda: d.agenda ?? null };
+      const planes = new Map((d.planes ?? []).filter((p) => p?.id).map((p) => [p.id, { ...p, hechas: { ...(p.hechas ?? {}) } }]));
+      const dias = { ...(d.dias ?? {}) };
+      const hechas = [];
+      for (const { id, valor } of cambios) {
+        if (id === 'base') base = valor === null ? { casillas: [], ajustes: {}, agenda: null } : JSON.parse(valor);
+        else if (id.startsWith('p:')) {
+          const pid = id.slice(2);
+          if (valor === null) planes.delete(pid);
+          else planes.set(pid, { ...JSON.parse(valor), hechas: planes.get(pid)?.hechas ?? {} });
+        } else if (id.startsWith('h:')) hechas.push([id.slice(2), valor]);
+        else if (id.startsWith('d:')) valor === null ? delete dias[id.slice(2)] : (dias[id.slice(2)] = JSON.parse(valor));
+      }
+      // Las lecturas hechas, después de los planes (pueden llegar en el mismo lote).
+      for (const [clave, valor] of hechas) {
+        const [pid, fecha] = clave.split(':');
+        const plan = planes.get(pid);
+        if (!plan) continue;
+        if (valor === null) delete plan.hechas[fecha];
+        else plan.hechas[fecha] = JSON.parse(valor);
+      }
+      await guardar(normalizar({ ...d, ...base, planes: [...planes.values()], dias }));
       await despues?.();
     },
   };

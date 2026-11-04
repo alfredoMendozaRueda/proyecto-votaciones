@@ -230,7 +230,7 @@ test('gastos: se sincronizan gasto a gasto y se activan solos en los dispositivo
     borrarLlave: async () => {},
   });
   await sincro.resumen();
-  assert.deepEqual(estado.colecciones, ['memoria', 'ajustes', 'gastos'], 'respeta lo que el usuario quitó y añade Gastos');
+  assert.deepEqual(estado.colecciones, ['memoria', 'ajustes', 'gastos', 'biblia'], 'respeta lo que el usuario quitó y añade Gastos y la lectura bíblica');
   assert.equal(estado.cursor, 0);
   // Si luego lo quita, no vuelve a activarse solo.
   estado = { ...estado, colecciones: ['memoria'], cursor: 9 };

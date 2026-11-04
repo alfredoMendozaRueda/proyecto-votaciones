@@ -2,6 +2,7 @@ import { icono } from './iconos.js';
 import { markdownAHtml } from './markdown.js';
 import { cuandoLegible } from './fechas.js';
 import { normalizarGastos, deshacerApunte } from '../compartido/gastos.js';
+import { normalizarBiblia, marcarCasilla, sumarMinutos } from '../compartido/biblia.js';
 
 const PEDIR_PULSO = 'Prepárame el pulso de hoy';
 const CLAVE_PULSO = 'kitsune.pulso';
@@ -14,6 +15,8 @@ const ETIQUETAS_HERRAMIENTA = {
   ver_gastos: 'Mirando tus gastos…',
   poner_saldo: 'Apuntando tu saldo…',
   mover_dinero: 'Apuntando el movimiento…',
+  marcar_biblia: 'Marcando tu lectura…',
+  ver_biblia: 'Mirando tu plan de lectura…',
   ver_recordatorios: 'Mirando tus recordatorios…',
   borrar_recordatorio: 'Borrando el recordatorio…',
   web_search: 'Buscando en internet…',
@@ -488,6 +491,30 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
                   },
                 }
               : null,
+        });
+        break;
+      }
+      case 'biblia': {
+        // Lo marcado en la lectura bíblica, con Deshacer (lo desmarca y quita el tiempo sumado).
+        const m = e.marcado;
+        const tiempo = [m.minutos_lectura ? `${m.minutos_lectura} min de lectura` : '', m.minutos_oracion ? `${m.minutos_oracion} min de oración` : ''].filter(Boolean);
+        nota({
+          simbolo: 'libro',
+          etiqueta: m.si ? 'Lectura bíblica' : 'Desmarcado',
+          texto: [[...m.marcado.map((x) => (x === 'leído' ? 'He leído' : x === 'orado' ? 'He orado' : x)), ...tiempo].join(' · '), m.lectura, m.si && m.racha > 1 ? `${m.racha} días seguidos` : ''].filter(Boolean).join(' · '),
+          deshacer: api.biblia
+            ? {
+                etiqueta: 'Deshacer',
+                hecho: 'Deshecho',
+                accion: async () => {
+                  let datos = normalizarBiblia((await api.biblia.leer()) ?? {});
+                  for (const id of m.ids ?? []) datos = marcarCasilla(datos, m.fecha, id, !m.si);
+                  if (m.minutos_lectura) datos = sumarMinutos(datos, m.fecha, 'lectura', -m.minutos_lectura);
+                  if (m.minutos_oracion) datos = sumarMinutos(datos, m.fecha, 'oracion', -m.minutos_oracion);
+                  await api.biblia.guardar(datos);
+                },
+              }
+            : null,
         });
         break;
       }

@@ -13,6 +13,7 @@ import { aviso } from '../../compartido/notificaciones.js';
 import { transcribirGroq } from '../../compartido/dictado.js';
 import { normalizarDatosEmpleo } from '../../compartido/empleo.js';
 import { crearAlmacenGastos, normalizarGastos } from '../../compartido/gastos.js';
+import { crearAlmacenBiblia, normalizarBiblia, avisosBiblia } from '../../compartido/biblia.js';
 import {
   Sincronizador,
   coleccionLista,
@@ -20,6 +21,7 @@ import {
   coleccionEmpleo,
   coleccionGastos,
   coleccionCuentas,
+  coleccionBiblia,
   coleccionAjustes,
   coleccionClaves,
   coleccionConsumo,
@@ -117,6 +119,39 @@ export function crearBackendWeb() {
   });
   // Registro de la IA: cada tarea se manda al servidor (si está vinculado).
   const registroIA = crearEnvioRegistroIA(() => avisos.cliente());
+  // Lectura bíblica: cifrada (tus oraciones son tuyas). Cada cambio rehace los avisos
+  // de los próximos días en el servidor (al móvil: lo que toca leer y lo que falta).
+  let temporizadorBiblia = null;
+  const avisarBiblia = (espera = 800) => {
+    clearTimeout(temporizadorBiblia);
+    temporizadorBiblia = setTimeout(async () => {
+      if (!(await avisos.vinculado().catch(() => false))) return;
+      try {
+        const datos = await biblia.leer();
+        await (await avisos.cliente()).bibliaAvisos(avisosBiblia(datos));
+      } catch {
+        // Sin servidor o sin red: se manda en el siguiente cambio o al volver a abrir.
+      }
+    }, espera);
+  };
+  const leerBiblia = async () => {
+    try {
+      return JSON.parse((await leerSecreto('biblia')) ?? 'null');
+    } catch {
+      return null;
+    }
+  };
+  const biblia = crearAlmacenBiblia({
+    leer: leerBiblia,
+    guardar: (datos) => guardarSecreto('biblia', JSON.stringify(datos)),
+    alCambiar: () => {
+      tocado();
+      avisarBiblia();
+    },
+  });
+  // Al abrir y cada pocas horas: los avisos solo cubren dos semanas.
+  avisarBiblia(5000);
+  setInterval(() => avisarBiblia(0), 6 * 3_600_000);
   const escuchar = (lista, f) => {
     oyentes[lista].push(f);
     return () => (oyentes[lista] = oyentes[lista].filter((x) => x !== f));
@@ -393,6 +428,7 @@ export function crearBackendWeb() {
         recordatorios,
         memoria,
         gastos,
+        biblia,
         calendario: {
           estado: async () => {
             const e = await estadoCorreo();
@@ -472,6 +508,7 @@ export function crearBackendWeb() {
       consumo: coleccionConsumo({ leer: async () => leerLocal(CLAVE_CONSUMO), guardar: async (d) => guardarLocal(CLAVE_CONSUMO, d) }),
       gastos: coleccionGastos({ leer: () => gastos.leer(), guardar: (d) => guardarSecreto('gastos', JSON.stringify(d)), normalizar: normalizarGastos }),
       cuentas: coleccionCuentas({ leer: () => gastos.leer(), guardar: (d) => guardarSecreto('gastos', JSON.stringify(d)), normalizar: normalizarGastos }),
+      biblia: coleccionBiblia({ leer: leerBiblia, guardar: (d) => guardarSecreto('biblia', JSON.stringify(d)), normalizar: normalizarBiblia, despues: () => avisarBiblia() }),
     },
     leerEstado: async () => leerLocal(CLAVE_SINCRO),
     guardarEstado: async (estado) => guardarLocal(CLAVE_SINCRO, estado),
@@ -613,6 +650,11 @@ export function crearBackendWeb() {
     gastos: {
       leer: () => gastos.leer(),
       guardar: (datos) => gastos.guardar(datos),
+    },
+    // Lectura bíblica: planes, casillas de cada día y avisos. Cifrada y sincronizada.
+    biblia: {
+      leer: () => biblia.leer(),
+      guardar: (datos) => biblia.guardar(datos),
     },
     consumo: {
       async resumen() {

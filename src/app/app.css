@@ -7998,3 +7998,786 @@ p.gastos__dia {
   flex: 0 0 auto;
   width: auto;
 }
+
+/* ---------- Lectura bíblica ---------- */
+.biblia {
+  --leido: var(--kin);
+  --orado: #a9b6de;
+}
+
+.biblia__pestanas {
+  margin-bottom: 2px;
+}
+
+.biblia__dia h2 {
+  font-size: 15.5px;
+}
+
+.biblia__lectura {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px 15px;
+  border: 1px solid var(--linea-suave);
+  border-radius: 18px;
+  background: radial-gradient(120% 140% at 0% 0%, var(--kin-velo), transparent 60%), var(--carbon);
+}
+
+.biblia__lectura .gastos__etiqueta {
+  margin: 0;
+}
+
+.biblia__lectura--hecha {
+  border-color: color-mix(in srgb, var(--leido) 35%, var(--linea-suave));
+}
+
+.biblia__pasaje {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.biblia__lectura--libre .biblia__pasaje {
+  font-size: 18px;
+}
+
+.biblia__lectura--libre .ajuste__ayuda {
+  margin: 0;
+  max-width: 60ch;
+}
+
+.biblia__lectura--libre .boton {
+  justify-self: start;
+}
+
+.biblia__abrir {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.biblia__enlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--texto);
+  text-decoration: none;
+}
+
+.biblia__enlace .icono:last-child {
+  opacity: 0.6;
+}
+
+.biblia__leida {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.biblia__leida[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--leido) 45%, transparent);
+  color: var(--kin-vivo);
+}
+
+/* Las casillas del día: grandes y fáciles de tocar. */
+.biblia__casillas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 8px;
+}
+
+.biblia__casilla {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--linea-suave);
+  border-radius: 14px;
+  background: var(--carbon);
+  color: var(--texto-2);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.12s ease;
+}
+
+.biblia__casilla:hover {
+  border-color: var(--linea);
+  color: var(--texto);
+}
+
+.biblia__casilla:active {
+  transform: scale(0.98);
+}
+
+.biblia__casilla:focus-visible {
+  outline: 2px solid var(--kin);
+  outline-offset: 2px;
+}
+
+.biblia__check {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: var(--carbon-3);
+  color: var(--texto-3);
+}
+
+.biblia__casilla[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--kin) 40%, transparent);
+  background: color-mix(in srgb, var(--kin) 10%, var(--carbon));
+  color: var(--texto);
+}
+
+.biblia__casilla[aria-pressed='true'] .biblia__check {
+  background: var(--kin);
+  color: var(--papel-tinta);
+}
+
+.biblia__casilla[data-casilla='orado'][aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--orado) 40%, transparent);
+  background: color-mix(in srgb, var(--orado) 10%, var(--carbon));
+}
+
+.biblia__casilla[data-casilla='orado'][aria-pressed='true'] .biblia__check {
+  background: var(--orado);
+}
+
+.biblia__casilla--nueva {
+  justify-content: center;
+  border-style: dashed;
+  color: var(--texto-3);
+}
+
+.biblia__nueva-casilla {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.biblia__nueva-casilla[hidden] {
+  display: none;
+}
+
+.biblia__nueva-casilla .campo {
+  flex: 1 1 180px;
+}
+
+.biblia__bloque {
+  display: grid;
+  gap: 6px;
+}
+
+.biblia__tiempo-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+}
+
+.biblia__tiempo-nombre {
+  min-width: 64px;
+  font-size: 14px;
+}
+
+.biblia__tiempo-valor {
+  margin-right: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.biblia__tiempo-valor[data-tic] {
+  color: var(--kin-vivo);
+}
+
+.biblia__preguntas {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.45;
+  max-width: 62ch;
+}
+
+.biblia__preguntas li::marker {
+  color: var(--kin);
+  font-weight: 600;
+}
+
+.biblia__bloque > .boton,
+.biblia__bloque > .gastos__enlace {
+  justify-self: start;
+}
+
+.biblia__versiculo {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--linea-suave);
+  border-radius: 14px;
+  background: var(--carbon);
+  color: var(--texto);
+  text-decoration: none;
+  transition: border-color 0.18s ease;
+}
+
+.biblia__versiculo:hover {
+  border-color: color-mix(in srgb, var(--kin) 45%, var(--linea-suave));
+}
+
+.biblia__cita {
+  font-family: var(--display);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.biblia__tema {
+  color: var(--texto-2);
+  font-size: 13px;
+}
+
+.biblia__leer {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  color: var(--kin-vivo);
+  font-size: 12.5px;
+}
+
+.biblia__racha {
+  margin: 2px 2px 8px;
+  color: var(--texto-3);
+  font-size: 12.5px;
+}
+
+.biblia__racha strong {
+  color: var(--kin-vivo);
+}
+
+.biblia__atraso {
+  display: grid;
+  gap: 8px;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--kin) 30%, var(--linea-suave));
+  border-radius: 14px;
+  background: var(--kin-velo);
+  font-size: 13.5px;
+}
+
+.biblia__atraso p {
+  margin: 0;
+}
+
+.biblia__opciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Planes. */
+.biblia__planes {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.biblia__plan {
+  border: 1px solid var(--linea-suave);
+  border-radius: 14px;
+  background: var(--carbon);
+}
+
+.biblia__plan--abierto {
+  padding-bottom: 10px;
+}
+
+.biblia__plan-fila {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 11px 13px;
+  border: 0;
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.biblia__plan-nombre {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.biblia__plan-detalle {
+  color: var(--texto-3);
+  font-size: 12px;
+}
+
+.biblia__marca {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--kin-velo);
+  color: var(--kin-vivo);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.biblia__barra {
+  display: block;
+  height: 4px;
+  margin-top: 3px;
+  border-radius: 3px;
+  background: var(--carbon-3);
+  overflow: hidden;
+}
+
+.biblia__barra span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--kin);
+}
+
+.biblia__dias {
+  display: grid;
+  gap: 1px;
+  margin: 0 8px 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.biblia__dia-plan {
+  display: grid;
+  grid-template-columns: auto 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.biblia__dia-plan--hoy {
+  background: var(--carbon-2);
+}
+
+.biblia__check-plan {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--linea-suave);
+  border-radius: 8px;
+  background: none;
+  color: var(--texto-3);
+  cursor: pointer;
+}
+
+.biblia__check-plan[aria-pressed='true'] {
+  border-color: transparent;
+  background: var(--kin);
+  color: var(--papel-tinta);
+}
+
+.biblia__dia-fecha {
+  color: var(--texto-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.biblia__dia-texto {
+  overflow: hidden;
+  color: var(--texto);
+  text-decoration: none;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.biblia__dia-texto:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.biblia__dia-plan--hecha .biblia__dia-texto,
+.biblia__dia-plan--saltada .biblia__dia-texto {
+  color: var(--texto-3);
+}
+
+.biblia__dia-plan--saltada .biblia__dia-texto {
+  text-decoration: line-through;
+}
+
+.biblia__dia-estado {
+  color: var(--texto-3);
+  font-size: 11px;
+}
+
+.biblia__dia-plan--atrasada .biblia__dia-estado {
+  color: var(--kin-vivo);
+}
+
+.biblia__plan .formulario__botones {
+  padding: 0 12px;
+}
+
+.biblia__crear {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--linea-suave);
+  border-radius: 16px;
+  background: var(--carbon);
+}
+
+.biblia__plantillas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px;
+}
+
+.biblia__plantilla {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--linea-suave);
+  border-radius: 12px;
+  background: var(--negro);
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.biblia__plantilla[aria-checked='true'] {
+  border-color: color-mix(in srgb, var(--kin) 55%, transparent);
+  background: color-mix(in srgb, var(--kin) 9%, var(--negro));
+}
+
+.biblia__plantilla-nombre {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.biblia__plantilla-detalle {
+  color: var(--texto-3);
+  font-size: 12px;
+}
+
+.biblia__grupos,
+.biblia__libros,
+.biblia__semana {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.biblia__libro {
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+.biblia__crear .chip[aria-pressed='true'],
+.biblia__semana .chip[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--kin) 55%, transparent);
+  background: color-mix(in srgb, var(--kin) 14%, var(--carbon));
+  color: var(--texto);
+}
+
+.biblia__semana .chip {
+  min-width: 34px;
+  text-align: center;
+}
+
+.biblia__fechas {
+  flex-wrap: wrap;
+  align-items: end;
+}
+
+.biblia__con-fin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 8px;
+}
+
+.biblia__fila-dias {
+  display: grid;
+  gap: 4px;
+}
+
+.biblia__previa {
+  margin: 0;
+  color: var(--kin-vivo);
+  font-size: 13px;
+}
+
+.biblia__interruptor {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.biblia__mis-casillas {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.biblia__mis-casillas li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+/* El mes. */
+.biblia__cifra .gastos__total {
+  font-size: 30px;
+}
+
+.biblia__de {
+  margin-left: 4px;
+  color: var(--texto-3);
+  font-family: var(--cuerpo, inherit);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.biblia__calendario {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.biblia__cab {
+  padding: 2px 0;
+  color: var(--texto-3);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-align: center;
+}
+
+.biblia__celda {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 3px;
+  aspect-ratio: 1;
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: var(--carbon);
+  color: var(--texto-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.biblia__celda--vacia {
+  background: none;
+  cursor: default;
+}
+
+.biblia__celda--hecha {
+  background: color-mix(in srgb, var(--kin) 12%, var(--carbon));
+  color: var(--texto);
+}
+
+.biblia__celda--hoy {
+  border-color: var(--kin);
+}
+
+.biblia__celda--futura {
+  opacity: 0.45;
+}
+
+.biblia__celda--falta {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--kin) 35%, transparent);
+  border-style: dashed;
+}
+
+.biblia__num {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.biblia__puntos {
+  display: flex;
+  gap: 3px;
+  min-height: 6px;
+}
+
+.biblia__punto {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--texto-3);
+}
+
+.biblia__punto--leido {
+  background: var(--leido);
+}
+
+.biblia__punto--orado {
+  background: var(--orado);
+}
+
+.biblia__leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.biblia__leyenda .biblia__punto {
+  margin-left: 6px;
+}
+
+.biblia__ley-falta {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-left: 6px;
+  border: 1px dashed var(--kin);
+  border-radius: 4px;
+}
+
+.biblia__resumen {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.biblia__resumen li {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--linea-suave);
+  font-size: 14px;
+}
+
+.biblia__resumen strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.biblia__progreso {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 8px;
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.biblia__progreso .biblia__barra {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+/* La tarjeta de Hoy: ir al apartado y marcar sin entrar. */
+.hoy-biblia {
+  cursor: default;
+}
+
+.hoy-biblia__ir {
+  display: grid;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hoy-biblia__casillas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.hoy-biblia__casilla {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--linea-suave);
+  border-radius: 999px;
+  background: var(--negro);
+  color: var(--texto-2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.hoy-biblia__casilla[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--kin) 45%, transparent);
+  background: color-mix(in srgb, var(--kin) 14%, var(--carbon));
+  color: var(--texto);
+}
+
+.hoy-biblia--hecha .hoy-tarjeta__valor {
+  color: var(--texto-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .biblia__casilla,
+  .hoy-biblia__casilla {
+    transition: none;
+  }
+}
+
+.biblia__plan-etiqueta {
+  margin: 0;
+  color: var(--texto-3);
+  font-size: 12.5px;
+}
+
+.biblia__sobre {
+  margin: 0;
+}
+
+.biblia__crear .biblia__fechas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px 14px;
+}
+
+.biblia__crear .biblia__fechas > .gasto__etiqueta:not(.biblia__con-fin) {
+  display: grid;
+  gap: 4px;
+  flex: 0 1 190px;
+}
+
+.biblia__crear .biblia__fechas .campo {
+  width: 100%;
+}
+
+.biblia__con-fin {
+  flex: 1 1 100%;
+  order: 3;
+  padding-bottom: 0;
+}
