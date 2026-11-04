@@ -283,7 +283,7 @@ export function coleccionClaves({ leer, guardar, borrar, despues }) {
   };
 }
 
-// Gastos: cada gasto (m:) y cada fijo (f:) por separado, y el presupuesto aparte;
+// Gastos: cada gasto o ingreso (m:) y cada fijo (f:) por separado, y el presupuesto y el saldo aparte;
 // así dos dispositivos pueden apuntar a la vez sin pisarse.
 export function coleccionGastos({ leer, guardar, normalizar = (d) => d, despues }) {
   return {
@@ -291,7 +291,7 @@ export function coleccionGastos({ leer, guardar, normalizar = (d) => d, despues 
       const d = await leer();
       const mapa = new Map();
       if (!d || typeof d !== 'object') return mapa;
-      const base = { presupuesto: d.presupuesto ?? 0 };
+      const base = { presupuesto: d.presupuesto ?? 0, saldo: d.saldo ?? null };
       mapa.set('base', { firma: comoTexto(base), valor: comoTexto(base) });
       for (const m of d.movimientos ?? []) if (m?.id) mapa.set(`m:${m.id}`, { firma: comoTexto(m), valor: comoTexto(m) });
       for (const f of d.fijos ?? []) if (f?.id) mapa.set(`f:${f.id}`, { firma: comoTexto(f), valor: comoTexto(f) });
@@ -300,11 +300,11 @@ export function coleccionGastos({ leer, guardar, normalizar = (d) => d, despues 
     firma: (v) => v,
     async aplicar(cambios) {
       const d = (await leer()) ?? {};
-      let base = { presupuesto: d.presupuesto ?? 0 };
+      let base = { presupuesto: d.presupuesto ?? 0, saldo: d.saldo ?? null };
       const movimientos = new Map((d.movimientos ?? []).filter((m) => m?.id).map((m) => [m.id, m]));
       const fijos = new Map((d.fijos ?? []).filter((f) => f?.id).map((f) => [f.id, f]));
       for (const { id, valor } of cambios) {
-        if (id === 'base') base = valor === null ? { presupuesto: 0 } : JSON.parse(valor);
+        if (id === 'base') base = valor === null ? { presupuesto: 0, saldo: null } : JSON.parse(valor);
         else if (id.startsWith('m:')) valor === null ? movimientos.delete(id.slice(2)) : movimientos.set(id.slice(2), JSON.parse(valor));
         else if (id.startsWith('f:')) valor === null ? fijos.delete(id.slice(2)) : fijos.set(id.slice(2), JSON.parse(valor));
       }

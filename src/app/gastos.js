@@ -5,10 +5,22 @@
 import { icono } from './iconos.js';
 import {
   CATEGORIAS,
+  CATEGORIAS_INGRESO,
+  esCategoriaIngreso,
+  adivinarCategoria,
+  adivinarIngreso,
+  ponerSaldo,
+  apuntarMovimiento,
+  fijoQueEs,
+  prevision,
+  serieBalance,
+  saldoAlFinal,
+  totalIngresosFijosAlMes,
   FRECUENCIAS,
   DIAS_SEMANA,
   categoria,
   euros,
+  aprox,
   fechaISO,
   mesDe,
   nombreMes,
@@ -17,7 +29,6 @@ import {
   interpretarGasto,
   leerImporte,
   normalizarGastos,
-  anadirMovimiento,
   editarMovimiento,
   borrarMovimiento,
   anadirFijo,
@@ -28,7 +39,6 @@ import {
   cambiarOcurrencia,
   ponerPresupuesto,
   resumenMes,
-  historico,
   totalFijosAlMes,
   cuandoFijo,
   proximaFecha,
@@ -49,6 +59,13 @@ function diaLegible(fecha, hoy) {
   if (fecha === sumarDias(hoy, 1)) return 'Mañana';
   const [a, m, d] = fecha.split('-').map(Number);
   return mayuscula(new Date(a, m - 1, d).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' }));
+}
+// «+420», «−1,2k»: para la gráfica, donde cabe poco.
+function corto(centimos, { signo = false } = {}) {
+  const e = Math.round(centimos / 100);
+  const abs = Math.abs(e);
+  const texto = abs >= 10000 ? `${Math.round(abs / 1000)}k` : abs >= 1000 ? `${(abs / 1000).toFixed(1).replace('.', ',').replace(',0', '')}k` : String(abs);
+  return `${e < 0 ? '−' : signo && e > 0 ? '+' : ''}${texto}`;
 }
 const fechaCorta = (fecha) => {
   const [, m, d] = fecha.split('-').map(Number);
@@ -84,7 +101,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
   // Lo que está abierto para editar: el id de un gasto, de un fijo («f…») o «nuevo-fijo».
   let abierto = null;
   // Lo que el usuario elige a mano en la línea rápida (manda sobre lo que se adivina).
-  let elegido = { categoria: null, fecha: null, repite: null, frecuencia: 'mensual', dia: null };
+  let elegido = { categoria: null, fecha: null, repite: null, frecuencia: 'mensual', dia: null, tipo: null };
   let deshacer = null;
   let temporizadorAviso = null;
 
@@ -168,7 +185,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     const texto = contenedor.querySelector('#gastos-texto');
     texto.addEventListener('input', () => {
       // Un texto nuevo vuelve a adivinar desde cero.
-      if (!texto.value.trim()) elegido = { categoria: null, fecha: null, repite: null, frecuencia: 'mensual', dia: null };
+      if (!texto.value.trim()) elegido = { categoria: null, fecha: null, repite: null, frecuencia: 'mensual', dia: null, tipo: null };
       pintarPrevia();
     });
     contenedor.querySelector('#gastos-rapido').addEventListener('submit', (e) => {
@@ -207,8 +224,9 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
   function pintarCifra(r) {
     const actual = mesDe(hoy);
     const futuro = mes > actual;
+    const p = prevision(datos, mes, hoy);
     const etiqueta = futuro ? `previsto para ${nombreMes(mes, { corto: true })}` : mes === actual ? 'gastado este mes' : `gastado en ${nombreMes(mes, { corto: true })}`;
-    const cifra = futuro ? r.previsto : r.gastado;
+    const cifra = futuro ? p.gastos : r.gastado;
     const anterior = resumenMes(datos, sumarMeses(mes, -1), hoy);
     let comparacion = '';
     if (!futuro && anterior.previsto && mes !== actual) {
@@ -217,9 +235,21 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     }
     const detalle = [
       r.pendiente && !futuro ? `+ ${euros(r.pendiente, { redondo: true })} de fijos por pagar` : '',
-      r.pendiente && !futuro ? `previsto ${euros(r.previsto, { redondo: true })}` : '',
+      // A fin de mes: lo previsto más lo que falta del día a día (según tus meses anteriores).
+      mes === actual && (r.pendiente || p.estimado) ? `a fin de mes, ~${aprox(p.gastos)}` : '',
+      futuro && p.motivo ? `${p.factor > 1 ? 'más' : 'menos'} de lo normal: ${p.motivo}` : '',
       comparacion,
     ].filter(Boolean);
+    // Ingresos y ahorro: lo real en los meses pasados; lo previsto en este y los que vienen.
+    const ingresos = futuro || mes === actual ? p.ingresos : r.ingresos;
+    const ahorro = futuro || mes === actual ? p.ahorro : r.ingresos - r.previsto;
+    const balance = ingresos
+      ? `<p class="gastos__balance">Ingresos <strong class="gastos__mas">+${escapar(mes < actual ? euros(ingresos, { redondo: true }) : aprox(ingresos))}</strong> · ${
+          mes < actual ? (ahorro >= 0 ? 'ahorraste' : 'gastaste de más') : ahorro >= 0 ? 'ahorrarás ~' : 'gastarás de más ~'
+        }<strong class="${ahorro >= 0 ? 'gastos__mas' : 'gastos__menos'}">${escapar(mes < actual ? euros(Math.abs(ahorro), { redondo: true }) : aprox(Math.abs(ahorro)))}</strong></p>`
+      : '';
+    const saldo = saldoAlFinal(datos, mes, hoy);
+    const lineaSaldo = saldo !== null && mes >= actual ? `<p class="gastos__balance">Saldo a fin de mes <strong>~${escapar(aprox(saldo))}</strong></p>` : '';
     let presupuesto = '';
     if (r.presupuesto) {
       const pagado = Math.min(100, (r.gastado / r.presupuesto) * 100);
@@ -234,15 +264,14 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
             ? `Te pasas <strong>${euros(-r.disponible, { redondo: true })}</strong> de tu presupuesto de ${euros(r.presupuesto, { redondo: true })}`
             : `Te quedan <strong>${euros(r.disponible, { redondo: true })}</strong> de tu presupuesto de ${euros(r.presupuesto, { redondo: true })}${r.pendiente ? ' · ya contados los fijos que faltan' : ''}`
         }</p>`;
-    } else if (!datos.movimientos.length && !datos.fijos.length) {
-      presupuesto = '';
-    } else {
+    } else if (datos.movimientos.length || datos.fijos.length) {
       presupuesto = `<button type="button" class="gastos__enlace" data-ir-presupuesto>Ponte un presupuesto mensual</button>`;
     }
     contenedor.querySelector('#gastos-cifra').innerHTML = `
       <p class="gastos__etiqueta">${escapar(etiqueta)}</p>
-      <p class="gastos__total">${escapar(euros(cifra))}</p>
+      <p class="gastos__total">${futuro ? `~${escapar(aprox(cifra))}` : escapar(euros(cifra))}</p>
       ${detalle.length ? `<p class="gastos__detalle">${escapar(detalle.join(' · '))}</p>` : ''}
+      ${balance}${lineaSaldo}
       ${presupuesto}`;
   }
 
@@ -251,10 +280,16 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
   function interpretacion() {
     const texto = contenedor.querySelector('#gastos-texto')?.value ?? '';
     const i = interpretarGasto(texto, hoy);
-    const repite = elegido.repite ?? Boolean(i.fijo);
+    // Gasto (resta), ingreso (suma) o saldo (lo que hay en la cuenta): lo adivinado o lo que elijas.
+    const tipo = elegido.tipo ?? i.tipo;
+    const ingreso = tipo === 'ingreso';
+    const repite = tipo === 'saldo' ? false : elegido.repite ?? Boolean(i.fijo);
+    const adivinada = ingreso === i.ingreso ? i.categoria : ingreso ? adivinarIngreso(i.concepto) : adivinarCategoria(i.concepto);
     return {
       ...i,
-      categoria: elegido.categoria ?? i.categoria,
+      tipo,
+      ingreso,
+      categoria: elegido.categoria && esCategoriaIngreso(elegido.categoria) === ingreso ? elegido.categoria : adivinada,
       fecha: elegido.fecha ?? i.fecha,
       repite,
       frecuencia: elegido.repite === null && i.fijo ? i.fijo.frecuencia : elegido.frecuencia,
@@ -275,19 +310,38 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     const enFoco = document.activeElement?.closest?.('#gastos-previa') ? document.activeElement.dataset.foco : null;
     caja.hidden = false;
     const ayer = sumarDias(hoy, -1);
+    // Si ya es un fijo (la nómina, el alquiler), se ajusta ese mes en vez de sumarlo otra vez.
+    const yaFijo = i.centimos && !i.repite && i.tipo !== 'saldo' ? fijoQueEs(datos, { concepto: i.concepto || categoria(i.categoria).nombre, categoria: i.categoria, ingreso: i.ingreso, fecha: i.fecha }) : null;
+    const explicacion =
+      i.tipo === 'saldo'
+        ? 'Lo que tienes en la cuenta: no suma ni resta, es desde donde calculo cómo acabas cada mes.'
+        : yaFijo
+        ? yaFijo.centimos === i.centimos
+          ? `Ya cuento «${yaFijo.fijo.concepto}» del ${fechaCorta(yaFijo.fecha)}: no lo sumo otra vez.`
+          : `Es «${yaFijo.fijo.concepto}» del ${fechaCorta(yaFijo.fecha)}: lo dejo en ${euros(i.centimos)} ese mes (normalmente ${euros(yaFijo.centimos)}), sin sumarlo otra vez.`
+        : i.ingreso
+        ? 'Suma a lo que entra este mes.'
+        : '';
+    const titulo = i.tipo === 'saldo' ? 'Saldo de tu cuenta' : i.concepto || categoria(i.categoria).nombre;
     caja.innerHTML = `
       <p class="gastos__entiendo">${
         i.centimos
-          ? `<strong>${escapar(i.concepto || categoria(i.categoria).nombre)}</strong> · ${escapar(euros(i.centimos))} · ${
+          ? `<strong>${escapar(titulo)}</strong> · <span class="${i.ingreso ? 'gastos__mas' : i.tipo === 'gasto' ? 'gastos__resta' : ''}">${i.ingreso ? '+' : i.tipo === 'gasto' ? '−' : ''}${escapar(euros(i.centimos))}</span> · ${
               i.repite ? escapar(textoRepite(i)) : escapar(diaLegible(i.fecha, hoy).toLowerCase())
             }`
-          : 'Escribe también cuánto: «12,50 súper»'
+          : 'Escribe también cuánto: «12,50 súper», «nómina 1.850», «tengo 2.300»'
       }</p>
-      <div class="gastos__categorias" role="group" aria-label="Categoría">
-        ${CATEGORIAS.map(
+      ${explicacion && i.centimos ? `<p class="gastos__explica">${escapar(explicacion)}</p>` : ''}
+      <div class="gastos__tipo" role="group" aria-label="Qué es">
+        <button type="button" class="chip" data-tipo="gasto" aria-pressed="${i.tipo === 'gasto'}" title="Lo que gastas: resta">− Gasto</button>
+        <button type="button" class="chip" data-tipo="ingreso" aria-pressed="${i.tipo === 'ingreso'}" title="Lo que te entra: suma">+ Ingreso</button>
+        <button type="button" class="chip" data-tipo="saldo" aria-pressed="${i.tipo === 'saldo'}" title="Lo que tienes en la cuenta">= Saldo</button>
+      </div>
+      ${i.tipo === 'saldo' ? '' : `<div class="gastos__categorias" role="group" aria-label="Categoría">
+        ${(i.ingreso ? CATEGORIAS_INGRESO : CATEGORIAS).map(
           (c) => `<button type="button" class="gastos__categoria" data-categoria="${c.id}" aria-pressed="${c.id === i.categoria}" style="--c:${c.color}"><span class="gastos__punto"></span>${escapar(c.nombre)}</button>`,
         ).join('')}
-      </div>
+      </div>`}
       <div class="gastos__opciones">
         ${
           i.repite
@@ -301,7 +355,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
                <button type="button" class="chip" data-fecha="${ayer}" aria-pressed="${i.fecha === ayer}">Ayer</button>
                <input class="campo gastos__fecha" type="date" data-foco="fecha" value="${i.fecha}" max="${sumarDias(hoy, 366)}" aria-label="Fecha del gasto">`
         }
-        <button type="button" class="chip gastos__repite" data-repite aria-pressed="${i.repite}">${icono('actualizar', 13)} Se repite</button>
+        ${i.tipo === 'saldo' ? '' : `<button type="button" class="chip gastos__repite" data-repite aria-pressed="${i.repite}">${icono('actualizar', 13)} Se repite</button>`}
       </div>`;
     if (enFoco) caja.querySelector(`[data-foco="${enFoco}"]`)?.focus();
   }
@@ -319,6 +373,10 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.categoria) elegido.categoria = b.dataset.categoria;
+    else if (b.dataset.tipo) {
+      elegido.tipo = b.dataset.tipo;
+      elegido.categoria = null;
+    }
     else if (b.dataset.fecha) elegido.fecha = b.dataset.fecha;
     else if ('repite' in b.dataset) elegido.repite = !interpretacion().repite;
     else return;
@@ -347,26 +405,36 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     error('');
     const campo = contenedor.querySelector('#gastos-texto');
     const concepto = i.concepto || categoria(i.categoria).nombre;
-    if (i.repite) {
+    if (i.tipo === 'saldo') {
+      mes = mesDe(hoy);
+      await guardar(ponerSaldo(datos, i.centimos, i.fecha), { aviso: `Saldo: ${euros(i.centimos)}${i.fecha === hoy ? ' hoy' : ` el ${fechaCorta(i.fecha)}`}`, alDeshacer: (antes) => antes });
+    } else if (i.repite) {
       const [a, m, d] = i.fecha.split('-').map(Number);
       const r = anadirFijo(datos, {
         concepto,
         centimos: i.centimos,
         categoria: i.categoria,
+        ingreso: i.ingreso,
         frecuencia: i.frecuencia,
         dia: i.dia,
         mes: m,
         diaSemana: ((new Date(a, m - 1, d).getDay() + 6) % 7) + 1,
         desde: `${mesDe(i.fecha)}-01`,
       }, hoy);
-      await guardar(r.datos, { aviso: `Gasto fijo: ${concepto} · ${euros(i.centimos)} ${textoRepite(i)}`, alDeshacer: (antes) => antes });
+      await guardar(r.datos, { aviso: `${i.ingreso ? 'Ingreso' : 'Gasto'} fijo: ${concepto} · ${i.ingreso ? '+' : ''}${euros(i.centimos)} ${textoRepite(i)}`, alDeshacer: (antes) => antes });
     } else {
-      const r = anadirMovimiento(datos, { concepto, centimos: i.centimos, categoria: i.categoria, fecha: i.fecha });
-      mes = mesDe(i.fecha);
-      await guardar(r.datos, { aviso: `Apuntado: ${concepto} · ${euros(i.centimos)}`, alDeshacer: (antes) => antes });
+      const { datos: nuevos, resultado } = apuntarMovimiento(datos, { concepto, centimos: i.centimos, categoria: i.categoria, ingreso: i.ingreso, fecha: i.fecha }, hoy);
+      mes = mesDe(resultado.fecha);
+      const aviso =
+        resultado.tipo === 'fijo-ajustado'
+          ? resultado.igual
+            ? `Ya contado: ${resultado.concepto} del ${fechaCorta(resultado.fecha)}`
+            : `${resultado.concepto} de ${nombreMes(mesDe(resultado.fecha), { corto: true })}: ${euros(i.centimos)}`
+          : `${i.ingreso ? 'Ingreso' : 'Gasto'}: ${concepto} · ${i.ingreso ? '+' : '−'}${euros(i.centimos)}`;
+      await guardar(nuevos, { aviso, alDeshacer: (antes) => antes });
     }
     campo.value = '';
-    elegido = { categoria: null, fecha: null, repite: null, frecuencia: 'mensual', dia: null };
+    elegido = { categoria: null, fecha: null, repite: null, frecuencia: 'mensual', dia: null, tipo: null };
     pintarPrevia();
     campo.focus();
   }
@@ -377,16 +445,16 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     const c = categoria(x.categoria);
     const detalle = [
       c.nombre,
-      x.tipo === 'fijo' ? (x.pendiente ? `fijo · se cobra el ${fechaCorta(x.fecha)}` : x.cambiado ? 'fijo · importe de este mes' : 'fijo') : '',
+      x.tipo === 'fijo' ? (x.pendiente ? `fijo · ${x.ingreso ? 'llega' : 'se cobra'} el ${fechaCorta(x.fecha)}` : x.cambiado ? 'fijo · importe de este mes' : 'fijo') : '',
       x.nota,
     ].filter(Boolean);
     const id = x.tipo === 'fijo' ? x.id : x.id;
     return `
-      <li class="gasto${x.pendiente ? ' gasto--pendiente' : ''}${abierto === id ? ' gasto--abierto' : ''}" data-gasto="${escapar(id)}">
+      <li class="gasto${x.pendiente ? ' gasto--pendiente' : ''}${x.ingreso ? ' gasto--ingreso' : ''}${abierto === id ? ' gasto--abierto' : ''}" data-gasto="${escapar(id)}">
         <button type="button" class="gasto__fila" data-abrir="${escapar(id)}" aria-expanded="${abierto === id}">
           <span class="gasto__punto" style="--c:${c.color}" aria-hidden="true">${x.tipo === 'fijo' ? icono('actualizar', 11) : ''}</span>
           <span class="gasto__cuerpo"><span class="gasto__concepto">${escapar(x.concepto)}</span><span class="gasto__detalle">${escapar(detalle.join(' · '))}</span></span>
-          <span class="gasto__importe">${escapar(euros(x.centimos))}</span>
+          <span class="gasto__importe">${x.ingreso ? '+' : ''}${escapar(euros(x.centimos))}</span>
         </button>
         ${abierto === id ? (x.tipo === 'fijo' ? editorOcurrencia(x) : editorMovimiento(x)) : ''}
       </li>`;
@@ -407,23 +475,27 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
           : `<p>Nada apuntado en ${escapar(nombreMes(mes, { corto: true }))}${filtro ? ` en ${escapar(categoria(filtro).nombre)}` : ''}.</p>`
       }</div>`;
     }
-    const porPagar = lista.filter((x) => x.pendiente).sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const pendientes = lista.filter((x) => x.pendiente).sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const porPagar = pendientes.filter((x) => !x.ingreso);
+    const porCobrar = pendientes.filter((x) => x.ingreso);
     const pasados = lista.filter((x) => !x.pendiente);
     const dias = new Map();
     for (const x of pasados) dias.set(x.fecha, [...(dias.get(x.fecha) ?? []), x]);
     const suma = (xs) => xs.reduce((s, x) => s + x.centimos, 0);
+    // El total del día: lo gastado y, si hubo, lo que entró.
+    const totalDia = (xs) => {
+      const g = suma(xs.filter((x) => !x.ingreso));
+      const i = suma(xs.filter((x) => x.ingreso));
+      return [g ? euros(g) : '', i ? `+${euros(i)}` : ''].filter(Boolean).join(' · ');
+    };
+    const grupo = (titulo, xs, total) =>
+      `<div class="gastos__grupo"><p class="gastos__dia"><span>${titulo}</span><span>${escapar(total)}</span></p><ul class="gastos__lista">${xs.map(filaGasto).join('')}</ul></div>`;
     return `
       ${chipFiltro}
-      ${
-        porPagar.length
-          ? `<div class="gastos__grupo"><p class="gastos__dia"><span>Por pagar este mes</span><span>${escapar(euros(suma(porPagar)))}</span></p><ul class="gastos__lista">${porPagar.map(filaGasto).join('')}</ul></div>`
-          : ''
-      }
+      ${porCobrar.length ? grupo('Por cobrar este mes', porCobrar, `+${euros(suma(porCobrar))}`) : ''}
+      ${porPagar.length ? grupo('Por pagar este mes', porPagar, euros(suma(porPagar))) : ''}
       ${[...dias]
-        .map(
-          ([fecha, xs]) =>
-            `<div class="gastos__grupo"><p class="gastos__dia"><span>${escapar(diaLegible(fecha, hoy))}${fecha === hoy || fecha === sumarDias(hoy, -1) ? ` · ${fechaCorta(fecha)}` : ''}</span><span>${escapar(euros(suma(xs)))}</span></p><ul class="gastos__lista">${xs.map(filaGasto).join('')}</ul></div>`,
-        )
+        .map(([fecha, xs]) => grupo(`${escapar(diaLegible(fecha, hoy))}${fecha === hoy || fecha === sumarDias(hoy, -1) ? ` · ${fechaCorta(fecha)}` : ''}`, xs, totalDia(xs)))
         .join('')}
       ${
         r.omitidos.length && !filtro
@@ -432,7 +504,9 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
       }`;
   }
 
-  const opcionesCategoria = (actual) => CATEGORIAS.map((c) => `<option value="${c.id}" ${c.id === actual ? 'selected' : ''}>${escapar(c.nombre)}</option>`).join('');
+  const opciones = (lista, actual) => lista.map((c) => `<option value="${c.id}" ${c.id === actual ? 'selected' : ''}>${escapar(c.nombre)}</option>`).join('');
+  // Gasto o ingreso se decide con la categoría (Nómina, Pagas y extras… son de ingreso).
+  const opcionesCategoria = (actual) => `<optgroup label="Gasto">${opciones(CATEGORIAS, actual)}</optgroup><optgroup label="Ingreso">${opciones(CATEGORIAS_INGRESO, actual)}</optgroup>`;
 
   function editorMovimiento(m) {
     return `
@@ -477,36 +551,47 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
   // ---------- Fijos ----------
 
   function panelFijos() {
-    const activos = datos.fijos.filter((f) => fijoActivo(f, hoy));
-    const baja = datos.fijos.filter((f) => !fijoActivo(f, hoy));
     const ordenar = (xs) =>
       [...xs].sort((a, b) => (proximaFecha(a, hoy)?.fecha ?? '9999').localeCompare(proximaFecha(b, hoy)?.fecha ?? '9999') || a.concepto.localeCompare(b.concepto, 'es'));
+    const activos = datos.fijos.filter((f) => fijoActivo(f, hoy));
+    const gastosFijos = activos.filter((f) => !f.ingreso);
+    const ingresosFijos = activos.filter((f) => f.ingreso);
+    const baja = datos.fijos.filter((f) => !fijoActivo(f, hoy));
     const fila = (f) => {
       const c = categoria(f.categoria);
       const proxima = proximaFecha(f, hoy);
       const detalle = [cuandoFijo(f), fijoActivo(f, hoy) ? (proxima ? `próximo ${fechaCorta(proxima.fecha)}` : '') : `de baja desde el ${fechaCorta(f.hasta)}`];
       return `
-        <li class="gasto${abierto === f.id ? ' gasto--abierto' : ''}${fijoActivo(f, hoy) ? '' : ' gasto--baja'}" data-gasto="${f.id}">
+        <li class="gasto${abierto === f.id ? ' gasto--abierto' : ''}${f.ingreso ? ' gasto--ingreso' : ''}${fijoActivo(f, hoy) ? '' : ' gasto--baja'}" data-gasto="${f.id}">
           <button type="button" class="gasto__fila" data-abrir="${f.id}" aria-expanded="${abierto === f.id}">
             <span class="gasto__punto" style="--c:${c.color}" aria-hidden="true">${icono('actualizar', 11)}</span>
             <span class="gasto__cuerpo"><span class="gasto__concepto">${escapar(f.concepto)}</span><span class="gasto__detalle">${escapar(detalle.filter(Boolean).join(' · '))}</span></span>
-            <span class="gasto__importe">${escapar(euros(f.centimos))}${f.frecuencia !== 'mensual' ? `<small>${escapar(euros(alMes(f), { redondo: true }))}/mes</small>` : ''}</span>
+            <span class="gasto__importe">${f.ingreso ? '+' : ''}${escapar(euros(f.centimos))}${f.frecuencia !== 'mensual' ? `<small>${escapar(euros(alMes(f), { redondo: true }))}/mes</small>` : ''}</span>
           </button>
           ${abierto === f.id ? editorFijo(f) : ''}
         </li>`;
     };
+    const ingresosMes = totalIngresosFijosAlMes(datos, hoy);
     return `
       <div class="gastos__fijos-cabecera">
-        <p><span class="gastos__etiqueta">tus fijos</span><strong>${escapar(euros(totalFijosAlMes(datos, hoy)))}</strong> al mes${activos.length ? ` · ${activos.length} ${activos.length === 1 ? 'gasto' : 'gastos'}` : ''}</p>
+        <p><span class="gastos__etiqueta">tus gastos fijos</span><strong>${escapar(euros(totalFijosAlMes(datos, hoy)))}</strong> al mes${
+          ingresosMes ? ` · ingresos fijos <strong class="gastos__mas gastos__fijos-ingresos">+${escapar(euros(ingresosMes, { redondo: true }))}</strong>` : ''
+        }</p>
         <button type="button" class="boton" data-abrir="nuevo-fijo">${icono('nueva', 15)} Nuevo</button>
       </div>
       ${abierto === 'nuevo-fijo' ? `<div class="gasto gasto--abierto gasto--nuevo">${editorFijo(null)}</div>` : ''}
+      ${ingresosFijos.length ? `<p class="gastos__dia"><span>Ingresos</span><span>+${escapar(euros(ingresosMes))}/mes</span></p><ul class="gastos__lista">${ordenar(ingresosFijos).map(fila).join('')}</ul>` : ''}
       ${
-        activos.length
-          ? `<ul class="gastos__lista">${ordenar(activos).map(fila).join('')}</ul>`
+        gastosFijos.length
+          ? `${ingresosFijos.length ? `<p class="gastos__dia"><span>Gastos</span><span>${escapar(euros(totalFijosAlMes(datos, hoy)))}/mes</span></p>` : ''}<ul class="gastos__lista">${ordenar(gastosFijos).map(fila).join('')}</ul>`
           : abierto === 'nuevo-fijo'
           ? ''
           : `<div class="gastos__vacio"><p><strong>Aquí van los gastos que se repiten</strong>: alquiler o hipoteca, luz, móvil, Netflix, el gimnasio, el seguro del coche…</p><p>Apúntalos una vez y Kitsune los cuenta solos cada mes (o cada año) en su día.</p></div>`
+      }
+      ${
+        !ingresosFijos.length && abierto !== 'nuevo-fijo'
+          ? `<p class="ajuste__ayuda apartado__nota">Apunta también tu nómina (por ejemplo «nómina 1.850 al mes») para ver cuánto ahorras y la previsión de los próximos meses.</p>`
+          : ''
       }
       ${baja.length ? `<p class="gastos__dia"><span>Dados de baja</span></p><ul class="gastos__lista">${baja.map(fila).join('')}</ul>` : ''}`;
   }
@@ -554,9 +639,56 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
 
   // ---------- Resumen ----------
 
+  // La gráfica de ingresos y gastos: los 5 meses anteriores, este y los 3 siguientes (estimados).
+  function graficaBalance() {
+    const serie = serieBalance(datos, hoy);
+    if (!serie.some((m) => m.gastos || m.ingresos)) return '';
+    const maximo = Math.max(1, ...serie.flatMap((m) => [m.gastos, m.ingresos]));
+    const alto = (c) => `${((c / maximo) * 100).toFixed(1)}%`;
+    const conSaldo = serie.some((m) => m.saldo !== null);
+    const conIngresos = serie.some((m) => m.ingresos);
+    const columnas = serie
+      .map((m) => {
+        const nombre = MESES_CORTOS[Number(m.mes.slice(5)) - 1];
+        const parteEstimada = m.gastos ? (m.tipo === 'futuro' ? 100 : (m.estimado / m.gastos) * 100) : 0;
+        const titulo = `${mayuscula(nombreMes(m.mes))}${m.tipo === 'futuro' ? ' (estimado)' : m.tipo === 'actual' ? ' (en curso)' : ''}: gastos ${euros(m.gastos)}${m.ingresos ? `, ingresos ${euros(m.ingresos)}, ${m.ahorro >= 0 ? 'ahorro' : 'déficit'} ${euros(Math.abs(m.ahorro))}` : ''}${m.motivo && m.tipo !== 'pasado' ? ` · ${m.motivo}` : ''}`;
+        return `<button type="button" class="balance__mes balance__mes--${m.tipo}${m.mes === mes ? ' balance__mes--visto' : ''}" data-ir-mes="${m.mes}" title="${escapar(titulo)}" aria-label="${escapar(titulo)}">
+          <span class="balance__barras">
+            ${conIngresos ? `<span class="balance__barra balance__barra--ingreso" style="height:${alto(m.ingresos)}"></span>` : ''}
+            <span class="balance__barra balance__barra--gasto" style="height:${alto(m.gastos)}"><span class="balance__estimado" style="height:${parteEstimada.toFixed(1)}%"></span></span>
+          </span>
+          <span class="balance__nombre">${nombre}${m.tipo === 'futuro' && m.motivo ? '<i class="balance__marca" aria-hidden="true"></i>' : ''}</span>
+          ${conIngresos ? `<span class="balance__ahorro ${m.ahorro >= 0 ? 'gastos__mas' : 'gastos__menos'}">${corto(m.ahorro, { signo: true })}</span>` : ''}
+          ${conSaldo ? `<span class="balance__saldo">${m.saldo === null ? '·' : corto(m.saldo)}</span>` : ''}
+        </button>`;
+      })
+      .join('');
+    // Lo que viene: el mes que viene, con su porqué.
+    const siguiente = serie.find((m) => m.tipo === 'futuro');
+    const fijos = siguiente.fijos;
+    const variable = siguiente.diaADia;
+    const porque = siguiente.motivo
+      ? siguiente.factor > 1
+        ? `, +${Math.round((siguiente.factor - 1) * 100)} % por ${siguiente.motivo}`
+        : `, −${Math.round((1 - siguiente.factor) * 100)} %: ${siguiente.motivo}`
+      : '';
+    const texto = `<strong>${mayuscula(nombreMes(siguiente.mes, { corto: true }))}</strong>: estimo <strong>~${aprox(siguiente.gastos)}</strong> de gastos (${aprox(fijos)} fijos${
+      variable ? ` + ~${aprox(variable)} del día a día${porque}` : ''
+    }${siguiente.añoPasado ? `, contando lo que gastaste el ${nombreMes(siguiente.mes, { corto: true })} pasado` : ''})${
+      siguiente.ingresos ? ` e ingresos de ${euros(siguiente.ingresos, { redondo: true })}: ${siguiente.ahorro >= 0 ? `ahorrarías <strong class="gastos__mas">~${aprox(siguiente.ahorro)}</strong>` : `te faltarían <strong class="gastos__menos">~${aprox(-siguiente.ahorro)}</strong>`}` : ''
+    }.${siguiente.saldo !== null ? ` Acabarías el mes con ~${aprox(siguiente.saldo)} en la cuenta.` : ''}${
+      !siguiente.fiable ? ' <span class="gastos__nota-fina">Con pocos meses apuntados la estimación es aproximada; mejora sola con el tiempo.</span>' : ''
+    }`;
+    return `
+      <p class="gastos__dia"><span>Ingresos y gastos</span><span>${conIngresos ? 'por mes' : ''}</span></p>
+      <p class="balance__leyenda">${conIngresos ? '<i class="balance__ley balance__ley--ingreso"></i>ingresos ' : ''}<i class="balance__ley balance__ley--gasto"></i>gastos <i class="balance__ley balance__ley--estimado"></i>estimado <i class="balance__marca balance__marca--ley"></i>época especial</p>
+      <div class="balance" style="--columnas:${serie.length}" role="group" aria-label="Ingresos y gastos por mes, con la previsión de los próximos">${columnas}</div>
+      ${conIngresos || conSaldo ? `<p class="balance__pie">Debajo de cada mes: ${conIngresos ? '<span class="gastos__mas">lo que ahorras</span>' : ''}${conIngresos && conSaldo ? ' y ' : ''}${conSaldo ? 'el saldo con que acabas' : ''} (en euros; k = mil).</p>` : ''}
+      <p class="gastos__prevision">${texto}</p>
+      ${conIngresos ? '' : '<p class="ajuste__ayuda">Apunta tu nómina («nómina 1.850 al mes») para ver cuánto ahorras cada mes.</p>'}`;
+  }
+
   function panelResumen(r) {
-    const meses = historico(datos, mes, 6, hoy);
-    const maximo = Math.max(1, ...meses.map((m) => m.total));
     const categorias = r.porCategoria.length
       ? `<ul class="gastos__categorias-resumen">${r.porCategoria
           .map(
@@ -568,21 +700,24 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
           )
           .join('')}</ul>`
       : `<p class="gastos__vacio">Sin gastos en ${escapar(nombreMes(mes, { corto: true }))}.</p>`;
+    const saldo = datos.saldo;
     return `
+      ${graficaBalance()}
       <p class="gastos__dia"><span>En qué se va ${mes === mesDe(hoy) ? 'este mes' : `en ${escapar(nombreMes(mes, { corto: true }))}`}</span><span>${escapar(euros(r.previsto))}</span></p>
       ${categorias}
-      <p class="gastos__dia"><span>Últimos 6 meses</span><span>media ${escapar(euros(Math.round(meses.reduce((s, m) => s + m.total, 0) / meses.length), { redondo: true }))}</span></p>
-      <div class="gastos__meses" role="group" aria-label="Gasto de los últimos meses">
-        ${meses
-          .map(
-            (m) => `<button type="button" class="gastos__mes-barra${m.mes === mes ? ' gastos__mes-barra--actual' : ''}" data-ir-mes="${m.mes}" title="${escapar(`${mayuscula(nombreMes(m.mes))}: ${euros(m.total)}`)}">
-              <span class="gastos__mes-cifra">${m.total ? escapar(euros(m.total, { redondo: true }).replace(/\s?€/, '')) : ''}</span>
-              <span class="gastos__mes-columna"><span style="height:${((m.total / maximo) * 100).toFixed(1)}%"></span></span>
-              <span class="gastos__mes-nombre">${MESES_CORTOS[Number(m.mes.slice(5)) - 1]}</span>
-            </button>`,
-          )
-          .join('')}
-      </div>
+      <form class="gastos__ajuste" data-saldo>
+        <label for="gastos-saldo"><span class="gastos__etiqueta">saldo de tu cuenta</span>
+          <span class="ajuste__ayuda">${
+            saldo
+              ? `Apuntaste ${escapar(euros(saldo.centimos))} el ${escapar(fechaCorta(saldo.fecha))}. Ponlo al día cuando quieras: desde ahí calculo cómo acabas cada mes.`
+              : 'Lo que tienes hoy en el banco. Con él calculo cómo acabarás cada mes.'
+          }</span></label>
+        <div class="formulario__fila">
+          <input class="campo" id="gastos-saldo" name="saldo" inputmode="decimal" placeholder="por ejemplo 2.340,50" value="">
+          <button type="submit" class="boton">${saldo ? 'Actualizar' : 'Guardar'}</button>
+          ${saldo ? '<button type="button" class="boton" data-quitar-saldo>Quitar</button>' : ''}
+        </div>
+      </form>
       <form class="gastos__ajuste" data-presupuesto>
         <label for="gastos-presupuesto"><span class="gastos__etiqueta">presupuesto mensual</span>
           <span class="ajuste__ayuda">Lo que quieres gastar como mucho cada mes, fijos incluidos.</span></label>
@@ -668,6 +803,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
       });
     }
     if ('quitarPresupuesto' in d) return guardar(ponerPresupuesto(datos, 0), { aviso: 'Sin presupuesto' });
+    if ('quitarSaldo' in d) return guardar(ponerSaldo(datos, null, hoy), { aviso: 'Sin saldo', alDeshacer: (antes) => antes });
     if (d.csv) {
       const desde = d.csv === 'mes' ? mes : `${mes.slice(0, 4)}-01`;
       const hasta = d.csv === 'mes' ? mes : `${mes.slice(0, 4)}-12`;
@@ -709,6 +845,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
         concepto: form.concepto.value,
         centimos: importeDe(form.importe.value),
         categoria: form.categoria.value,
+        ingreso: esCategoriaIngreso(form.categoria.value),
         fecha: form.fecha.value,
         nota: form.nota.value,
       });
@@ -728,17 +865,26 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
         concepto: form.concepto.value,
         centimos: importeDe(form.importe.value),
         categoria: form.categoria.value,
+        ingreso: esCategoriaIngreso(form.categoria.value),
         frecuencia: form.frecuencia.value,
         dia: Math.min(31, Math.max(1, Number(form.dia.value) || 1)),
         mes: Number(form.mes.value),
         diaSemana: Number(form.diaSemana.value),
         desde: form.desde.value || `${mesDe(hoy)}-01`,
       };
-      if (!campos.concepto.trim()) throw new Error('Pon qué es: alquiler, Netflix…');
+      if (!campos.concepto.trim()) throw new Error('Pon qué es: alquiler, Netflix, nómina…');
       const id = form.dataset.editarFijo;
       abierto = null;
       if (id) return guardar(editarFijo(datos, id, campos, hoy), { aviso: 'Guardado' });
-      return guardar(anadirFijo(datos, campos, hoy).datos, { aviso: `Gasto fijo: ${campos.concepto.trim()} · ${euros(campos.centimos)}`, alDeshacer: (antes) => antes });
+      return guardar(anadirFijo(datos, campos, hoy).datos, { aviso: `${campos.ingreso ? 'Ingreso' : 'Gasto'} fijo: ${campos.concepto.trim()} · ${euros(campos.centimos)}`, alDeshacer: (antes) => antes });
+    }
+    if ('saldo' in form.dataset) {
+      const texto = form.saldo.value.trim();
+      if (!texto) throw new Error('Escribe lo que tienes hoy en la cuenta, por ejemplo 2.340,50.');
+      // Saldo en negativo («-120»): también vale.
+      const negativo = /^[-−]/.test(texto);
+      const centimos = importeDe(texto.replace(/^[-−]\s*/, ''));
+      return guardar(ponerSaldo(datos, negativo ? -centimos : centimos, hoy), { aviso: `Saldo: ${euros(negativo ? -centimos : centimos)} hoy` });
     }
     if ('presupuesto' in form.dataset) {
       const texto = form.presupuesto.value.trim();

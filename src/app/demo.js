@@ -992,6 +992,10 @@ function gastosDemo(ahora = new Date()) {
     fijo('fdemo05', 'Netflix', 13.99, 'suscripciones', 18),
     fijo('fdemo06', 'Spotify', 10.99, 'suscripciones', 22),
     fijo('fdemo07', 'Seguro del coche', 412, 'facturas', 15, { frecuencia: 'anual', mes: 3 }),
+    // Lo que entra: la nómina el 28 y las pagas extra de junio y diciembre.
+    fijo('fdemo08', 'Nómina', 1850, 'nomina', 28, { ingreso: true }),
+    fijo('fdemo09', 'Paga extra', 1850, 'extra', 20, { ingreso: true, frecuencia: 'anual', mes: 12 }),
+    fijo('fdemo10', 'Paga extra', 1850, 'extra', 20, { ingreso: true, frecuencia: 'anual', mes: 6 }),
   ];
   const sueltos = [
     ['Mercadona', 'super', [62.4, 48.15, 71.3, 55.8]],
@@ -1017,5 +1021,8 @@ function gastosDemo(ahora = new Date()) {
       });
     }
   }
-  return { movimientos, fijos, presupuesto: 160000 };
+  const anterior = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 12);
+  movimientos.push({ id: 'gdemoing1', fecha: fecha(anterior), centimos: 4000, concepto: 'Bizum de Lucía', categoria: 'ingresos', ingreso: true, creado: n + 1 });
+  // Lo que hay hoy en la cuenta.
+  return { movimientos, fijos, presupuesto: 160000, saldo: { centimos: 324050, fecha: fecha(ahora) } };
 }

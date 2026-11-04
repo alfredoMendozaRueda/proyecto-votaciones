@@ -1,7 +1,7 @@
 import { icono } from './iconos.js';
 import { markdownAHtml } from './markdown.js';
 import { cuandoLegible } from './fechas.js';
-import { normalizarGastos, borrarFijo, borrarMovimiento } from '../compartido/gastos.js';
+import { normalizarGastos, deshacerApunte } from '../compartido/gastos.js';
 
 const PEDIR_PULSO = 'Prepárame el pulso de hoy';
 const CLAVE_PULSO = 'kitsune.pulso';
@@ -12,6 +12,7 @@ const ETIQUETAS_HERRAMIENTA = {
   crear_recordatorio: 'Apuntando el recordatorio…',
   apuntar_gasto: 'Apuntando el gasto…',
   ver_gastos: 'Mirando tus gastos…',
+  poner_saldo: 'Apuntando tu saldo…',
   ver_recordatorios: 'Mirando tus recordatorios…',
   borrar_recordatorio: 'Borrando el recordatorio…',
   web_search: 'Buscando en internet…',
@@ -457,21 +458,32 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
         notaRecordatorio(e.recordatorio);
         break;
       case 'gasto': {
+        // Qué ha apuntado Kitsune, dicho claro: lo que resta, lo que suma o lo que tienes.
         const g = e.gasto;
+        const etiqueta =
+          g.tipo === 'saldo'
+            ? 'Saldo de tu cuenta'
+            : g.tipo === 'fijo-ajustado'
+            ? `${g.ingreso ? 'Ingreso' : 'Gasto'} fijo de este mes${g.igual ? ' · ya contado' : ' · ajustado'}`
+            : g.tipo === 'fijo'
+            ? `${g.ingreso ? 'Ingreso' : 'Gasto'} fijo · ${g.cuando.toLowerCase()}`
+            : `${g.ingreso ? 'Ingreso' : 'Gasto'} · ${g.categoria}`;
+        const signo = g.tipo === 'saldo' ? '= ' : g.ingreso ? '+' : '−';
         nota({
           simbolo: 'cartera',
-          etiqueta: g.tipo === 'fijo' ? `Gasto fijo · ${g.cuando.toLowerCase()}` : `Gasto · ${g.categoria}`,
-          texto: `${g.concepto} · ${g.importe}`,
-          deshacer: api.gastos
-            ? {
-                etiqueta: 'Deshacer',
-                hecho: 'Quitado',
-                accion: async () => {
-                  const datos = normalizarGastos((await api.gastos.leer()) ?? {});
-                  await api.gastos.guardar(g.tipo === 'fijo' ? borrarFijo(datos, g.id) : borrarMovimiento(datos, g.id));
-                },
-              }
-            : null,
+          etiqueta,
+          texto: g.tipo === 'saldo' ? `${signo}${g.importe}${g.fin_de_mes ? ` · a fin de mes ~${g.fin_de_mes}` : ''}` : `${g.concepto} · ${signo}${g.importe}`,
+          deshacer:
+            api.gastos && !(g.tipo === 'fijo-ajustado' && g.igual)
+              ? {
+                  etiqueta: 'Deshacer',
+                  hecho: 'Deshecho',
+                  accion: async () => {
+                    const datos = normalizarGastos((await api.gastos.leer()) ?? {});
+                    await api.gastos.guardar(deshacerApunte(datos, g));
+                  },
+                }
+              : null,
         });
         break;
       }

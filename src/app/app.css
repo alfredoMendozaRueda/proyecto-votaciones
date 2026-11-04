@@ -7690,3 +7690,257 @@ p.gastos__dia {
     animation: none;
   }
 }
+
+/* Gastos: ingresos, saldo y previsión. */
+.gastos {
+  --ingreso: #8fcf9e;
+  --ingreso-hondo: #3f6b4a;
+}
+
+.gastos__mas {
+  color: var(--ingreso);
+}
+
+.gastos__menos {
+  color: var(--rojo-vivo);
+}
+
+.gastos__resta {
+  color: var(--texto);
+}
+
+.gasto--ingreso .gasto__importe {
+  color: var(--ingreso);
+}
+
+.gastos__balance {
+  margin: 1px 0 0;
+  font-size: 12.5px;
+  color: var(--texto-2);
+}
+
+.gastos__balance strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.gastos__fijos-ingresos {
+  font-family: inherit !important;
+  font-size: 14px !important;
+}
+
+.gastos__tipo {
+  display: flex;
+  gap: 5px;
+}
+
+.gastos__tipo .chip {
+  flex: 1;
+  padding: 6px 8px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.gastos__tipo .chip[aria-pressed='true'] {
+  border-color: var(--acento);
+  background: var(--acento-velo);
+  color: var(--texto);
+}
+
+.gastos__tipo .chip[data-tipo='ingreso'][aria-pressed='true'] {
+  border-color: var(--ingreso-hondo);
+  background: color-mix(in srgb, var(--ingreso) 14%, transparent);
+  color: var(--ingreso);
+}
+
+.gastos__tipo .chip[data-tipo='saldo'][aria-pressed='true'] {
+  border-color: var(--linea);
+  background: var(--carbon-3);
+}
+
+.gastos__explica {
+  margin: -2px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--texto-3);
+}
+
+/* La gráfica de ingresos y gastos. */
+.balance {
+  display: grid;
+  grid-template-columns: repeat(var(--columnas, 9), minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px 0 0;
+}
+
+.balance__mes {
+  display: grid;
+  grid-template-rows: 116px auto auto auto;
+  gap: 3px;
+  min-width: 0;
+  padding: 4px 1px 3px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--texto-3);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.balance__mes:hover,
+.balance__mes--visto {
+  background: var(--carbon);
+}
+
+.balance__mes:focus-visible {
+  outline: 2px solid var(--rojo);
+  outline-offset: 1px;
+}
+
+.balance__barras {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  height: 100%;
+}
+
+.balance__barra {
+  position: relative;
+  width: 42%;
+  max-width: 14px;
+  min-height: 2px;
+  overflow: hidden;
+  border-radius: 4px 4px 2px 2px;
+  transition: height 0.35s ease;
+}
+
+.balance__barra--ingreso {
+  background: var(--ingreso);
+  opacity: 0.85;
+}
+
+.balance__barra--gasto {
+  background: var(--acento);
+}
+
+/* La parte estimada (lo que falta del mes o un mes que viene), rayada. */
+.balance__estimado {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  background: repeating-linear-gradient(-45deg, var(--acento-hondo) 0 3px, var(--negro) 3px 6px);
+}
+
+.balance__mes--futuro .balance__barra--ingreso {
+  opacity: 0.45;
+}
+
+.balance__nombre {
+  position: relative;
+  font-size: 11px;
+  text-align: center;
+}
+
+.balance__mes--actual .balance__nombre {
+  color: var(--texto);
+  font-weight: 600;
+}
+
+/* Un mes que viene con algo especial (Navidad, verano…): un punto dorado. */
+.balance__marca {
+  position: absolute;
+  top: -2px;
+  margin-left: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--kin, var(--acento-vivo));
+}
+
+.balance__ahorro,
+.balance__saldo {
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.balance__saldo {
+  color: var(--texto-2);
+}
+
+.balance__pie {
+  margin: 2px 2px 0;
+  font-size: 11.5px;
+  color: var(--texto-3);
+}
+
+.balance__leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  margin: -2px 2px 6px;
+  font-size: 11.5px;
+  color: var(--texto-3);
+}
+
+.balance__marca--ley {
+  position: static;
+  display: inline-block;
+  margin-left: 4px;
+}
+
+.balance__ley {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 4px;
+  border-radius: 2px;
+}
+
+.balance__ley--ingreso {
+  background: var(--ingreso);
+}
+
+.balance__ley--gasto {
+  background: var(--acento);
+}
+
+.balance__ley--estimado {
+  background: repeating-linear-gradient(-45deg, var(--acento-hondo) 0 2px, var(--negro) 2px 4px);
+}
+
+.gastos__prevision {
+  margin: 8px 0 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--carbon);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--texto-2);
+}
+
+.gastos__prevision strong {
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
+
+.gastos__prevision strong.gastos__mas {
+  color: var(--ingreso);
+}
+
+.gastos__prevision strong.gastos__menos {
+  color: var(--rojo-vivo);
+}
+
+.gastos__nota-fina {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--texto-3);
+}
