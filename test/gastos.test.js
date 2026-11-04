@@ -34,6 +34,12 @@ import {
   totalIngresosFijosAlMes,
   apuntarMovimiento,
   deshacerApunte,
+  cuentaDeTexto,
+  tipoDeTexto,
+  saldosAlFinal,
+  parteEfectivo,
+  anadirTraspaso,
+  borrarTraspaso,
 } from '../src/compartido/gastos.js';
 import { coleccionGastos, Sincronizador, COLECCIONES_SINCRO } from '../src/compartido/sincro.js';
 import { gruposParaGroq, ConversacionClaude } from '../src/compartido/claude.js';
@@ -169,9 +175,9 @@ test('gastos: datos raros se limpian; el CSV se abre bien en Excel', () => {
   assert.equal(d.fijos[0].dia, 1, 'un día imposible vuelve al del alta');
   assert.equal(d.movimientos.find((m) => m.concepto.startsWith('Con')).categoria, 'otros');
   const csv = aCSV(d, '2026-11', '2026-11', HOY);
-  assert.ok(csv.startsWith('﻿Fecha;Concepto;Categoría;Tipo;Importe\r\n'));
-  assert.match(csv, /2026-11-01;Luz;Facturas;Gasto fijo;-60,00/);
-  assert.match(csv, /2026-11-05;"Con ; y ""comillas""";Otros;Gasto;-19,99/);
+  assert.ok(csv.startsWith('﻿Fecha;Concepto;Categoría;Tipo;Cuenta;Importe\r\n'));
+  assert.match(csv, /2026-11-01;Luz;Facturas;Gasto fijo;Banco;-60,00/);
+  assert.match(csv, /2026-11-05;"Con ; y ""comillas""";Otros;Gasto;Banco;-19,99/);
   const ia = resumenParaIA(d, '2026-11', HOY);
   assert.equal(ia.gastado, '82,49 €');
   assert.deepEqual(ia.gastos_fijos, ['Luz: 60,00 € · cada mes, el día 1']);
@@ -182,7 +188,7 @@ test('gastos: el almacén que usa el chat apunta puntuales y fijos y los quita',
   let cambios = 0;
   const g = crearAlmacenGastos({ leer: async () => guardado, guardar: async (d) => (guardado = structuredClone(d)), alCambiar: () => cambios++ });
   const a = await g.apuntar({ concepto: 'Gasolina', importe: 58.4, fecha: '2026-11-13' }, HOY);
-  assert.deepEqual({ ...a, id: undefined }, { tipo: 'puntual', ingreso: false, id: undefined, concepto: 'Gasolina', centimos: 5840, importe: '58,40 €', categoria: 'Transporte', fecha: '2026-11-13' });
+  assert.deepEqual({ ...a, id: undefined }, { tipo: 'puntual', ingreso: false, id: undefined, concepto: 'Gasolina', centimos: 5840, importe: '58,40 €', categoria: 'Transporte', fecha: '2026-11-13', cuenta: 'banco' });
   const b = await g.apuntar({ concepto: 'Spotify', importe: 10.99, frecuencia: 'mensual', dia: 22 }, HOY);
   assert.equal(b.tipo, 'fijo');
   assert.equal(b.cuando, 'Cada mes, el día 22');
@@ -272,7 +278,7 @@ test('gastos en el chat: «apunta 12,50 del súper» llama a apuntar_gasto y avi
   await c.enviar('apunta 12,50 del súper');
   assert.ok(peticiones[0].tools.some((t) => t.function.name === 'apuntar_gasto'));
   assert.ok(peticiones[0].tools.some((t) => t.function.name === 'ver_gastos'));
-  assert.deepEqual(apuntados, [{ concepto: 'Súper', importe: 12.5, ingreso: false, categoria: 'super', fecha: undefined, frecuencia: undefined, dia: undefined }]);
+  assert.deepEqual(apuntados, [{ concepto: 'Súper', importe: 12.5, ingreso: false, categoria: 'super', fecha: undefined, frecuencia: undefined, dia: undefined, cuenta: 'banco' }]);
   assert.deepEqual(eventos.find((e) => e.tipo === 'gasto')?.gasto.concepto, 'Súper');
   assert.match(peticiones[0].messages[0].content, /Llevas sus cuentas.*TIENE.*poner_saldo.*ENTRA.*ingreso=true.*GASTA/s);
 });
@@ -305,7 +311,7 @@ test('ingresos: la nómina y lo que te llega se reconocen y se cuentan aparte', 
   assert.deepEqual(r.porCategoria.map((c) => c.id), ['casa', 'super']);
   assert.equal(totalFijosAlMes(d, HOY), 80000);
   assert.equal(totalIngresosFijosAlMes(d, HOY), 185000);
-  assert.match(aCSV(d, '2026-11', '2026-11', HOY), /2026-11-28;Nómina;Nómina;Ingreso fijo \(por cobrar\);1850,00/);
+  assert.match(aCSV(d, '2026-11', '2026-11', HOY), /2026-11-28;Nómina;Nómina;Ingreso fijo \(por cobrar\);Banco;1850,00/);
 });
 
 test('previsión: Semana Santa en su mes y Navidad, rebajas y verano con su peso', () => {
@@ -387,7 +393,8 @@ test('saldo: desde lo que hay hoy en la cuenta, cómo acaba cada mes', () => {
   assert.equal(saldoAlFinal(d, '2026-12', HOY), saldoAlFinal(d, '2026-11', HOY) - 80000 + 200000 - dic.centimos);
   assert.equal(ponerSaldo(d, null, HOY).saldo, null);
   const ia = resumenParaIA(d, '2026-11', HOY);
-  assert.match(ia.saldo, /^3\.000,00 € el 2026-11-14; a fin de este mes ~/);
+  assert.equal(ia.saldo_banco, '3.000,00 € el 2026-11-14');
+  assert.match(ia.saldo_a_fin_de_mes, /^~.* en el banco$/);
   assert.equal(ia.proximos_meses.length, 3);
   assert.match(ia.proximos_meses[0], /^diciembre de 2026: gastos ~.*\(Navidad: regalos, cenas y viajes\), ingresos 2\.000 €/);
 });
@@ -505,9 +512,145 @@ test('saldo en el chat: «tengo 2.300 en la cuenta» llama a poner_saldo, no a a
   await c.enviar('tengo 2.300 en la cuenta');
   const herramientas = peticiones[0].tools.map((t) => t.function.name);
   assert.ok(herramientas.includes('poner_saldo') && herramientas.includes('apuntar_gasto'));
-  assert.deepEqual(saldos, [{ importe: 2300, fecha: undefined }]);
+  assert.deepEqual(saldos, [{ importe: 2300, fecha: undefined, cuenta: 'banco' }]);
   assert.equal(eventos.find((e) => e.tipo === 'gasto')?.gasto.tipo, 'saldo');
   assert.match(peticiones[0].messages[0].content, /poner_saldo/);
   assert.ok(gruposParaGroq(['tengo 2.300 en la cuenta']).has('gastos'));
   assert.ok(gruposParaGroq(['me quedan 300 en el banco']).has('gastos'));
+});
+
+// ---------- Banco y efectivo ----------
+
+test('efectivo: se entiende si fue en efectivo, con tarjeta o sacando del cajero', () => {
+  const i = (t) => {
+    const r = interpretarGasto(t, HOY);
+    return [r.tipo, r.cuenta, r.centimos, r.concepto];
+  };
+  assert.deepEqual(i('café 2,40 en efectivo'), ['gasto', 'efectivo', 240, 'Café']);
+  assert.deepEqual(i('he pagado 12 del parking en metálico'), ['gasto', 'efectivo', 1200, 'Parking']);
+  assert.deepEqual(i('cena 45 con tarjeta'), ['gasto', 'banco', 4500, 'Cena']);
+  assert.deepEqual(i('súper 30'), ['gasto', null, 3000, 'Súper'], 'sin decir nada no se sabe: la app pone el banco');
+  assert.deepEqual(i('me han dado 20 en mano'), ['ingreso', 'efectivo', 2000, '']);
+  assert.equal(i('+40 bizum de Ana')[1], 'banco');
+  // Lo que tienes: banco o efectivo.
+  assert.deepEqual(i('tengo 2.300 en la cuenta').slice(0, 2), ['saldo', 'banco']);
+  assert.deepEqual(i('llevo 40 en la cartera').slice(0, 2), ['saldo', 'efectivo']);
+  assert.deepEqual(i('tengo 60 en efectivo').slice(0, 2), ['saldo', 'efectivo']);
+  assert.deepEqual(i('en la cartera tengo 35').slice(0, 2), ['saldo', 'efectivo']);
+  // Cambiar el dinero de sitio: no es gasto ni ingreso.
+  assert.deepEqual(i('he sacado 50 del cajero').slice(0, 3), ['traspaso', 'banco', 5000]);
+  assert.deepEqual(i('saqué 100 en efectivo').slice(0, 3), ['traspaso', 'banco', 10000]);
+  assert.deepEqual(i('cajero 20').slice(0, 3), ['traspaso', 'banco', 2000]);
+  assert.deepEqual(i('he ingresado 200 en el banco').slice(0, 3), ['traspaso', 'efectivo', 20000]);
+  assert.deepEqual(i('he metido 80 en la cuenta').slice(0, 3), ['traspaso', 'efectivo', 8000]);
+  // Y lo que se parece pero no lo es.
+  assert.equal(tipoDeTexto('me han ingresado la nómina en la cuenta, 1.850'), 'ingreso');
+  assert.equal(tipoDeTexto('comisión del cajero 2 €'), 'gasto');
+  assert.equal(tipoDeTexto('he sacado las entradas del cine, 18'), 'gasto');
+  assert.equal(cuentaDeTexto('netflix 13 al mes'), null);
+});
+
+test('efectivo: cada cosa en su sitio y el saldo de cada uno a fin de mes', () => {
+  let d = normalizarGastos({
+    movimientos: [
+      // Octubre: así se sabe cuánto sueles pagar en efectivo (un 25 %).
+      { concepto: 'Súper', centimos: 30000, fecha: '2026-10-10' },
+      { concepto: 'Bar', centimos: 10000, fecha: '2026-10-12', cuenta: 'efectivo' },
+      { concepto: 'Cena', centimos: 4000, fecha: '2026-11-16' },
+      { concepto: 'Churros', centimos: 600, fecha: '2026-11-16', cuenta: 'efectivo' },
+    ],
+    fijos: [{ concepto: 'Nómina', centimos: 200000, ingreso: true, dia: 28, desde: '2026-01-01' }],
+  }, HOY);
+  d = ponerSaldo(d, 300000, HOY);
+  d = ponerSaldo(d, 5000, HOY, 'efectivo');
+  assert.deepEqual(d.saldoEfectivo, { centimos: 5000, fecha: HOY });
+  d = anadirTraspaso(d, { centimos: 2000, fecha: '2026-11-15', de: 'banco' }).datos;
+  assert.equal(d.traspasos[0].id.startsWith('t'), true);
+  const r = resumenMes(d, '2026-11', HOY);
+  assert.equal(r.traspasos[0].concepto, 'Sacado del cajero');
+  assert.equal(r.gastado, 4600, 'la cena y los churros; sacar del cajero no es un gasto');
+  assert.equal(resumenMes(d, '2026-11', '2026-11-20').enEfectivo, 600);
+  assert.equal(parteEfectivo(d, HOY), 0.25);
+  // Noviembre: banco −40 (cena) −20 (cajero) +2.000 (nómina); efectivo +20 (cajero) −6 (churros); más lo estimado que queda.
+  const est = estimarDiaADia(d, '2026-11', HOY);
+  const resto = Math.max(0, est.centimos - 4600);
+  const dias = (30 - 14) / 30;
+  const enEfectivo = Math.min(Math.round(resto * 0.25), Math.round(est.centimos * 0.25 * dias));
+  const delBanco = Math.min(Math.round(resto * 0.75), Math.round(est.centimos * 0.75 * dias));
+  const s = saldosAlFinal(d, '2026-11', HOY);
+  assert.equal(s.efectivo, Math.max(0, 5000 + 2000 - 600 - enEfectivo));
+  assert.equal(s.banco, 300000 - 4000 - 2000 + 200000 - delBanco - Math.max(0, enEfectivo - (5000 + 2000 - 600)));
+  assert.equal(s.total, s.banco + s.efectivo);
+  assert.equal(saldoAlFinal(d, '2026-11', HOY), s.total);
+  // Si el efectivo no llega, lo que falta se saca del banco: el efectivo no baja de cero.
+  const dic = saldosAlFinal(d, '2027-03', HOY);
+  assert.ok(dic.efectivo >= 0);
+  // Sin saldo del efectivo, todo el día a día sale del banco (como antes).
+  const soloBanco = saldosAlFinal(ponerSaldo(d, null, HOY, 'efectivo'), '2026-12', HOY);
+  assert.equal(soloBanco.efectivo, null);
+  assert.equal(soloBanco.total, soloBanco.banco);
+  // El CSV dice de dónde sale cada cosa; el traspaso no suma en la columna del importe.
+  const csv = aCSV(d, '2026-11', '2026-11', HOY);
+  assert.match(csv, /2026-11-15;Sacado del cajero \(20,00 €\);;Traspaso;Banco → Efectivo;\r\n/);
+  assert.match(csv, /2026-11-16;Churros;.*;Gasto;Efectivo;-6,00/);
+  // Para el chat.
+  const ia = resumenParaIA(d, '2026-11', HOY);
+  assert.equal(ia.saldo_efectivo, '50,00 € el 2026-11-14');
+  assert.match(ia.saldo_a_fin_de_mes, /\(banco ~.*, efectivo ~.*\)/);
+  assert.deepEqual(ia.traspasos, ['2026-11-15 · Sacado del cajero · 20,00 €']);
+  assert.equal(borrarTraspaso(d, d.traspasos[0].id).traspasos.length, 0);
+});
+
+test('efectivo desde el chat: mover dinero, saldo del efectivo y deshacer', async () => {
+  let guardado = normalizarGastos({ saldo: { centimos: 100000, fecha: '2026-11-01' } }, HOY);
+  const g = crearAlmacenGastos({ leer: async () => guardado, guardar: async (d) => (guardado = structuredClone(d)) });
+  const t = await g.mover({ importe: 50, de: 'banco' }, HOY);
+  assert.deepEqual({ ...t, id: undefined }, { tipo: 'traspaso', id: undefined, de: 'banco', a: 'efectivo', concepto: 'Sacado del cajero', centimos: 5000, importe: '50,00 €', fecha: HOY });
+  assert.equal(guardado.traspasos.length, 1);
+  assert.equal(guardado.movimientos.length, 0, 'no es un gasto');
+  await g.deshacer(t, HOY);
+  assert.equal(guardado.traspasos.length, 0);
+  const s = await g.saldo({ importe: 40, cuenta: 'efectivo' }, HOY);
+  assert.equal(s.cuenta, 'efectivo');
+  assert.deepEqual(guardado.saldoEfectivo, { centimos: 4000, fecha: HOY });
+  assert.deepEqual(guardado.saldo, { centimos: 100000, fecha: '2026-11-01' }, 'el del banco no se toca');
+  await g.deshacer(s, HOY);
+  assert.equal(guardado.saldoEfectivo, null);
+  const a = await g.apuntar({ concepto: 'Churros', importe: 3, cuenta: 'efectivo' }, HOY);
+  assert.equal(a.cuenta, 'efectivo');
+  assert.equal(guardado.movimientos[0].cuenta, 'efectivo');
+  assert.ok(gruposParaGroq(['he sacado 50 del cajero']).has('gastos'));
+  assert.ok(gruposParaGroq(['llevo 40 en la cartera']).has('gastos'));
+});
+
+test('efectivo en el chat: «he sacado 50 del cajero» llama a mover_dinero', async () => {
+  const sse = (trozos) => new Response(trozos.map((t) => `data: ${JSON.stringify(t)}\n\n`).join('') + 'data: [DONE]\n\n', { headers: { 'content-type': 'text/event-stream' } });
+  const delta = (d, fin = null) => ({ choices: [{ index: 0, delta: d, finish_reason: fin }] });
+  const peticiones = [];
+  const movidos = [];
+  const eventos = [];
+  const c = new ConversacionClaude({
+    obtenerClave: async (p) => (p === 'openai' ? 'sk-prueba' : null),
+    obtenerAjustes: () => ({ proveedor: 'openai', modeloOpenAI: 'gpt-6-luna', busquedaWeb: false, usarMemoria: false, personalidad: '' }),
+    gmail: { estado: async () => ({ conectado: false }) },
+    gastos: {
+      apuntar: async () => assert.fail('no es un gasto'),
+      mover: async (e) => (movidos.push(e), { tipo: 'traspaso', id: 'tx1', de: 'banco', a: 'efectivo', concepto: 'Sacado del cajero', centimos: 5000, importe: '50,00 €', fecha: HOY }),
+      resumen: async () => ({}),
+    },
+    emitir: (e) => eventos.push(e),
+    opcionesCliente: {
+      fetch: async (url, init) => {
+        const cuerpo = JSON.parse(init.body);
+        peticiones.push(cuerpo);
+        if (cuerpo.messages.at(-1).role === 'tool') return sse([delta({ content: 'Pasan 50 € del banco al efectivo.' }), delta({}, 'stop')]);
+        return sse([delta({ tool_calls: [{ index: 0, id: 'call_m', type: 'function', function: { name: 'mover_dinero', arguments: '{"importe":50,"de":"banco"}' } }] }), delta({}, 'tool_calls')]);
+      },
+    },
+  });
+  await c.enviar('he sacado 50 del cajero');
+  assert.ok(peticiones[0].tools.some((t) => t.function.name === 'mover_dinero'));
+  assert.deepEqual(movidos, [{ importe: 50, de: 'banco', fecha: undefined }]);
+  assert.equal(eventos.find((e) => e.tipo === 'gasto')?.gasto.tipo, 'traspaso');
+  assert.match(peticiones[0].messages[0].content, /banco y efectivo.*mover_dinero/s);
 });

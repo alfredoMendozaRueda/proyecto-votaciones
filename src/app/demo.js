@@ -1017,12 +1017,20 @@ function gastosDemo(ahora = new Date()) {
         // Repartidos por el mes (en el actual, solo hasta hoy); cada mes cambia un poco.
         if (atras === 0 && (n + i) % 3 === 0) return;
         const dia = Math.max(1, Math.min(ultimo, Math.round(((i + 1) * ultimo) / (importes.length + 1)) - ((n + atras) % 3)));
-        movimientos.push({ id: `gdemo${dos(n++)}${atras}`, fecha: fecha(new Date(primero.getFullYear(), primero.getMonth(), dia)), centimos: Math.round(euros * (1 + atras * 0.07) * 100), concepto, categoria, creado: n });
+        // El café, el cine y el metro, en efectivo.
+        const cuenta = ['Café', 'Cine', 'Metro'].includes(concepto) ? 'efectivo' : 'banco';
+        movimientos.push({ id: `gdemo${dos(n++)}${atras}`, fecha: fecha(new Date(primero.getFullYear(), primero.getMonth(), dia)), centimos: Math.round(euros * (1 + atras * 0.07) * 100), concepto, categoria, cuenta, creado: n });
       });
     }
   }
   const anterior = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 12);
   movimientos.push({ id: 'gdemoing1', fecha: fecha(anterior), centimos: 4000, concepto: 'Bizum de Lucía', categoria: 'ingresos', ingreso: true, creado: n + 1 });
   // Lo que hay hoy en la cuenta.
-  return { movimientos, fijos, presupuesto: 160000, saldo: { centimos: 324050, fecha: fecha(ahora) } };
+  // Lo sacado del cajero: el mes pasado y a principios de este.
+  const traspasos = [
+    { id: 'tdemo01', fecha: fecha(new Date(ahora.getFullYear(), ahora.getMonth() - 1, 6)), centimos: 10000, de: 'banco', creado: 1 },
+    { id: 'tdemo02', fecha: fecha(new Date(ahora.getFullYear(), ahora.getMonth(), Math.min(2, ahora.getDate()))), centimos: 5000, de: 'banco', creado: 2 },
+  ];
+  // Lo que hay hoy en el banco y en la cartera.
+  return { movimientos, fijos, traspasos, presupuesto: 160000, saldo: { centimos: 324050, fecha: fecha(ahora) }, saldoEfectivo: { centimos: 4500, fecha: fecha(ahora) } };
 }

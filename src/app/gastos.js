@@ -10,11 +10,18 @@ import {
   adivinarCategoria,
   adivinarIngreso,
   ponerSaldo,
+  saldoDe,
+  saldosAlFinal,
+  nombreCuenta,
+  otraCuenta,
+  conceptoTraspaso,
+  anadirTraspaso,
+  editarTraspaso,
+  borrarTraspaso,
   apuntarMovimiento,
   fijoQueEs,
   prevision,
   serieBalance,
-  saldoAlFinal,
   totalIngresosFijosAlMes,
   FRECUENCIAS,
   DIAS_SEMANA,
@@ -50,6 +57,11 @@ import {
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const mayuscula = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+// Lo que el usuario elige a mano en la línea rápida (manda sobre lo que se adivina).
+const NADA_ELEGIDO = () => ({ categoria: null, fecha: null, repite: null, frecuencia: 'mensual', dia: null, tipo: null, cuenta: null, de: null });
+// «Banco ~2.300 € · efectivo ~45 €» (lo que se sepa).
+const textoSaldos = (s, formato) =>
+  [s.banco !== null ? `banco ${formato(s.banco)}` : '', s.efectivo !== null ? `efectivo ${formato(s.efectivo)}` : ''].filter(Boolean).join(' · ');
 // «1,50» para un campo de importe.
 const importeCampo = (centimos) => (centimos / 100).toFixed(2).replace('.', ',').replace(/,00$/, '');
 
@@ -100,8 +112,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
   let filtro = '';
   // Lo que está abierto para editar: el id de un gasto, de un fijo («f…») o «nuevo-fijo».
   let abierto = null;
-  // Lo que el usuario elige a mano en la línea rápida (manda sobre lo que se adivina).
-  let elegido = { categoria: null, fecha: null, repite: null, frecuencia: 'mensual', dia: null, tipo: null };
+  let elegido = NADA_ELEGIDO();
   let deshacer = null;
   let temporizadorAviso = null;
 
@@ -185,7 +196,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     const texto = contenedor.querySelector('#gastos-texto');
     texto.addEventListener('input', () => {
       // Un texto nuevo vuelve a adivinar desde cero.
-      if (!texto.value.trim()) elegido = { categoria: null, fecha: null, repite: null, frecuencia: 'mensual', dia: null, tipo: null };
+      if (!texto.value.trim()) elegido = NADA_ELEGIDO();
       pintarPrevia();
     });
     contenedor.querySelector('#gastos-rapido').addEventListener('submit', (e) => {
@@ -234,6 +245,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
       comparacion = cambio === 0 ? 'igual que el mes anterior' : `${cambio > 0 ? '+' : '−'}${Math.abs(cambio)} % que ${nombreMes(sumarMeses(mes, -1), { corto: true })}`;
     }
     const detalle = [
+      r.enEfectivo && !futuro ? `${euros(r.enEfectivo, { redondo: true })} en efectivo` : '',
       r.pendiente && !futuro ? `+ ${euros(r.pendiente, { redondo: true })} de fijos por pagar` : '',
       // A fin de mes: lo previsto más lo que falta del día a día (según tus meses anteriores).
       mes === actual && (r.pendiente || p.estimado) ? `a fin de mes, ~${aprox(p.gastos)}` : '',
@@ -248,8 +260,14 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
           mes < actual ? (ahorro >= 0 ? 'ahorraste' : 'gastaste de más') : ahorro >= 0 ? 'ahorrarás ~' : 'gastarás de más ~'
         }<strong class="${ahorro >= 0 ? 'gastos__mas' : 'gastos__menos'}">${escapar(mes < actual ? euros(Math.abs(ahorro), { redondo: true }) : aprox(Math.abs(ahorro)))}</strong></p>`
       : '';
-    const saldo = saldoAlFinal(datos, mes, hoy);
-    const lineaSaldo = saldo !== null && mes >= actual ? `<p class="gastos__balance">Saldo a fin de mes <strong>~${escapar(aprox(saldo))}</strong></p>` : '';
+    const s = saldosAlFinal(datos, mes, hoy);
+    const ambos = s.banco !== null && s.efectivo !== null;
+    const lineaSaldo =
+      s.total !== null && mes >= actual
+        ? `<p class="gastos__balance">${ambos ? 'Tendrás a fin de mes' : s.banco !== null ? 'En el banco a fin de mes' : 'En efectivo a fin de mes'} <strong>~${escapar(aprox(s.total))}</strong>${
+            ambos ? ` <span class="gastos__saldos">(${escapar(textoSaldos(s, (c) => `~${aprox(c)}`))})</span>` : ''
+          }</p>`
+        : '';
     let presupuesto = '';
     if (r.presupuesto) {
       const pagado = Math.min(100, (r.gastado / r.presupuesto) * 100);
@@ -283,7 +301,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     // Gasto (resta), ingreso (suma) o saldo (lo que hay en la cuenta): lo adivinado o lo que elijas.
     const tipo = elegido.tipo ?? i.tipo;
     const ingreso = tipo === 'ingreso';
-    const repite = tipo === 'saldo' ? false : elegido.repite ?? Boolean(i.fijo);
+    const repite = tipo === 'saldo' || tipo === 'traspaso' ? false : elegido.repite ?? Boolean(i.fijo);
     const adivinada = ingreso === i.ingreso ? i.categoria : ingreso ? adivinarIngreso(i.concepto) : adivinarCategoria(i.concepto);
     return {
       ...i,
@@ -294,6 +312,9 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
       repite,
       frecuencia: elegido.repite === null && i.fijo ? i.fijo.frecuencia : elegido.frecuencia,
       dia: elegido.dia ?? Number((elegido.fecha ?? i.fecha).slice(8)),
+      // Banco o efectivo (sin decir nada, el banco). En un traspaso, de dónde sale.
+      cuenta: elegido.cuenta ?? (i.tipo === 'traspaso' ? null : i.cuenta) ?? 'banco',
+      de: elegido.de ?? (i.tipo === 'traspaso' ? i.cuenta : null) ?? 'banco',
       vacio: !texto.trim(),
     };
   }
@@ -311,38 +332,59 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     caja.hidden = false;
     const ayer = sumarDias(hoy, -1);
     // Si ya es un fijo (la nómina, el alquiler), se ajusta ese mes en vez de sumarlo otra vez.
-    const yaFijo = i.centimos && !i.repite && i.tipo !== 'saldo' ? fijoQueEs(datos, { concepto: i.concepto || categoria(i.categoria).nombre, categoria: i.categoria, ingreso: i.ingreso, fecha: i.fecha }) : null;
+    const yaFijo = i.centimos && !i.repite && i.tipo !== 'saldo' && i.tipo !== 'traspaso' ? fijoQueEs(datos, { concepto: i.concepto || categoria(i.categoria).nombre, categoria: i.categoria, ingreso: i.ingreso, fecha: i.fecha }) : null;
     const explicacion =
-      i.tipo === 'saldo'
-        ? 'Lo que tienes en la cuenta: no suma ni resta, es desde donde calculo cómo acabas cada mes.'
+      i.tipo === 'traspaso'
+        ? i.de === 'banco'
+          ? `Pasas ${euros(i.centimos ?? 0)} del banco al efectivo: no es un gasto, el total no cambia.`
+          : `Pasas ${euros(i.centimos ?? 0)} del efectivo al banco: no es un ingreso, el total no cambia.`
+        : i.tipo === 'saldo'
+        ? i.cuenta === 'efectivo'
+          ? 'Lo que llevas en efectivo: no suma ni resta, es desde donde calculo cómo acabas cada mes.'
+          : 'Lo que tienes en el banco: no suma ni resta, es desde donde calculo cómo acabas cada mes.'
         : yaFijo
         ? yaFijo.centimos === i.centimos
           ? `Ya cuento «${yaFijo.fijo.concepto}» del ${fechaCorta(yaFijo.fecha)}: no lo sumo otra vez.`
           : `Es «${yaFijo.fijo.concepto}» del ${fechaCorta(yaFijo.fecha)}: lo dejo en ${euros(i.centimos)} ese mes (normalmente ${euros(yaFijo.centimos)}), sin sumarlo otra vez.`
         : i.ingreso
-        ? 'Suma a lo que entra este mes.'
+        ? `Suma a lo que entra este mes${i.cuenta === 'efectivo' ? ', en efectivo' : ''}.`
+        : i.cuenta === 'efectivo'
+        ? 'Sale de tu efectivo, no del banco.'
         : '';
-    const titulo = i.tipo === 'saldo' ? 'Saldo de tu cuenta' : i.concepto || categoria(i.categoria).nombre;
+    const titulo = i.tipo === 'traspaso' ? conceptoTraspaso(i.de) : i.tipo === 'saldo' ? (i.cuenta === 'efectivo' ? 'Tu efectivo' : 'Saldo del banco') : i.concepto || categoria(i.categoria).nombre;
+    const signo = i.ingreso ? '+' : i.tipo === 'gasto' ? '−' : i.tipo === 'traspaso' ? '⇄ ' : '';
+    const cuentas =
+      i.tipo === 'traspaso'
+        ? `<div class="gastos__cuenta" role="group" aria-label="De dónde a dónde">
+            <button type="button" class="chip" data-de="banco" aria-pressed="${i.de === 'banco'}">${icono('tarjeta', 13)} Banco → efectivo</button>
+            <button type="button" class="chip" data-de="efectivo" aria-pressed="${i.de === 'efectivo'}">${icono('billete', 13)} Efectivo → banco</button>
+          </div>`
+        : `<div class="gastos__cuenta" role="group" aria-label="${i.tipo === 'saldo' ? 'Dónde' : 'Cómo lo pagas'}">
+            <button type="button" class="chip" data-cuenta="banco" aria-pressed="${i.cuenta === 'banco'}" title="Tarjeta, Bizum, domiciliado…">${icono('tarjeta', 13)} Banco</button>
+            <button type="button" class="chip" data-cuenta="efectivo" aria-pressed="${i.cuenta === 'efectivo'}" title="En efectivo, en mano">${icono('billete', 13)} Efectivo</button>
+          </div>`;
     caja.innerHTML = `
       <p class="gastos__entiendo">${
         i.centimos
-          ? `<strong>${escapar(titulo)}</strong> · <span class="${i.ingreso ? 'gastos__mas' : i.tipo === 'gasto' ? 'gastos__resta' : ''}">${i.ingreso ? '+' : i.tipo === 'gasto' ? '−' : ''}${escapar(euros(i.centimos))}</span> · ${
+          ? `<strong>${escapar(titulo)}</strong> · <span class="${i.ingreso ? 'gastos__mas' : i.tipo === 'gasto' ? 'gastos__resta' : ''}">${signo}${escapar(euros(i.centimos))}</span> · ${
               i.repite ? escapar(textoRepite(i)) : escapar(diaLegible(i.fecha, hoy).toLowerCase())
             }`
-          : 'Escribe también cuánto: «12,50 súper», «nómina 1.850», «tengo 2.300»'
+          : 'Escribe también cuánto: «12,50 súper», «nómina 1.850», «tengo 2.300», «he sacado 50 del cajero»'
       }</p>
       ${explicacion && i.centimos ? `<p class="gastos__explica">${escapar(explicacion)}</p>` : ''}
       <div class="gastos__tipo" role="group" aria-label="Qué es">
         <button type="button" class="chip" data-tipo="gasto" aria-pressed="${i.tipo === 'gasto'}" title="Lo que gastas: resta">− Gasto</button>
         <button type="button" class="chip" data-tipo="ingreso" aria-pressed="${i.tipo === 'ingreso'}" title="Lo que te entra: suma">+ Ingreso</button>
-        <button type="button" class="chip" data-tipo="saldo" aria-pressed="${i.tipo === 'saldo'}" title="Lo que tienes en la cuenta">= Saldo</button>
+        <button type="button" class="chip" data-tipo="saldo" aria-pressed="${i.tipo === 'saldo'}" title="Lo que tienes en el banco o en efectivo">= Saldo</button>
+        <button type="button" class="chip" data-tipo="traspaso" aria-pressed="${i.tipo === 'traspaso'}" title="Sacar del cajero o ingresar efectivo en el banco: no es gasto ni ingreso">⇄ Cajero</button>
       </div>
-      ${i.tipo === 'saldo' ? '' : `<div class="gastos__categorias" role="group" aria-label="Categoría">
+      ${i.tipo === 'saldo' || i.tipo === 'traspaso' ? '' : `<div class="gastos__categorias" role="group" aria-label="Categoría">
         ${(i.ingreso ? CATEGORIAS_INGRESO : CATEGORIAS).map(
           (c) => `<button type="button" class="gastos__categoria" data-categoria="${c.id}" aria-pressed="${c.id === i.categoria}" style="--c:${c.color}"><span class="gastos__punto"></span>${escapar(c.nombre)}</button>`,
         ).join('')}
       </div>`}
       <div class="gastos__opciones">
+        ${cuentas}
         ${
           i.repite
             ? `<select class="campo gastos__select" data-foco="frecuencia" aria-label="Cada cuánto">${FRECUENCIAS.map((f) => `<option value="${f.id}" ${f.id === i.frecuencia ? 'selected' : ''}>${f.nombre}</option>`).join('')}</select>
@@ -355,7 +397,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
                <button type="button" class="chip" data-fecha="${ayer}" aria-pressed="${i.fecha === ayer}">Ayer</button>
                <input class="campo gastos__fecha" type="date" data-foco="fecha" value="${i.fecha}" max="${sumarDias(hoy, 366)}" aria-label="Fecha del gasto">`
         }
-        ${i.tipo === 'saldo' ? '' : `<button type="button" class="chip gastos__repite" data-repite aria-pressed="${i.repite}">${icono('actualizar', 13)} Se repite</button>`}
+        ${i.tipo === 'saldo' || i.tipo === 'traspaso' ? '' : `<button type="button" class="chip gastos__repite" data-repite aria-pressed="${i.repite}">${icono('actualizar', 13)} Se repite</button>`}
       </div>`;
     if (enFoco) caja.querySelector(`[data-foco="${enFoco}"]`)?.focus();
   }
@@ -373,6 +415,8 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.categoria) elegido.categoria = b.dataset.categoria;
+    else if (b.dataset.cuenta) elegido.cuenta = b.dataset.cuenta;
+    else if (b.dataset.de) elegido.de = b.dataset.de;
     else if (b.dataset.tipo) {
       elegido.tipo = b.dataset.tipo;
       elegido.categoria = null;
@@ -405,9 +449,16 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     error('');
     const campo = contenedor.querySelector('#gastos-texto');
     const concepto = i.concepto || categoria(i.categoria).nombre;
+    const cuando = i.fecha === hoy ? ' hoy' : ` el ${fechaCorta(i.fecha)}`;
     if (i.tipo === 'saldo') {
       mes = mesDe(hoy);
-      await guardar(ponerSaldo(datos, i.centimos, i.fecha), { aviso: `Saldo: ${euros(i.centimos)}${i.fecha === hoy ? ' hoy' : ` el ${fechaCorta(i.fecha)}`}`, alDeshacer: (antes) => antes });
+      await guardar(ponerSaldo(datos, i.centimos, i.fecha, i.cuenta), { aviso: `${i.cuenta === 'efectivo' ? 'En efectivo' : 'En el banco'}: ${euros(i.centimos)}${cuando}`, alDeshacer: (antes) => antes });
+    } else if (i.tipo === 'traspaso') {
+      mes = mesDe(i.fecha);
+      await guardar(anadirTraspaso(datos, { centimos: i.centimos, fecha: i.fecha, de: i.de }).datos, {
+        aviso: `${conceptoTraspaso(i.de)}: ${euros(i.centimos)} (${nombreCuenta(i.de).toLowerCase()} → ${nombreCuenta(otraCuenta(i.de)).toLowerCase()})`,
+        alDeshacer: (antes) => antes,
+      });
     } else if (i.repite) {
       const [a, m, d] = i.fecha.split('-').map(Number);
       const r = anadirFijo(datos, {
@@ -415,6 +466,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
         centimos: i.centimos,
         categoria: i.categoria,
         ingreso: i.ingreso,
+        cuenta: i.cuenta,
         frecuencia: i.frecuencia,
         dia: i.dia,
         mes: m,
@@ -423,18 +475,18 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
       }, hoy);
       await guardar(r.datos, { aviso: `${i.ingreso ? 'Ingreso' : 'Gasto'} fijo: ${concepto} · ${i.ingreso ? '+' : ''}${euros(i.centimos)} ${textoRepite(i)}`, alDeshacer: (antes) => antes });
     } else {
-      const { datos: nuevos, resultado } = apuntarMovimiento(datos, { concepto, centimos: i.centimos, categoria: i.categoria, ingreso: i.ingreso, fecha: i.fecha }, hoy);
+      const { datos: nuevos, resultado } = apuntarMovimiento(datos, { concepto, centimos: i.centimos, categoria: i.categoria, ingreso: i.ingreso, fecha: i.fecha, cuenta: i.cuenta }, hoy);
       mes = mesDe(resultado.fecha);
       const aviso =
         resultado.tipo === 'fijo-ajustado'
           ? resultado.igual
             ? `Ya contado: ${resultado.concepto} del ${fechaCorta(resultado.fecha)}`
             : `${resultado.concepto} de ${nombreMes(mesDe(resultado.fecha), { corto: true })}: ${euros(i.centimos)}`
-          : `${i.ingreso ? 'Ingreso' : 'Gasto'}: ${concepto} · ${i.ingreso ? '+' : '−'}${euros(i.centimos)}`;
+          : `${i.ingreso ? 'Ingreso' : 'Gasto'}: ${concepto} · ${i.ingreso ? '+' : '−'}${euros(i.centimos)}${i.cuenta === 'efectivo' ? ' en efectivo' : ''}`;
       await guardar(nuevos, { aviso, alDeshacer: (antes) => antes });
     }
     campo.value = '';
-    elegido = { categoria: null, fecha: null, repite: null, frecuencia: 'mensual', dia: null, tipo: null };
+    elegido = NADA_ELEGIDO();
     pintarPrevia();
     campo.focus();
   }
@@ -446,6 +498,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     const detalle = [
       c.nombre,
       x.tipo === 'fijo' ? (x.pendiente ? `fijo · ${x.ingreso ? 'llega' : 'se cobra'} el ${fechaCorta(x.fecha)}` : x.cambiado ? 'fijo · importe de este mes' : 'fijo') : '',
+      x.cuenta === 'efectivo' ? 'en efectivo' : '',
       x.nota,
     ].filter(Boolean);
     const id = x.tipo === 'fijo' ? x.id : x.id;
@@ -460,13 +513,50 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
       </li>`;
   }
 
+  // Sacar del cajero o ingresar efectivo: ni suma ni resta, solo cambia de sitio.
+  function filaTraspaso(t) {
+    return `
+      <li class="gasto gasto--traspaso${abierto === t.id ? ' gasto--abierto' : ''}" data-gasto="${escapar(t.id)}">
+        <button type="button" class="gasto__fila" data-abrir="${escapar(t.id)}" aria-expanded="${abierto === t.id}">
+          <span class="gasto__punto" aria-hidden="true">${icono('traspaso', 13)}</span>
+          <span class="gasto__cuerpo"><span class="gasto__concepto">${escapar(t.concepto)}</span><span class="gasto__detalle">${escapar([`${nombreCuenta(t.de)} → ${nombreCuenta(t.a).toLowerCase()} · no es gasto`, t.nota].filter(Boolean).join(' · '))}</span></span>
+          <span class="gasto__importe">${escapar(euros(t.centimos))}</span>
+        </button>
+        ${abierto === t.id ? editorTraspaso(t) : ''}
+      </li>`;
+  }
+
+  function editorTraspaso(t) {
+    return `
+      <form class="formulario gasto__editor" data-editar-traspaso="${escapar(t.id)}">
+        <div class="formulario__fila">
+          <select class="campo" name="de" aria-label="De dónde a dónde">
+            <option value="banco" ${t.de === 'banco' ? 'selected' : ''}>Banco → efectivo</option>
+            <option value="efectivo" ${t.de === 'efectivo' ? 'selected' : ''}>Efectivo → banco</option>
+          </select>
+          <input class="campo gasto__campo-importe" name="importe" value="${escapar(importeCampo(t.centimos))}" inputmode="decimal" aria-label="Importe en euros" required>
+        </div>
+        <div class="formulario__fila">
+          <input class="campo" type="date" name="fecha" value="${t.fecha}" aria-label="Fecha" required>
+          <input class="campo" name="nota" value="${escapar(t.nota ?? '')}" maxlength="200" placeholder="Nota (opcional)" aria-label="Nota">
+        </div>
+        <p class="apartado__mensaje" role="alert" hidden></p>
+        <div class="formulario__botones">
+          <button type="submit" class="boton boton--primario">Guardar</button>
+          <button type="button" class="boton" data-cerrar>Cancelar</button>
+          <button type="button" class="boton boton--peligro gasto__borrar" data-borrar-traspaso="${escapar(t.id)}">${icono('papelera', 14)} Borrar</button>
+        </div>
+      </form>`;
+  }
+
   function panelMovimientos(r) {
     const lista = filtro ? r.lista.filter((x) => x.categoria === filtro) : r.lista;
+    const traspasos = filtro ? [] : r.traspasos;
     const chipFiltro = filtro
       ? `<button type="button" class="chip chip--acento gastos__filtro" data-quitar-filtro>Solo ${escapar(categoria(filtro).nombre)} · ${escapar(euros(lista.reduce((s, x) => s + x.centimos, 0)))} ${icono('cerrar', 12)}</button>`
       : '';
-    if (!lista.length) {
-      const vacio = !datos.movimientos.length && !datos.fijos.length;
+    if (!lista.length && !traspasos.length) {
+      const vacio = !datos.movimientos.length && !datos.fijos.length && !datos.traspasos.length;
       return `${chipFiltro}<div class="gastos__vacio">${
         vacio
           ? `<p><strong>Apunta tu primer gasto</strong> arriba, como lo dirías: «12,50 súper», «ayer 30 gasolina».</p>
@@ -478,18 +568,19 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     const pendientes = lista.filter((x) => x.pendiente).sort((a, b) => a.fecha.localeCompare(b.fecha));
     const porPagar = pendientes.filter((x) => !x.ingreso);
     const porCobrar = pendientes.filter((x) => x.ingreso);
-    const pasados = lista.filter((x) => !x.pendiente);
+    const pasados = [...lista.filter((x) => !x.pendiente), ...traspasos].sort((a, b) => b.fecha.localeCompare(a.fecha) || (b.creado ?? 0) - (a.creado ?? 0));
     const dias = new Map();
     for (const x of pasados) dias.set(x.fecha, [...(dias.get(x.fecha) ?? []), x]);
     const suma = (xs) => xs.reduce((s, x) => s + x.centimos, 0);
     // El total del día: lo gastado y, si hubo, lo que entró.
+    // (Lo que se saca del cajero no cuenta: no es gasto.)
     const totalDia = (xs) => {
-      const g = suma(xs.filter((x) => !x.ingreso));
+      const g = suma(xs.filter((x) => !x.ingreso && x.tipo !== 'traspaso'));
       const i = suma(xs.filter((x) => x.ingreso));
       return [g ? euros(g) : '', i ? `+${euros(i)}` : ''].filter(Boolean).join(' · ');
     };
     const grupo = (titulo, xs, total) =>
-      `<div class="gastos__grupo"><p class="gastos__dia"><span>${titulo}</span><span>${escapar(total)}</span></p><ul class="gastos__lista">${xs.map(filaGasto).join('')}</ul></div>`;
+      `<div class="gastos__grupo"><p class="gastos__dia"><span>${titulo}</span><span>${escapar(total)}</span></p><ul class="gastos__lista">${xs.map((x) => (x.tipo === 'traspaso' ? filaTraspaso(x) : filaGasto(x))).join('')}</ul></div>`;
     return `
       ${chipFiltro}
       ${porCobrar.length ? grupo('Por cobrar este mes', porCobrar, `+${euros(suma(porCobrar))}`) : ''}
@@ -508,6 +599,9 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
   // Gasto o ingreso se decide con la categoría (Nómina, Pagas y extras… son de ingreso).
   const opcionesCategoria = (actual) => `<optgroup label="Gasto">${opciones(CATEGORIAS, actual)}</optgroup><optgroup label="Ingreso">${opciones(CATEGORIAS_INGRESO, actual)}</optgroup>`;
 
+  const selectorCuenta = (actual) =>
+    `<select class="campo gasto__cuenta" name="cuenta" aria-label="Banco o efectivo"><option value="banco" ${actual !== 'efectivo' ? 'selected' : ''}>Banco</option><option value="efectivo" ${actual === 'efectivo' ? 'selected' : ''}>Efectivo</option></select>`;
+
   function editorMovimiento(m) {
     return `
       <form class="formulario gasto__editor" data-editar-movimiento="${escapar(m.id)}">
@@ -519,7 +613,10 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
           <select class="campo" name="categoria" aria-label="Categoría">${opcionesCategoria(m.categoria)}</select>
           <input class="campo" type="date" name="fecha" value="${m.fecha}" aria-label="Fecha" required>
         </div>
-        <input class="campo" name="nota" value="${escapar(m.nota ?? '')}" maxlength="200" placeholder="Nota (opcional)" aria-label="Nota">
+        <div class="formulario__fila">
+          ${selectorCuenta(m.cuenta)}
+          <input class="campo" name="nota" value="${escapar(m.nota ?? '')}" maxlength="200" placeholder="Nota (opcional)" aria-label="Nota">
+        </div>
         <p class="apartado__mensaje" role="alert" hidden></p>
         <div class="formulario__botones">
           <button type="submit" class="boton boton--primario">Guardar</button>
@@ -597,7 +694,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
   }
 
   function editorFijo(f) {
-    const v = f ?? { concepto: '', centimos: 0, categoria: 'casa', frecuencia: 'mensual', dia: Number(hoy.slice(8)), diaSemana: 1, mes: Number(hoy.slice(5, 7)), desde: `${mesDe(hoy)}-01` };
+    const v = f ?? { concepto: '', centimos: 0, categoria: 'casa', frecuencia: 'mensual', dia: Number(hoy.slice(8)), diaSemana: 1, mes: Number(hoy.slice(5, 7)), desde: `${mesDe(hoy)}-01`, cuenta: 'banco' };
     const activo = f ? fijoActivo(f, hoy) : true;
     return `
       <form class="formulario gasto__editor" data-editar-fijo="${f ? f.id : ''}">
@@ -621,6 +718,9 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
           </label>
           <label class="gasto__etiqueta">Desde
             <input class="campo" type="date" name="desde" value="${v.desde}" aria-label="Desde cuándo cuenta">
+          </label>
+          <label class="gasto__etiqueta">Con
+            ${selectorCuenta(v.cuenta)}
           </label>
         </div>
         <p class="apartado__mensaje" role="alert" hidden></p>
@@ -676,7 +776,13 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
       variable ? ` + ~${aprox(variable)} del día a día${porque}` : ''
     }${siguiente.añoPasado ? `, contando lo que gastaste el ${nombreMes(siguiente.mes, { corto: true })} pasado` : ''})${
       siguiente.ingresos ? ` e ingresos de ${euros(siguiente.ingresos, { redondo: true })}: ${siguiente.ahorro >= 0 ? `ahorrarías <strong class="gastos__mas">~${aprox(siguiente.ahorro)}</strong>` : `te faltarían <strong class="gastos__menos">~${aprox(-siguiente.ahorro)}</strong>`}` : ''
-    }.${siguiente.saldo !== null ? ` Acabarías el mes con ~${aprox(siguiente.saldo)} en la cuenta.` : ''}${
+    }.${
+      siguiente.saldo !== null
+        ? siguiente.saldos.banco !== null && siguiente.saldos.efectivo !== null
+          ? ` Acabarías el mes con ~${aprox(siguiente.saldo)} (${textoSaldos(siguiente.saldos, (c) => `~${aprox(c)}`)}).`
+          : ` Acabarías el mes con ~${aprox(siguiente.saldo)} ${siguiente.saldos.banco !== null ? 'en el banco' : 'en efectivo'}.`
+        : ''
+    }${
       !siguiente.fiable ? ' <span class="gastos__nota-fina">Con pocos meses apuntados la estimación es aproximada; mejora sola con el tiempo.</span>' : ''
     }`;
     return `
@@ -700,24 +806,32 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
           )
           .join('')}</ul>`
       : `<p class="gastos__vacio">Sin gastos en ${escapar(nombreMes(mes, { corto: true }))}.</p>`;
-    const saldo = datos.saldo;
+    const formSaldo = (cuenta) => {
+      const saldo = saldoDe(datos, cuenta);
+      const banco = cuenta === 'banco';
+      return `
+      <form class="gastos__ajuste" data-saldo="${cuenta}">
+        <label for="gastos-saldo-${cuenta}"><span class="gastos__etiqueta">${banco ? 'saldo del banco' : 'efectivo'}</span>
+          <span class="ajuste__ayuda">${
+            saldo
+              ? `Apuntaste ${escapar(euros(saldo.centimos))} el ${escapar(fechaCorta(saldo.fecha))}. Ponlo al día cuando quieras: desde ahí calculo cómo acabas cada mes.`
+              : banco
+              ? 'Lo que tienes hoy en el banco. Con él calculo cómo acabarás cada mes.'
+              : 'Lo que llevas en la cartera o tienes en casa. Lo que pagues en efectivo sale de aquí, y lo que saques del cajero entra aquí.'
+          }</span></label>
+        <div class="formulario__fila">
+          <input class="campo" id="gastos-saldo-${cuenta}" name="saldo" inputmode="decimal" placeholder="por ejemplo ${banco ? '2.340,50' : '60'}" value="">
+          <button type="submit" class="boton">${saldo ? 'Actualizar' : 'Guardar'}</button>
+          ${saldo ? `<button type="button" class="boton" data-quitar-saldo="${cuenta}">Quitar</button>` : ''}
+        </div>
+      </form>`;
+    };
     return `
       ${graficaBalance()}
       <p class="gastos__dia"><span>En qué se va ${mes === mesDe(hoy) ? 'este mes' : `en ${escapar(nombreMes(mes, { corto: true }))}`}</span><span>${escapar(euros(r.previsto))}</span></p>
       ${categorias}
-      <form class="gastos__ajuste" data-saldo>
-        <label for="gastos-saldo"><span class="gastos__etiqueta">saldo de tu cuenta</span>
-          <span class="ajuste__ayuda">${
-            saldo
-              ? `Apuntaste ${escapar(euros(saldo.centimos))} el ${escapar(fechaCorta(saldo.fecha))}. Ponlo al día cuando quieras: desde ahí calculo cómo acabas cada mes.`
-              : 'Lo que tienes hoy en el banco. Con él calculo cómo acabarás cada mes.'
-          }</span></label>
-        <div class="formulario__fila">
-          <input class="campo" id="gastos-saldo" name="saldo" inputmode="decimal" placeholder="por ejemplo 2.340,50" value="">
-          <button type="submit" class="boton">${saldo ? 'Actualizar' : 'Guardar'}</button>
-          ${saldo ? '<button type="button" class="boton" data-quitar-saldo>Quitar</button>' : ''}
-        </div>
-      </form>
+      ${formSaldo('banco')}
+      ${formSaldo('efectivo')}
       <form class="gastos__ajuste" data-presupuesto>
         <label for="gastos-presupuesto"><span class="gastos__etiqueta">presupuesto mensual</span>
           <span class="ajuste__ayuda">Lo que quieres gastar como mucho cada mes, fijos incluidos.</span></label>
@@ -779,6 +893,11 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
       abierto = null;
       return guardar(borrarMovimiento(datos, d.borrarMovimiento), { aviso: `Borrado: ${m?.concepto ?? 'gasto'}`, alDeshacer: (antes) => antes });
     }
+    if (d.borrarTraspaso) {
+      const t = datos.traspasos.find((x) => x.id === d.borrarTraspaso);
+      abierto = null;
+      return guardar(borrarTraspaso(datos, d.borrarTraspaso), { aviso: `Borrado: ${t ? conceptoTraspaso(t.de).toLowerCase() : 'movimiento'}`, alDeshacer: (antes) => antes });
+    }
     if (d.borrarFijo) {
       const f = datos.fijos.find((x) => x.id === d.borrarFijo);
       abierto = null;
@@ -803,7 +922,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
       });
     }
     if ('quitarPresupuesto' in d) return guardar(ponerPresupuesto(datos, 0), { aviso: 'Sin presupuesto' });
-    if ('quitarSaldo' in d) return guardar(ponerSaldo(datos, null, hoy), { aviso: 'Sin saldo', alDeshacer: (antes) => antes });
+    if (d.quitarSaldo) return guardar(ponerSaldo(datos, null, hoy, d.quitarSaldo), { aviso: d.quitarSaldo === 'efectivo' ? 'Sin saldo del efectivo' : 'Sin saldo del banco', alDeshacer: (antes) => antes });
     if (d.csv) {
       const desde = d.csv === 'mes' ? mes : `${mes.slice(0, 4)}-01`;
       const hasta = d.csv === 'mes' ? mes : `${mes.slice(0, 4)}-12`;
@@ -848,7 +967,14 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
         ingreso: esCategoriaIngreso(form.categoria.value),
         fecha: form.fecha.value,
         nota: form.nota.value,
+        cuenta: form.cuenta.value,
       });
+      abierto = null;
+      if (form.fecha.value && mesDe(form.fecha.value) !== mes) mes = mesDe(form.fecha.value);
+      return guardar(nuevos, { aviso: 'Guardado' });
+    }
+    if (form.dataset.editarTraspaso) {
+      const nuevos = editarTraspaso(datos, form.dataset.editarTraspaso, { centimos: importeDe(form.importe.value), de: form.de.value, fecha: form.fecha.value, nota: form.nota.value });
       abierto = null;
       if (form.fecha.value && mesDe(form.fecha.value) !== mes) mes = mesDe(form.fecha.value);
       return guardar(nuevos, { aviso: 'Guardado' });
@@ -871,6 +997,7 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
         mes: Number(form.mes.value),
         diaSemana: Number(form.diaSemana.value),
         desde: form.desde.value || `${mesDe(hoy)}-01`,
+        cuenta: form.cuenta.value,
       };
       if (!campos.concepto.trim()) throw new Error('Pon qué es: alquiler, Netflix, nómina…');
       const id = form.dataset.editarFijo;
@@ -878,13 +1005,16 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
       if (id) return guardar(editarFijo(datos, id, campos, hoy), { aviso: 'Guardado' });
       return guardar(anadirFijo(datos, campos, hoy).datos, { aviso: `${campos.ingreso ? 'Ingreso' : 'Gasto'} fijo: ${campos.concepto.trim()} · ${euros(campos.centimos)}`, alDeshacer: (antes) => antes });
     }
-    if ('saldo' in form.dataset) {
+    if (form.dataset.saldo) {
+      const cuenta = form.dataset.saldo;
       const texto = form.saldo.value.trim();
-      if (!texto) throw new Error('Escribe lo que tienes hoy en la cuenta, por ejemplo 2.340,50.');
-      // Saldo en negativo («-120»): también vale.
+      if (!texto) throw new Error(cuenta === 'efectivo' ? 'Escribe lo que llevas en efectivo, por ejemplo 60.' : 'Escribe lo que tienes hoy en el banco, por ejemplo 2.340,50.');
+      // El banco puede estar en negativo («-120»); el efectivo, no.
       const negativo = /^[-−]/.test(texto);
-      const centimos = importeDe(texto.replace(/^[-−]\s*/, ''));
-      return guardar(ponerSaldo(datos, negativo ? -centimos : centimos, hoy), { aviso: `Saldo: ${euros(negativo ? -centimos : centimos)} hoy` });
+      if (negativo && cuenta === 'efectivo') throw new Error('En efectivo no se puede tener menos de 0 €.');
+      const centimos = /^[-−]?\s*0+(?:[.,]0+)?$/.test(texto) ? 0 : importeDe(texto.replace(/^[-−]\s*/, ''));
+      const valor = negativo ? -centimos : centimos;
+      return guardar(ponerSaldo(datos, valor, hoy, cuenta), { aviso: `${cuenta === 'efectivo' ? 'En efectivo' : 'En el banco'}: ${euros(valor)} hoy`, alDeshacer: (antes) => antes });
     }
     if ('presupuesto' in form.dataset) {
       const texto = form.presupuesto.value.trim();

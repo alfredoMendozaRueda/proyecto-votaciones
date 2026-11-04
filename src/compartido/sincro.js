@@ -24,7 +24,11 @@ export const COLECCIONES_SINCRO = [
 ];
 // Colecciones que llegaron después: en los dispositivos que ya sincronizaban se
 // activan solas una vez (y se baja todo, por si otro dispositivo ya las subió).
-const COLECCIONES_NUEVAS = ['gastos'];
+const COLECCIONES_NUEVAS = ['gastos', 'cuentas'];
+// Colecciones que no se eligen aparte: van con otra (si se sincroniza Gastos, también
+// su efectivo y sus traspasos). Las versiones anteriores no las conocen y las dejan en paz.
+const ACOMPANANTES = { gastos: ['cuentas'] };
+const TODAS = [...COLECCIONES_SINCRO.map(([c]) => c), ...Object.values(ACOMPANANTES).flat()];
 // Ajustes que son de cada dispositivo (pantalla, atajos, motor de voz…).
 export const AJUSTES_LOCALES = new Set([
   'atajo',
@@ -285,6 +289,10 @@ export function coleccionClaves({ leer, guardar, borrar, despues }) {
 
 // Gastos: cada gasto o ingreso (m:) y cada fijo (f:) por separado, y el presupuesto y el saldo aparte;
 // así dos dispositivos pueden apuntar a la vez sin pisarse.
+// Los gastos viajan como siempre (lo que entienden también las versiones anteriores);
+// de qué cuenta es cada uno (banco o efectivo), los traspasos y el saldo del efectivo
+// van en «cuentas», que esas versiones no conocen y así no los pueden pisar.
+const sinCuenta = ({ cuenta, ...resto }) => resto;
 export function coleccionGastos({ leer, guardar, normalizar = (d) => d, despues }) {
   return {
     async leer() {
@@ -293,8 +301,8 @@ export function coleccionGastos({ leer, guardar, normalizar = (d) => d, despues 
       if (!d || typeof d !== 'object') return mapa;
       const base = { presupuesto: d.presupuesto ?? 0, saldo: d.saldo ?? null };
       mapa.set('base', { firma: comoTexto(base), valor: comoTexto(base) });
-      for (const m of d.movimientos ?? []) if (m?.id) mapa.set(`m:${m.id}`, { firma: comoTexto(m), valor: comoTexto(m) });
-      for (const f of d.fijos ?? []) if (f?.id) mapa.set(`f:${f.id}`, { firma: comoTexto(f), valor: comoTexto(f) });
+      for (const m of d.movimientos ?? []) if (m?.id) mapa.set(`m:${m.id}`, { firma: comoTexto(sinCuenta(m)), valor: comoTexto(sinCuenta(m)) });
+      for (const f of d.fijos ?? []) if (f?.id) mapa.set(`f:${f.id}`, { firma: comoTexto(sinCuenta(f)), valor: comoTexto(sinCuenta(f)) });
       return mapa;
     },
     firma: (v) => v,
@@ -303,12 +311,55 @@ export function coleccionGastos({ leer, guardar, normalizar = (d) => d, despues 
       let base = { presupuesto: d.presupuesto ?? 0, saldo: d.saldo ?? null };
       const movimientos = new Map((d.movimientos ?? []).filter((m) => m?.id).map((m) => [m.id, m]));
       const fijos = new Map((d.fijos ?? []).filter((f) => f?.id).map((f) => [f.id, f]));
+      // Lo que llega no dice la cuenta: se queda la que ya tenía aquí.
+      const conSuCuenta = (lista, id, valor) => ({ ...JSON.parse(valor), cuenta: lista.get(id)?.cuenta });
       for (const { id, valor } of cambios) {
         if (id === 'base') base = valor === null ? { presupuesto: 0, saldo: null } : JSON.parse(valor);
-        else if (id.startsWith('m:')) valor === null ? movimientos.delete(id.slice(2)) : movimientos.set(id.slice(2), JSON.parse(valor));
-        else if (id.startsWith('f:')) valor === null ? fijos.delete(id.slice(2)) : fijos.set(id.slice(2), JSON.parse(valor));
+        else if (id.startsWith('m:')) valor === null ? movimientos.delete(id.slice(2)) : movimientos.set(id.slice(2), conSuCuenta(movimientos, id.slice(2), valor));
+        else if (id.startsWith('f:')) valor === null ? fijos.delete(id.slice(2)) : fijos.set(id.slice(2), conSuCuenta(fijos, id.slice(2), valor));
       }
-      await guardar(normalizar({ ...base, movimientos: [...movimientos.values()], fijos: [...fijos.values()] }));
+      await guardar(normalizar({ ...d, ...base, movimientos: [...movimientos.values()], fijos: [...fijos.values()] }));
+      await despues?.();
+    },
+  };
+}
+
+// «efectivo» (su saldo), «t:id» (cada traspaso) y «e:id» (cada gasto, ingreso o fijo en efectivo).
+export function coleccionCuentas({ leer, guardar, normalizar = (d) => d, despues }) {
+  return {
+    async leer() {
+      const d = await leer();
+      const mapa = new Map();
+      if (!d || typeof d !== 'object') return mapa;
+      const poner = (id, v) => mapa.set(id, { firma: comoTexto(v), valor: comoTexto(v) });
+      if (d.saldoEfectivo) poner('efectivo', d.saldoEfectivo);
+      for (const t of d.traspasos ?? []) if (t?.id) poner(`t:${t.id}`, t);
+      for (const x of [...(d.movimientos ?? []), ...(d.fijos ?? [])]) if (x?.id && x.cuenta === 'efectivo') poner(`e:${x.id}`, 'efectivo');
+      for (const id of d.efectivoPendiente ?? []) poner(`e:${id}`, 'efectivo');
+      return mapa;
+    },
+    firma: (v) => v,
+    async aplicar(cambios) {
+      const d = (await leer()) ?? {};
+      let saldoEfectivo = d.saldoEfectivo ?? null;
+      const traspasos = new Map((d.traspasos ?? []).filter((t) => t?.id).map((t) => [t.id, t]));
+      const efectivo = new Map();
+      for (const { id, valor } of cambios) {
+        if (id === 'efectivo') saldoEfectivo = valor === null ? null : JSON.parse(valor);
+        else if (id.startsWith('t:')) valor === null ? traspasos.delete(id.slice(2)) : traspasos.set(id.slice(2), JSON.parse(valor));
+        else if (id.startsWith('e:')) efectivo.set(id.slice(2), valor !== null);
+      }
+      const cambiar = (x) => (efectivo.has(x.id) ? { ...x, cuenta: efectivo.get(x.id) ? 'efectivo' : 'banco' } : x);
+      const movimientos = (d.movimientos ?? []).map(cambiar);
+      const fijos = (d.fijos ?? []).map(cambiar);
+      // Si aún no ha llegado el gasto en sí, se apunta para cuando llegue.
+      const existen = new Set([...movimientos, ...fijos].map((x) => x?.id));
+      const pendiente = new Set(d.efectivoPendiente ?? []);
+      for (const [id, si] of efectivo) {
+        if (si && !existen.has(id)) pendiente.add(id);
+        else pendiente.delete(id);
+      }
+      await guardar(normalizar({ ...d, saldoEfectivo, traspasos: [...traspasos.values()], movimientos, fijos, efectivoPendiente: [...pendiente] }));
       await despues?.();
     },
   };
@@ -350,7 +401,7 @@ export function coleccionConsumo({ leer, guardar, despues }) {
 
 // ---------- Motor ----------
 
-const estadoNuevo = () => ({ cursor: 0, base: {}, pendientes: {}, ultima: 0, error: '', primera: true, colecciones: COLECCIONES_SINCRO.map(([c]) => c), ofrecidas: COLECCIONES_SINCRO.map(([c]) => c) });
+const estadoNuevo = () => ({ cursor: 0, base: {}, pendientes: {}, ultima: 0, error: '', primera: true, colecciones: COLECCIONES_SINCRO.map(([c]) => c), ofrecidas: [...TODAS] });
 const espera = (ms, signal) =>
   new Promise((ok, mal) => {
     const t = setTimeout(ok, ms);
@@ -375,12 +426,14 @@ export class Sincronizador {
     const e = await this.leerEstado();
     if (!e || typeof e !== 'object') return estadoNuevo();
     const estado = { ...estadoNuevo(), ...e };
-    const ofrecidas = Array.isArray(e.ofrecidas) ? e.ofrecidas : COLECCIONES_SINCRO.map(([c]) => c).filter((c) => !COLECCIONES_NUEVAS.includes(c));
+    const ofrecidas = Array.isArray(e.ofrecidas) ? e.ofrecidas : TODAS.filter((c) => !COLECCIONES_NUEVAS.includes(c));
     const nuevas = COLECCIONES_NUEVAS.filter((c) => !ofrecidas.includes(c));
     if (nuevas.length || !Array.isArray(e.ofrecidas)) {
-      estado.ofrecidas = COLECCIONES_SINCRO.map(([c]) => c);
+      estado.ofrecidas = [...TODAS];
       if (nuevas.length) {
-        estado.colecciones = [...new Set([...estado.colecciones, ...nuevas])];
+        // Las que se eligen se activan; las acompañantes siguen a la suya. Se baja todo otra vez.
+        const visibles = nuevas.filter((c) => COLECCIONES_SINCRO.some(([n]) => n === c));
+        estado.colecciones = [...new Set([...estado.colecciones, ...visibles])];
         estado.cursor = 0;
       }
       await this.guardarEstado(estado);
@@ -553,7 +606,7 @@ export class Sincronizador {
 
   async #rondaCon(clave, e) {
     const c = await this.cliente();
-    const activas = new Set(e.colecciones.filter((n) => this.colecciones[n]));
+    const activas = new Set(e.colecciones.flatMap((n) => [n, ...(ACOMPANANTES[n] ?? [])]).filter((n) => this.colecciones[n]));
     const coleccionDe = (id) => id.slice(0, id.indexOf('/'));
     const ahora = Date.now();
 

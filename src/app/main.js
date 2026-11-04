@@ -587,7 +587,7 @@ async function iniciar() {
     if (colecciones.includes('ajustes') || colecciones.includes('claves')) chat.comprobarClave();
     if (colecciones.includes('recordatorios')) contarRecordatoriosDeHoy();
     if (colecciones.includes('empleo')) apartados.empleo.recargar();
-    if (colecciones.includes('gastos')) apartados.gastos?.recargar();
+    if (colecciones.includes('gastos') || colecciones.includes('cuentas')) apartados.gastos?.recargar();
     const vista = { memoria: 'memoria', recordatorios: 'recordatorios', conversaciones: 'historial' };
     if (colecciones.some((c) => vista[c] === vistaActual)) apartados[vistaActual]?.mostrar();
   });

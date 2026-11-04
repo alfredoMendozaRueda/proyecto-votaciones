@@ -7944,3 +7944,57 @@ p.gastos__dia {
   font-size: 11.5px;
   color: var(--texto-3);
 }
+
+/* Banco o efectivo: dos botones juntos, como un interruptor. */
+.gastos__cuenta {
+  display: inline-flex;
+  gap: 0;
+}
+
+.gastos__cuenta .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.gastos__cuenta .chip:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.gastos__cuenta .chip:last-child {
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.gastos__cuenta .chip[aria-pressed='true'] {
+  position: relative;
+  z-index: 1;
+}
+
+.gastos__cuenta .chip .icono {
+  flex: none;
+  opacity: 0.8;
+}
+
+/* Sacar del cajero / ingresar en el banco: neutro, no es gasto ni ingreso. */
+.gasto--traspaso .gasto__punto {
+  background: var(--carbon-3);
+  box-shadow: inset 0 0 0 1px var(--linea);
+  color: var(--texto-2);
+}
+
+.gasto--traspaso .gasto__importe {
+  font-weight: 500;
+  color: var(--texto-2);
+}
+
+.gastos__saldos {
+  color: var(--texto-3);
+}
+
+.gasto__cuenta {
+  flex: 0 0 auto;
+  width: auto;
+}

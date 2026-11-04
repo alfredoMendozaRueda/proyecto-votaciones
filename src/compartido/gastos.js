@@ -6,6 +6,10 @@
 //
 // Un gasto fijo no se apunta cada mes: se calcula. Si un mes cambia (la luz
 // subió) o no toca (lo pausaste), se guarda como excepción de ese día.
+//
+// El dinero está en el banco o en efectivo: cada gasto, ingreso y fijo dice de
+// cuál sale («cuenta»), y cada uno tiene su saldo. Sacar del cajero o ingresar
+// efectivo en el banco es un traspaso: no es gasto ni ingreso, solo cambia de sitio.
 
 export const CATEGORIAS = [
   { id: 'casa', nombre: 'Casa', color: '#c58b5a' },
@@ -36,6 +40,15 @@ export const FRECUENCIAS = [
   { id: 'semanal', nombre: 'Cada semana', meses: 12 / 52 },
 ];
 const FRECUENCIA = new Map(FRECUENCIAS.map((f) => [f.id, f]));
+export const CUENTAS = [
+  { id: 'banco', nombre: 'Banco' },
+  { id: 'efectivo', nombre: 'Efectivo' },
+];
+export const nombreCuenta = (c) => (c === 'efectivo' ? 'Efectivo' : 'Banco');
+export const otraCuenta = (c) => (c === 'efectivo' ? 'banco' : 'efectivo');
+const cuentaValida = (c) => (c === 'efectivo' ? 'efectivo' : 'banco');
+// «Sacado del cajero» (del banco al efectivo) o «Ingresado en el banco» (al revés).
+export const conceptoTraspaso = (de) => (de === 'efectivo' ? 'Ingresado en el banco' : 'Sacado del cajero');
 export const DIAS_SEMANA = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
@@ -147,15 +160,36 @@ export function adivinarIngreso(concepto) {
 // de ingreso, luego el saldo y al final las palabras sueltas («nómina 1.850»).
 const VERBO_GASTO = /\b(?:he gastado|me he gastado|hemos gastado|gaste|he pagado|hemos pagado|pague|me (?:ha |han )?cobr\w*|me costo|me ha costado|he comprado|compre|he invertido|he dado|di|le he dado|he prestado|preste)\b/;
 const VERBO_INGRESO = /^\s*\+|\b(?:me (?:han |ha )?(?:ingresado|pagado|transferido|devuelto|dado|abonado|hecho un bizum|enviado)|me ingresaron|me pagaron|me dieron|me devolvieron|me transfirieron|he cobrado|cobre|hemos cobrado|he recibido|recibi|he ganado|gane|me han tocado|me toco|bizum recibido|me (?:ha |han )?llegad?o (?:la |el |una |un |mi )?(?:nomina|paga|sueldo|salario|bizum|transferencia|ingreso|dinero|devolucion|pension))\b/;
-const PISTA_SALDO = /\bsaldo\b|\b(?:tengo|me quedan?|quedan|hay|dispongo de|cuento con|llevo ahorrad[oa]s)\s+(?:ahora\s+|ya\s+|todavia\s+|aun\s+|unos?\s+|en total\s+|mas o menos\s+|casi\s+)*(?:€\s*)?\d|\ben (?:la|mi) cuenta (?:tengo|hay|me quedan?)\b|\b(?:tengo|hay)\b.*\ben (?:la|mi) cuenta\b|\ben el banco\b|\bahorrad[oa]s\b/;
+const PISTA_SALDO = /\b(?:llevo|tengo)\s+(?:unos?\s+|casi\s+)?(?:€\s*)?\d[^.]*\b(?:encima|en la cartera|en el bolsillo|en efectivo|en metalico|en mano|en suelto|en billetes)\b|\ben (?:la cartera|el bolsillo|efectivo|metalico) (?:tengo|hay|llevo|me quedan?)\b|\bsaldo\b|\b(?:tengo|me quedan?|quedan|hay|dispongo de|cuento con|llevo ahorrad[oa]s)\s+(?:ahora\s+|ya\s+|todavia\s+|aun\s+|unos?\s+|en total\s+|mas o menos\s+|casi\s+)*(?:€\s*)?\d|\ben (?:la|mi) cuenta (?:tengo|hay|me quedan?)\b|\b(?:tengo|hay)\b.*\ben (?:la|mi) cuenta\b|\ben el banco\b|\bahorrad[oa]s\b/;
+// Traspasos: «he sacado 50 del cajero» (banco → efectivo), «he ingresado 200 en el
+// banco» (efectivo → banco). «Me han ingresado la nómina» sigue siendo un ingreso.
+const VERBO_METER = /\b(?:he|hemos) (?:ingresado|metido|depositado)\b[^.]*\b(?:en el banco|en la cuenta|en mi cuenta|en el cajero)\b|\b(?:ingrese|meti|deposite)\b[^.]*\b(?:en el banco|en la cuenta|en mi cuenta|en el cajero)\b/;
+const VERBO_SACAR = /\b(?:he sacado|hemos sacado|saque|he retirado|retire|retirada|sacar)\b[^.]*\b(?:cajero|efectivo|metalico|dinero|pasta|billetes?|banco|cuenta)\b/;
+const SOLO_CAJERO = /\bcajero\b/;
+const NO_TRASPASO = /\bcomision|\bcuota\b|\bentradas?\b/;
 export function tipoDeTexto(texto) {
   const t = sinTildes(texto);
+  if (!NO_TRASPASO.test(t) && (VERBO_METER.test(t) || VERBO_SACAR.test(t) || (SOLO_CAJERO.test(t) && !VERBO_GASTO.test(t)))) return 'traspaso';
   if (VERBO_GASTO.test(t)) return 'gasto';
   if (VERBO_INGRESO.test(texto) || VERBO_INGRESO.test(t)) return 'ingreso';
   if (PISTA_SALDO.test(t)) return 'saldo';
   if (PISTA_INGRESO.test(t)) return 'ingreso';
   return 'gasto';
 }
+
+// ¿Banco o efectivo? Lo que diga el texto, o null si no dice nada (entonces, el banco).
+const PISTA_EFECTIVO = /\b(?:en efectivo|efectivo|en metalico|metalico|en mano|en billetes?|en monedas|en suelto|cash|en la cartera|de la cartera|en el bolsillo|del bolsillo|en la hucha|de la hucha|encima)\b/;
+const PISTA_BANCO = /\b(?:con (?:la )?tarjeta|tarjeta|por bizum|bizum|transferencia|en el banco|del banco|en la cuenta|de la cuenta|en mi cuenta|domiciliad[oa]s?|paypal|apple pay|google pay|con el movil)\b/;
+export function cuentaDeTexto(texto) {
+  const t = sinTildes(texto);
+  if (VERBO_METER.test(t)) return 'efectivo';
+  if (VERBO_SACAR.test(t) || (SOLO_CAJERO.test(t) && !NO_TRASPASO.test(t) && !VERBO_GASTO.test(t))) return 'banco';
+  if (PISTA_EFECTIVO.test(t)) return 'efectivo';
+  if (PISTA_BANCO.test(t)) return 'banco';
+  return null;
+}
+// Lo que sobra en el concepto una vez sabido de dónde sale: «café en efectivo» → «café».
+const FRASE_CUENTA = /\s(?:en efectivo|en metálico|en metalico|en mano|en billetes?|en monedas|en suelto|en cash|cash|con (?:la )?tarjeta|con el móvil|con el movil|por bizum)(?=[\s,.;:]|$)/gi;
 
 // ---------- Escribir un gasto en una línea ----------
 // «12,50 súper», «súper 12,50», «ayer 30€ gasolina», «netflix 12,99 al mes»,
@@ -164,6 +198,8 @@ const RE_IMPORTE = /(?:€\s*)?\d+(?:[.,]\d+)*(?:\s*(?:€|eur(?:os?)?\b))?/gi;
 export function interpretarGasto(texto, hoy = fechaISO()) {
   let t = ` ${String(texto ?? '').trim()} `;
   const tipo = tipoDeTexto(texto ?? '');
+  const cuenta = cuentaDeTexto(texto ?? '');
+  t = t.replace(FRASE_CUENTA, ' ');
   const ingreso = tipo === 'ingreso';
   t = t.replace(/^\s*\+\s*/, ' ');
   let fecha = hoy;
@@ -217,9 +253,11 @@ export function interpretarGasto(texto, hoy = fechaISO()) {
     concepto: concepto.slice(0, 80),
     categoria: ingreso ? adivinarIngreso(concepto) : concepto ? adivinarCategoria(concepto) : 'otros',
     fecha,
-    fijo: tipo === 'saldo' ? null : fijo,
+    fijo: tipo === 'saldo' || tipo === 'traspaso' ? null : fijo,
     ingreso,
     tipo,
+    // De dónde sale (o dónde está, para el saldo); en un traspaso, de dónde sale el dinero.
+    cuenta,
   };
 }
 
@@ -245,9 +283,27 @@ function normalizarMovimiento(m) {
     concepto: concepto || categoria(catFinal).nombre,
     categoria: catFinal,
     nota: cadena(m.nota, 200),
+    cuenta: cuentaValida(m.cuenta),
     creado: Number.isFinite(m.creado) ? m.creado : 0,
   };
 }
+
+// Del banco al efectivo (de: 'banco') o al revés.
+function normalizarTraspaso(t) {
+  if (!t || typeof t !== 'object') return null;
+  const centimos = entero(t.centimos, 1, MAX_CENTIMOS);
+  if (!centimos || !fechaValida(t.fecha)) return null;
+  return {
+    id: typeof t.id === 'string' && /^t[0-9a-z]{4,30}$/.test(t.id) ? t.id : nuevoId('t'),
+    fecha: t.fecha,
+    centimos,
+    de: cuentaValida(t.de),
+    nota: cadena(t.nota, 200),
+    creado: Number.isFinite(t.creado) ? t.creado : 0,
+  };
+}
+
+const saldoValido = (s) => (s && entero(s.centimos, -MAX_CENTIMOS, MAX_CENTIMOS) !== null && fechaValida(s.fecha) ? { centimos: s.centimos, fecha: s.fecha } : null);
 
 function normalizarExcepciones(e) {
   if (!e || typeof e !== 'object') return {};
@@ -284,6 +340,7 @@ function normalizarFijo(f, hoy) {
     desde,
     hasta: fechaValida(f.hasta) && f.hasta >= desde ? f.hasta : '',
     excepciones: normalizarExcepciones(f.excepciones),
+    cuenta: cuentaValida(f.cuenta),
     creado: Number.isFinite(f.creado) ? f.creado : 0,
   };
 }
@@ -292,12 +349,23 @@ export function normalizarGastos(d = {}, hoy = fechaISO()) {
   const datos = d && typeof d === 'object' ? d : {};
   const movimientos = (Array.isArray(datos.movimientos) ? datos.movimientos : []).map(normalizarMovimiento).filter(Boolean);
   movimientos.sort((a, b) => b.fecha.localeCompare(a.fecha) || b.creado - a.creado);
+  const fijos = (Array.isArray(datos.fijos) ? datos.fijos : []).map((f) => normalizarFijo(f, hoy)).filter(Boolean).slice(0, MAX_FIJOS);
+  // Lo que llegó por la sincronización como «en efectivo» antes que el gasto en sí: se le aplica en cuanto llega.
+  const pendientes = new Set((Array.isArray(datos.efectivoPendiente) ? datos.efectivoPendiente : []).filter((id) => typeof id === 'string' && /^[gf][0-9a-z]{4,30}$/.test(id)));
+  for (const x of [...movimientos, ...fijos]) {
+    if (pendientes.delete(x.id)) x.cuenta = 'efectivo';
+  }
+  const traspasos = (Array.isArray(datos.traspasos) ? datos.traspasos : []).map(normalizarTraspaso).filter(Boolean);
+  traspasos.sort((a, b) => b.fecha.localeCompare(a.fecha) || b.creado - a.creado);
   return {
     movimientos: movimientos.slice(0, MAX_MOVIMIENTOS),
-    fijos: (Array.isArray(datos.fijos) ? datos.fijos : []).map((f) => normalizarFijo(f, hoy)).filter(Boolean).slice(0, MAX_FIJOS),
+    fijos,
+    traspasos: traspasos.slice(0, MAX_MOVIMIENTOS),
     presupuesto: entero(datos.presupuesto, 0, MAX_CENTIMOS) ?? 0,
-    // Lo que había en la cuenta un día concreto: desde ahí se calcula el saldo de cada fin de mes.
-    saldo: datos.saldo && entero(datos.saldo.centimos, -MAX_CENTIMOS, MAX_CENTIMOS) !== null && fechaValida(datos.saldo.fecha) ? { centimos: datos.saldo.centimos, fecha: datos.saldo.fecha } : null,
+    // Lo que había en el banco y en efectivo un día concreto: desde ahí se calcula cómo acaba cada mes.
+    saldo: saldoValido(datos.saldo),
+    saldoEfectivo: saldoValido(datos.saldoEfectivo),
+    efectivoPendiente: [...pendientes].slice(0, 500),
   };
 }
 
@@ -352,8 +420,25 @@ export function cambiarOcurrencia(datos, id, fecha, cambio, hoy = fechaISO()) {
 }
 
 export const ponerPresupuesto = (datos, centimos) => normalizarGastos({ ...datos, presupuesto: entero(centimos, 0, MAX_CENTIMOS) ?? 0 });
-// El saldo de la cuenta un día (hoy, si no se dice; null para quitarlo).
-export const ponerSaldo = (datos, centimos, fecha = fechaISO()) => normalizarGastos({ ...datos, saldo: centimos === null ? null : { centimos, fecha } }, fecha);
+// El saldo del banco (o del efectivo) un día (hoy, si no se dice; null para quitarlo).
+export const ponerSaldo = (datos, centimos, fecha = fechaISO(), cuenta = 'banco') =>
+  normalizarGastos({ ...datos, [cuenta === 'efectivo' ? 'saldoEfectivo' : 'saldo']: centimos === null ? null : { centimos, fecha } }, fecha);
+export const saldoDe = (datos, cuenta) => (cuenta === 'efectivo' ? datos.saldoEfectivo : datos.saldo);
+
+// Sacar del cajero (de: 'banco') o ingresar efectivo en el banco (de: 'efectivo').
+export function anadirTraspaso(datos, t, ahora = Date.now()) {
+  const traspaso = normalizarTraspaso({ ...t, id: undefined, creado: ahora });
+  if (!traspaso) throw new Error('Pon un importe mayor que cero y una fecha válida.');
+  return { datos: normalizarGastos({ ...datos, traspasos: [traspaso, ...datos.traspasos] }), traspaso };
+}
+export function editarTraspaso(datos, id, cambios) {
+  const anterior = datos.traspasos.find((t) => t.id === id);
+  if (!anterior) throw new Error('Ese movimiento ya no existe.');
+  const traspaso = normalizarTraspaso({ ...anterior, ...cambios, id });
+  if (!traspaso) throw new Error('Pon un importe mayor que cero y una fecha válida.');
+  return normalizarGastos({ ...datos, traspasos: datos.traspasos.map((t) => (t.id === id ? traspaso : t)) });
+}
+export const borrarTraspaso = (datos, id) => normalizarGastos({ ...datos, traspasos: datos.traspasos.filter((t) => t.id !== id) });
 
 // ---------- Cuentas ----------
 
@@ -431,6 +516,7 @@ export function resumenMes(datos, mes, hoy = fechaISO()) {
         concepto: f.concepto,
         categoria: f.categoria,
         ingreso: f.ingreso,
+        cuenta: f.cuenta,
         cambiado: o.cambiado,
         pendiente: o.fecha > hoy,
       })),
@@ -447,9 +533,13 @@ export function resumenMes(datos, mes, hoy = fechaISO()) {
   const previsto = gastado + pendiente;
   const ingresado = suma(entradas.filter((x) => !x.pendiente));
   const porCobrar = suma(entradas.filter((x) => x.pendiente));
+  const traspasos = datos.traspasos.filter((t) => t.fecha.startsWith(mes)).map((t) => ({ ...t, tipo: 'traspaso', concepto: conceptoTraspaso(t.de), a: otraCuenta(t.de) }));
   return {
     mes,
     lista,
+    // Sacar del cajero o ingresar efectivo: aparte, porque no es gasto ni ingreso.
+    traspasos,
+    enEfectivo: suma(gastos.filter((x) => !x.pendiente && x.cuenta === 'efectivo')),
     omitidos,
     gastado,
     pendiente,
@@ -514,12 +604,13 @@ export function apuntarMovimiento(datos, m, hoy = fechaISO(), ahora = Date.now()
     };
   }
   const r = anadirMovimiento(datos, { ...m, fecha, ingreso, categoria: cat }, ahora);
-  return { datos: r.datos, resultado: { tipo: 'puntual', ingreso, id: r.movimiento.id, concepto: r.movimiento.concepto, categoria: r.movimiento.categoria, centimos: r.movimiento.centimos, fecha } };
+  return { datos: r.datos, resultado: { tipo: 'puntual', ingreso, id: r.movimiento.id, concepto: r.movimiento.concepto, categoria: r.movimiento.categoria, centimos: r.movimiento.centimos, fecha, cuenta: r.movimiento.cuenta } };
 }
 
 // Deshacer cualquier cosa apuntada (desde el chat o la línea rápida).
 export function deshacerApunte(datos, r, hoy = fechaISO()) {
-  if (r.tipo === 'saldo') return normalizarGastos({ ...datos, saldo: r.anterior ?? null }, hoy);
+  if (r.tipo === 'saldo') return normalizarGastos({ ...datos, [r.cuenta === 'efectivo' ? 'saldoEfectivo' : 'saldo']: r.anterior ?? null }, hoy);
+  if (r.tipo === 'traspaso') return borrarTraspaso(datos, r.id);
   if (r.tipo === 'fijo-ajustado') {
     if (!datos.fijos.some((f) => f.id === r.fijoId)) return datos;
     return cambiarOcurrencia(datos, r.fijoId, r.fecha, r.anterior, hoy);
@@ -580,6 +671,19 @@ export function factorEstacional(mes) {
 }
 
 const gastoDelDia = (datos, mes) => datos.movimientos.filter((m) => !m.ingreso && m.fecha.startsWith(mes)).reduce((s, m) => s + m.centimos, 0);
+
+// Qué parte del día a día pagas en efectivo (según tus últimos 6 meses): 0 a 1.
+export function parteEfectivo(datos, hoy = fechaISO()) {
+  const desde = `${sumarMeses(mesDe(hoy), -6)}-01`;
+  let total = 0;
+  let efectivo = 0;
+  for (const m of datos.movimientos) {
+    if (m.ingreso || m.fecha < desde || m.fecha > hoy) continue;
+    total += m.centimos;
+    if (m.cuenta === 'efectivo') efectivo += m.centimos;
+  }
+  return total ? Math.round((efectivo / total) * 100) / 100 : 0;
+}
 
 // El gasto del día a día (sin fijos) que cabe esperar en un mes → { centimos, base, factor, motivo, meses, añoPasado } o null.
 export function estimarDiaADia(datos, mes, hoy = fechaISO()) {
@@ -644,38 +748,71 @@ export function prevision(datos, mes, hoy = fechaISO()) {
   };
 }
 
-// Saldo de la cuenta al acabar cada mes, desde el saldo que apuntaste (o null).
-export function saldoAlFinal(datos, mes, hoy = fechaISO()) {
-  const s = datos.saldo;
-  if (!s || mes < mesDe(s.fecha)) return null;
+// Lo que habrá en el banco y en efectivo al acabar un mes, desde los saldos que apuntaste
+// → { banco, efectivo, total } (null en lo que no se sabe).
+// Lo real cuenta en su sitio (lo pagado en efectivo, en el efectivo; sacar del cajero
+// pasa del banco al efectivo). Lo estimado del día a día se reparte como sueles pagar;
+// si el efectivo no llega, se supone que sacarás del banco lo que falte.
+export function saldosAlFinal(datos, mes, hoy = fechaISO()) {
+  const inicial = { banco: datos.saldo, efectivo: datos.saldoEfectivo };
+  const conocidas = Object.entries(inicial).filter(([, s]) => s);
+  const nada = { banco: null, efectivo: null, total: null };
+  if (!conocidas.length) return nada;
+  const primero = conocidas.map(([, s]) => mesDe(s.fecha)).sort()[0];
+  if (mes < primero) return nada;
   const actual = mesDe(hoy);
-  let saldo = s.centimos;
-  for (let m = mesDe(s.fecha); m <= mes; m = sumarMeses(m, 1)) {
+  const parte = parteEfectivo(datos, hoy);
+  const saldo = { banco: null, efectivo: null };
+  // Solo lo que pasa después del día de cada saldo (lo anterior ya está dentro).
+  const cuenta = (c, fecha, centimos) => {
+    if (saldo[c] !== null && fecha > inicial[c].fecha) saldo[c] += centimos;
+  };
+  for (let m = primero; m <= mes; m = sumarMeses(m, 1)) {
+    for (const [c, s] of conocidas) if (mesDe(s.fecha) === m) saldo[c] = s.centimos;
     const r = resumenMes(datos, m, hoy);
-    // Solo lo que pasa después del día del saldo (lo anterior ya está dentro).
-    for (const x of r.lista) if (x.fecha > s.fecha) saldo += x.ingreso ? x.centimos : -x.centimos;
-    if (m >= actual) {
-      const est = estimarDiaADia(datos, m, hoy);
-      if (est) {
-        // El día a día que falta: en el mes del saldo, solo la parte de los días que quedan.
-        const yaApuntado = gastoDelDia(datos, m);
-        let resto = Math.max(0, est.centimos - yaApuntado);
-        if (m === mesDe(s.fecha)) {
-          const [a, mm] = m.split('-').map(Number);
-          const total = diasDelMes(a, mm);
-          resto = Math.min(resto, Math.round((est.centimos * (total - Number(s.fecha.slice(8)))) / total));
-        }
-        saldo -= resto;
-      }
+    for (const x of r.lista) cuenta(x.cuenta, x.fecha, x.ingreso ? x.centimos : -x.centimos);
+    for (const t of r.traspasos) {
+      cuenta(t.de, t.fecha, -t.centimos);
+      cuenta(t.a, t.fecha, t.centimos);
     }
+    if (m < actual) continue;
+    const est = estimarDiaADia(datos, m, hoy);
+    if (!est) continue;
+    const resto = Math.max(0, est.centimos - gastoDelDia(datos, m));
+    const [a, mm] = m.split('-').map(Number);
+    const dias = diasDelMes(a, mm);
+    // En el mes del saldo, solo la parte de los días que quedan.
+    const recorte = (c, centimos, proporcion) =>
+      inicial[c] && mesDe(inicial[c].fecha) === m ? Math.min(centimos, Math.round((est.centimos * proporcion * (dias - Number(inicial[c].fecha.slice(8)))) / dias)) : centimos;
+    let delBanco = recorte('banco', Math.round(resto * (1 - parte)), 1 - parte);
+    if (saldo.efectivo !== null) {
+      const enEfectivo = recorte('efectivo', Math.round(resto * parte), parte);
+      saldo.efectivo -= enEfectivo;
+      // Sin efectivo para tanto: lo que falte lo sacarás del banco.
+      if (saldo.efectivo < 0) {
+        const falta = Math.min(enEfectivo, -saldo.efectivo);
+        saldo.efectivo += falta;
+        delBanco += falta;
+      }
+    } else {
+      // Sin saldo del efectivo: todo el día a día acaba saliendo del banco.
+      delBanco = recorte('banco', resto, 1);
+    }
+    if (saldo.banco !== null) saldo.banco -= delBanco;
   }
-  return saldo;
+  const total = saldo.banco === null && saldo.efectivo === null ? null : (saldo.banco ?? 0) + (saldo.efectivo ?? 0);
+  return { ...saldo, total };
 }
+// El total (banco + efectivo), o null.
+export const saldoAlFinal = (datos, mes, hoy = fechaISO()) => saldosAlFinal(datos, mes, hoy).total;
 
 // Los meses de la gráfica: los 5 anteriores, este y los 3 siguientes.
 export function serieBalance(datos, hoy = fechaISO(), { atras = 5, adelante = 3 } = {}) {
   const actual = mesDe(hoy);
-  return Array.from({ length: atras + 1 + adelante }, (_, i) => sumarMeses(actual, i - atras)).map((m) => ({ ...prevision(datos, m, hoy), saldo: saldoAlFinal(datos, m, hoy) }));
+  return Array.from({ length: atras + 1 + adelante }, (_, i) => sumarMeses(actual, i - atras)).map((m) => {
+    const s = saldosAlFinal(datos, m, hoy);
+    return { ...prevision(datos, m, hoy), saldo: s.total, saldos: s };
+  });
 }
 
 // Los fijos que tocan en los próximos días (para Hoy y el chat).
@@ -690,13 +827,20 @@ export function proximosFijos(datos, hoy = fechaISO(), dias = 7) {
 
 // Para abrir en Excel o Numbers: separado por «;» y con coma decimal, como en España.
 export function aCSV(datos, desde, hasta, hoy = fechaISO()) {
-  const filas = [['Fecha', 'Concepto', 'Categoría', 'Tipo', 'Importe']];
+  const filas = [['Fecha', 'Concepto', 'Categoría', 'Tipo', 'Cuenta', 'Importe']];
+  const importe = (c) => (c / 100).toFixed(2).replace('.', ',');
   for (let mes = desde; mes <= hasta; mes = sumarMeses(mes, 1)) {
     const r = resumenMes(datos, mes, hoy);
-    for (const x of [...r.lista].reverse()) {
+    const todo = [...r.lista, ...r.traspasos].sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.creado ?? 0) - (b.creado ?? 0));
+    for (const x of todo) {
+      if (x.tipo === 'traspaso') {
+        // No es gasto ni ingreso: sin importe en la columna que suma, para que siga dando el ahorro.
+        filas.push([x.fecha, `${x.concepto} (${importe(x.centimos)} €)`, '', 'Traspaso', `${nombreCuenta(x.de)} → ${nombreCuenta(x.a)}`, '']);
+        continue;
+      }
       const tipo = `${x.ingreso ? 'Ingreso' : 'Gasto'}${x.tipo === 'fijo' ? ` fijo${x.pendiente ? (x.ingreso ? ' (por cobrar)' : ' (por pagar)') : ''}` : ''}`;
       // Gastos en negativo e ingresos en positivo: así la columna suma el ahorro.
-      filas.push([x.fecha, x.concepto, categoria(x.categoria).nombre, tipo, `${x.ingreso ? '' : '-'}${(x.centimos / 100).toFixed(2).replace('.', ',')}`]);
+      filas.push([x.fecha, x.concepto, categoria(x.categoria).nombre, tipo, nombreCuenta(x.cuenta), `${x.ingreso ? '' : '-'}${importe(x.centimos)}`]);
     }
   }
   const celda = (v) => (/[;"\n]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
@@ -727,8 +871,16 @@ export function resumenParaIA(datos, mes, hoy = fechaISO()) {
       const p = prevision(datos, sumarMeses(mesDe(hoy), n), hoy);
       return `${nombreMes(p.mes)}: gastos ~${aprox(p.gastos)}${p.motivo ? ` (${p.motivo})` : ''}, ingresos ${euros(p.ingresos, { redondo: true })}, ahorro ~${aprox(p.ahorro)}`;
     }),
-    saldo: datos.saldo ? `${euros(datos.saldo.centimos)} el ${datos.saldo.fecha}; a fin de este mes ~${aprox(saldoAlFinal(datos, mesDe(hoy), hoy))}` : 'no lo ha apuntado',
-    ultimos: r.lista.filter((x) => x.tipo === 'puntual').slice(0, 15).map((x) => `${x.fecha} · ${x.ingreso ? 'ingreso' : 'gasto'} · ${x.concepto} · ${euros(x.centimos)} · ${categoria(x.categoria).nombre}`),
+    saldo_banco: datos.saldo ? `${euros(datos.saldo.centimos)} el ${datos.saldo.fecha}` : 'no lo ha apuntado',
+    saldo_efectivo: datos.saldoEfectivo ? `${euros(datos.saldoEfectivo.centimos)} el ${datos.saldoEfectivo.fecha}` : 'no lo ha apuntado',
+    saldo_a_fin_de_mes: (() => {
+      const s = saldosAlFinal(datos, mesDe(hoy), hoy);
+      if (s.total === null) return undefined;
+      return `~${aprox(s.total)}${s.banco !== null && s.efectivo !== null ? ` (banco ~${aprox(s.banco)}, efectivo ~${aprox(s.efectivo)})` : s.banco !== null ? ' en el banco' : ' en efectivo'}`;
+    })(),
+    gastado_en_efectivo: r.enEfectivo ? euros(r.enEfectivo) : undefined,
+    traspasos: r.traspasos.length ? r.traspasos.map((t) => `${t.fecha} · ${t.concepto} · ${euros(t.centimos)}`) : undefined,
+    ultimos: r.lista.filter((x) => x.tipo === 'puntual').slice(0, 15).map((x) => `${x.fecha} · ${x.ingreso ? 'ingreso' : 'gasto'} · ${x.concepto} · ${euros(x.centimos)} · ${categoria(x.categoria).nombre}${x.cuenta === 'efectivo' ? ' · en efectivo' : ''}`),
   };
 }
 
@@ -748,12 +900,12 @@ export function crearAlmacenGastos({ leer, guardar, alCambiar = () => {} }) {
       const datos = await cargar();
       const centimos = Math.round(Number(entrada.importe) * 100);
       const fecha = fechaValida(entrada.fecha) ? entrada.fecha : hoy;
-      const base = { concepto: entrada.concepto, centimos, categoria: entrada.categoria, ingreso: entrada.ingreso === true };
+      const base = { concepto: entrada.concepto, centimos, categoria: entrada.categoria, ingreso: entrada.ingreso === true, cuenta: cuentaValida(entrada.cuenta) };
       if (entrada.frecuencia && FRECUENCIA.has(entrada.frecuencia)) {
         const dia = entero(entrada.dia, 1, 31) ?? Number(fecha.slice(8));
         const r = anadirFijo(datos, { ...base, frecuencia: entrada.frecuencia, dia, mes: Number(fecha.slice(5, 7)), diaSemana: entero(entrada.dia_semana, 1, 7) ?? undefined, desde: `${mesDe(fecha)}-01` }, hoy);
         await escribir(r.datos);
-        return { tipo: 'fijo', ingreso: r.fijo.ingreso, id: r.fijo.id, concepto: r.fijo.concepto, importe: euros(r.fijo.centimos), categoria: categoria(r.fijo.categoria).nombre, cuando: cuandoFijo(r.fijo), al_mes: euros(alMes(r.fijo)) };
+        return { tipo: 'fijo', ingreso: r.fijo.ingreso, id: r.fijo.id, concepto: r.fijo.concepto, importe: euros(r.fijo.centimos), categoria: categoria(r.fijo.categoria).nombre, cuando: cuandoFijo(r.fijo), al_mes: euros(alMes(r.fijo)), cuenta: r.fijo.cuenta };
       }
       const { datos: nuevos, resultado } = apuntarMovimiento(datos, { ...base, fecha }, hoy);
       await escribir(nuevos);
@@ -768,14 +920,23 @@ export function crearAlmacenGastos({ leer, guardar, alCambiar = () => {} }) {
       }
       return { ...resultado, importe: euros(resultado.centimos), categoria: categoria(resultado.categoria).nombre };
     },
-    // Lo que hay en la cuenta: ni suma ni resta, es el punto de partida.
+    // Lo que hay en el banco o en efectivo: ni suma ni resta, es el punto de partida.
     async saldo(entrada, hoy = fechaISO()) {
       const datos = await cargar();
       const centimos = Math.round(Number(entrada.importe) * 100);
       const fecha = fechaValida(entrada.fecha) ? entrada.fecha : hoy;
-      await escribir(ponerSaldo(datos, centimos, fecha));
-      const nuevos = await cargar();
-      return { tipo: 'saldo', centimos, importe: euros(centimos), fecha, anterior: datos.saldo, fin_de_mes: aprox(saldoAlFinal(nuevos, mesDe(hoy), hoy) ?? centimos) };
+      const cuenta = cuentaValida(entrada.cuenta);
+      await escribir(ponerSaldo(datos, centimos, fecha, cuenta));
+      const s = saldosAlFinal(await cargar(), mesDe(hoy), hoy);
+      return { tipo: 'saldo', cuenta, centimos, importe: euros(centimos), fecha, anterior: saldoDe(datos, cuenta), fin_de_mes: aprox(s[cuenta] ?? centimos), total_fin_de_mes: s.banco !== null && s.efectivo !== null ? aprox(s.total) : undefined };
+    },
+    // Sacar del cajero (de: banco) o ingresar efectivo en el banco (de: efectivo): no es gasto ni ingreso.
+    async mover(entrada, hoy = fechaISO()) {
+      const centimos = Math.round(Number(entrada.importe) * 100);
+      const fecha = fechaValida(entrada.fecha) ? entrada.fecha : hoy;
+      const r = anadirTraspaso(await cargar(), { centimos, fecha, de: entrada.de });
+      await escribir(r.datos);
+      return { tipo: 'traspaso', id: r.traspaso.id, de: r.traspaso.de, a: otraCuenta(r.traspaso.de), concepto: conceptoTraspaso(r.traspaso.de), centimos, importe: euros(centimos), fecha };
     },
     // Deshacer lo que apuntó el chat (lo que devolvió apuntar o saldo).
     async deshacer(resultado, hoy = fechaISO()) {
@@ -783,7 +944,7 @@ export function crearAlmacenGastos({ leer, guardar, alCambiar = () => {} }) {
     },
     async quitar(id) {
       const datos = await cargar();
-      await escribir(id.startsWith('f') ? borrarFijo(datos, id) : borrarMovimiento(datos, id));
+      await escribir(id.startsWith('f') ? borrarFijo(datos, id) : id.startsWith('t') ? borrarTraspaso(datos, id) : borrarMovimiento(datos, id));
     },
     async resumen(mes, hoy = fechaISO()) {
       return resumenParaIA(await cargar(), mesValido(mes) ? mes : mesDe(hoy), hoy);

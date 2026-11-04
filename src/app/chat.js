@@ -13,6 +13,7 @@ const ETIQUETAS_HERRAMIENTA = {
   apuntar_gasto: 'Apuntando el gasto…',
   ver_gastos: 'Mirando tus gastos…',
   poner_saldo: 'Apuntando tu saldo…',
+  mover_dinero: 'Apuntando el movimiento…',
   ver_recordatorios: 'Mirando tus recordatorios…',
   borrar_recordatorio: 'Borrando el recordatorio…',
   web_search: 'Buscando en internet…',
@@ -460,15 +461,18 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
       case 'gasto': {
         // Qué ha apuntado Kitsune, dicho claro: lo que resta, lo que suma o lo que tienes.
         const g = e.gasto;
+        const enEfectivo = g.cuenta === 'efectivo' ? ' · en efectivo' : '';
         const etiqueta =
           g.tipo === 'saldo'
-            ? 'Saldo de tu cuenta'
+            ? g.cuenta === 'efectivo' ? 'Lo que tienes en efectivo' : 'Saldo del banco'
+            : g.tipo === 'traspaso'
+            ? `${g.de === 'efectivo' ? 'Efectivo → banco' : 'Banco → efectivo'} · no es gasto`
             : g.tipo === 'fijo-ajustado'
             ? `${g.ingreso ? 'Ingreso' : 'Gasto'} fijo de este mes${g.igual ? ' · ya contado' : ' · ajustado'}`
             : g.tipo === 'fijo'
-            ? `${g.ingreso ? 'Ingreso' : 'Gasto'} fijo · ${g.cuando.toLowerCase()}`
-            : `${g.ingreso ? 'Ingreso' : 'Gasto'} · ${g.categoria}`;
-        const signo = g.tipo === 'saldo' ? '= ' : g.ingreso ? '+' : '−';
+            ? `${g.ingreso ? 'Ingreso' : 'Gasto'} fijo · ${g.cuando.toLowerCase()}${enEfectivo}`
+            : `${g.ingreso ? 'Ingreso' : 'Gasto'} · ${g.categoria}${enEfectivo}`;
+        const signo = g.tipo === 'saldo' ? '= ' : g.tipo === 'traspaso' ? '⇄ ' : g.ingreso ? '+' : '−';
         nota({
           simbolo: 'cartera',
           etiqueta,

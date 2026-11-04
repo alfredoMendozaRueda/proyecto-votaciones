@@ -7,7 +7,7 @@ import { rutaIA, conRespaldo } from './modos.js';
 import { verTiempo } from './tiempo.js';
 import { PERMISOS, nivel, nivelHerramienta } from './permisos.js';
 import { normalizarAutomatizacion, describirCuando, describirHacer } from './automatizaciones.js';
-import { CATEGORIAS, CATEGORIAS_INGRESO, FRECUENCIAS, fechaValida, mesValido, euros, cuandoFijo } from './gastos.js';
+import { CATEGORIAS, CATEGORIAS_INGRESO, FRECUENCIAS, fechaValida, mesValido, euros, cuandoFijo, conceptoTraspaso, nombreCuenta } from './gastos.js';
 
 export { mensajesVisibles, recortarHistorial } from './historial.js';
 
@@ -209,7 +209,9 @@ const HERRAMIENTAS_GASTOS = [
       'Apunta un movimiento de dinero en el apartado Gastos: algo que ha GASTADO (resta: "he gastado 30 en la cena", "he ' +
       'pagado la luz", "me han cobrado 12 del parking") o algo que le ha ENTRADO (suma, ingreso=true: "me han ingresado la ' +
       'nómina, 1.850", "me han dado 50", "he cobrado", "me han hecho un Bizum"). NO la uses cuando diga cuánto TIENE ("tengo ' +
-      '2.300", "me quedan 300 en el banco"): eso es poner_saldo. Si se repite (alquiler, suscripción, "cada mes"), pon ' +
+      '2.300", "me quedan 300 en el banco"): eso es poner_saldo. Tampoco cuando saca del cajero o ingresa efectivo en el ' +
+      'banco: eso es mover_dinero. Pon cuenta="efectivo" si lo pagó o lo recibió en efectivo ("en efectivo", "en metálico", ' +
+      '"en mano", "de la cartera"); si no lo dice, es del banco (tarjeta, Bizum, domiciliado…). Si se repite (alquiler, suscripción, "cada mes"), pon ' +
       'frecuencia y queda como fijo. Si ya existe ese fijo (su nómina, su alquiler) y dice que le ha llegado o que lo ha ' +
       'pagado, no se duplica: se ajusta ese mes. Si no dice cuánto, pregúntaselo antes.',
     eager_input_streaming: true,
@@ -219,6 +221,7 @@ const HERRAMIENTAS_GASTOS = [
         concepto: { type: 'string', description: 'Qué es, corto: "Gasolina", "Cena con Ana", "Netflix".' },
         importe: { type: 'number', description: 'En euros, por ejemplo 12.5.' },
         ingreso: { type: 'boolean', description: 'true si es dinero que recibe (nómina, Bizum recibido…); si no, es un gasto.' },
+        cuenta: { type: 'string', enum: ['banco', 'efectivo'], description: 'De dónde sale o adónde llega: "efectivo" si fue en efectivo; si no, "banco".' },
         categoria: { type: 'string', enum: [...CATEGORIAS, ...CATEGORIAS_INGRESO].map((c) => c.id), description: 'La que mejor encaje (nomina, extra o ingresos para los ingresos).' },
         fecha: { type: 'string', description: 'Día del gasto, AAAA-MM-DD. Si no lo dice, hoy; para "ayer", calcúlalo con la fecha local de su mensaje.' },
         frecuencia: { type: 'string', enum: FRECUENCIAS.map((f) => f.id), description: 'Solo si es un gasto fijo que se repite.' },
@@ -244,23 +247,45 @@ const HERRAMIENTAS_GASTOS = [
   },
 ];
 
-HERRAMIENTAS_GASTOS.push({
-  name: 'poner_saldo',
-  description:
-    'Apunta cuánto dinero TIENE el usuario en su cuenta (el saldo): "tengo 2.300 €", "me quedan 300 en el banco", "mi saldo ' +
-    'es 1.200". No suma ni resta nada: es el punto de partida desde el que se calcula cómo acabará cada mes. No lo uses para ' +
-    'algo que ha gastado o le han ingresado (eso es apuntar_gasto).',
-  eager_input_streaming: true,
-  input_schema: {
-    type: 'object',
-    properties: {
-      importe: { type: 'number', description: 'En euros. Negativo si está en números rojos.' },
-      fecha: { type: 'string', description: 'AAAA-MM-DD del día de ese saldo. Si no lo dice, hoy.' },
+HERRAMIENTAS_GASTOS.push(
+  {
+    name: 'poner_saldo',
+    description:
+      'Apunta cuánto dinero TIENE el usuario (el saldo), en el banco o en efectivo: "tengo 2.300 € en la cuenta", "me quedan ' +
+      '300 en el banco" (cuenta="banco"); "llevo 40 en la cartera", "tengo 60 en efectivo" (cuenta="efectivo"). No suma ni ' +
+      'resta nada: es el punto de partida desde el que se calcula cómo acabará cada mes. No lo uses para algo que ha gastado ' +
+      'o le han ingresado (eso es apuntar_gasto).',
+    eager_input_streaming: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        importe: { type: 'number', description: 'En euros. Negativo si el banco está en números rojos.' },
+        cuenta: { type: 'string', enum: ['banco', 'efectivo'], description: '"efectivo" si habla de lo que lleva en efectivo, la cartera o en mano; si no, "banco".' },
+        fecha: { type: 'string', description: 'AAAA-MM-DD del día de ese saldo. Si no lo dice, hoy.' },
+      },
+      required: ['importe'],
+      additionalProperties: false,
     },
-    required: ['importe'],
-    additionalProperties: false,
   },
-});
+  {
+    name: 'mover_dinero',
+    description:
+      'Apunta que ha movido dinero entre el banco y el efectivo: sacar del cajero ("he sacado 50 del cajero", de="banco") o ' +
+      'ingresar efectivo en el banco ("he ingresado 200 en la cuenta", de="efectivo"). No es un gasto ni un ingreso: el total ' +
+      'no cambia, solo dónde está. "Me han ingresado la nómina" NO es esto: es un ingreso (apuntar_gasto).',
+    eager_input_streaming: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        importe: { type: 'number', description: 'En euros, por ejemplo 50.' },
+        de: { type: 'string', enum: ['banco', 'efectivo'], description: '"banco" al sacar del cajero; "efectivo" al ingresar efectivo en el banco.' },
+        fecha: { type: 'string', description: 'AAAA-MM-DD. Si no lo dice, hoy.' },
+      },
+      required: ['importe', 'de'],
+      additionalProperties: false,
+    },
+  },
+);
 
 const HERRAMIENTAS_MEMORIA = [
   {
@@ -508,6 +533,7 @@ function validarEntrada(nombre, entrada) {
       if (entrada.frecuencia !== undefined && !FRECUENCIAS.some((f) => f.id === entrada.frecuencia)) return null;
       if (entrada.dia !== undefined && !(Number.isInteger(entrada.dia) && entrada.dia >= 1 && entrada.dia <= 31)) return null;
       if (entrada.ingreso !== undefined && typeof entrada.ingreso !== 'boolean') return null;
+      if (entrada.cuenta !== undefined && entrada.cuenta !== 'banco' && entrada.cuenta !== 'efectivo') return null;
       const ingreso = entrada.ingreso ?? CATEGORIAS_INGRESO.some((c) => c.id === entrada.categoria);
       return {
         concepto: entrada.concepto.slice(0, 80),
@@ -517,6 +543,7 @@ function validarEntrada(nombre, entrada) {
         fecha: entrada.fecha,
         frecuencia: entrada.frecuencia,
         dia: entrada.dia,
+        cuenta: entrada.cuenta === 'efectivo' ? 'efectivo' : 'banco',
       };
     }
     case 'ver_gastos':
@@ -525,7 +552,16 @@ function validarEntrada(nombre, entrada) {
       const importe = Number(entrada.importe);
       if (!Number.isFinite(importe) || Math.abs(importe) > 1_000_000) return null;
       if (entrada.fecha !== undefined && !fechaValida(entrada.fecha)) return null;
-      return { importe: Math.round(importe * 100) / 100, fecha: entrada.fecha };
+      if (entrada.cuenta !== undefined && entrada.cuenta !== 'banco' && entrada.cuenta !== 'efectivo') return null;
+      // En efectivo no se puede estar en negativo.
+      if (entrada.cuenta === 'efectivo' && importe < 0) return null;
+      return { importe: Math.round(importe * 100) / 100, fecha: entrada.fecha, cuenta: entrada.cuenta === 'efectivo' ? 'efectivo' : 'banco' };
+    }
+    case 'mover_dinero': {
+      const importe = Number(entrada.importe);
+      if (!(importe > 0) || importe > 1_000_000 || (entrada.de !== 'banco' && entrada.de !== 'efectivo')) return null;
+      if (entrada.fecha !== undefined && !fechaValida(entrada.fecha)) return null;
+      return { importe: Math.round(importe * 100) / 100, de: entrada.de, fecha: entrada.fecha };
     }
     case 'borrar_recordatorio':
       return typeof entrada.id === 'string' && /^r[0-9a-z]+$/.test(entrada.id) ? { id: entrada.id } : null;
@@ -604,7 +640,7 @@ const GRUPO_DE = {
   buscar_correos: 'correo', leer_correo: 'correo', organizar_correo: 'correo', borrar_correo: 'correo', enviar_correo: 'correo',
   ver_agenda: 'agenda', crear_evento: 'agenda', modificar_evento: 'agenda', borrar_evento: 'agenda',
   crear_recordatorio: 'recordatorios', ver_recordatorios: 'recordatorios', borrar_recordatorio: 'recordatorios',
-  apuntar_gasto: 'gastos', ver_gastos: 'gastos', poner_saldo: 'gastos',
+  apuntar_gasto: 'gastos', ver_gastos: 'gastos', poner_saldo: 'gastos', mover_dinero: 'gastos',
   recordar: 'memoria', olvidar: 'memoria',
   crear_automatizacion: 'automatizaciones', ver_automatizaciones: 'automatizaciones',
   ver_tiempo: 'tiempo',
@@ -616,7 +652,7 @@ const PISTAS = {
   recordatorios: /recuerd|recordatorio|avis|alarma|pendiente|no se me olvide|apunta/,
   memoria: /recuerda que|apunta que|olvida|sabes de mi|que sabes|me llamo|\bsoy\b|me gusta|no me gusta|prefiero|mi (mujer|marido|pareja|novi[oa]|madre|padre|hij[oa]|herman[oa]|perro|gato|jefe)/,
   automatizaciones: /automatiz|cada vez que|siempre que|a partir de ahora|todos los dias|cada dia|cada manana|cada semana|regla|flujo|workflow/,
-  gastos: /gast[oeaé]|gaste\b|pague|pagado|pagar|euros?\b|€|\d\s*eur\b|presupuesto|cuanto llevo|suscripci|alquiler|hipoteca|cuesta al mes|me cobra|cobran|nomina|sueldo|salario|ingres|ahorr|saldo|cobr[eéo]|bizum|paga extra|tengo \d|me quedan|en (la|mi) cuenta|banco|me han dado|me han devuelto/,
+  gastos: /gast[oeaé]|gaste\b|pague|pagado|pagar|euros?\b|€|\d\s*eur\b|presupuesto|cuanto llevo|suscripci|alquiler|hipoteca|cuesta al mes|me cobra|cobran|nomina|sueldo|salario|ingres|ahorr|saldo|cobr[eéo]|bizum|paga extra|tengo \d|me quedan|en (la|mi) cuenta|banco|me han dado|me han devuelto|efectivo|metalico|cajero|cartera|he sacado|saque/,
   tiempo: /tiempo|llov|llue|lluvia|tormenta|temperatura|calor|frio|clima|paraguas|nieve|viento|grados|\bsol\b/,
   web: /busca|internet|noticia|precio|quien (es|fue|gano)|gano|cuanto cuesta|resultado|ultima hora|actualidad|\bweb\b|google|partido|cotiza|bolsa|estreno|que paso/,
   pulso: /pulso|resumen del dia|mi dia\b|que hay de nuevo|novedades/,
@@ -659,9 +695,11 @@ function promptSistema({ ajustes, correo, calendario, conRecordatorios, conGasto
       ? 'Llevas sus cuentas (apartado Gastos). Distingue siempre tres cosas: lo que TIENE ("tengo 2.300", "me quedan 300 en ' +
         'el banco") es su saldo → poner_saldo, no suma ni resta; lo que le ENTRA ("me han ingresado la nómina", "me han dado 50", ' +
         '"he cobrado") es un ingreso → apuntar_gasto con ingreso=true, suma; lo que GASTA ("he gastado", "he pagado", "me han ' +
-        'cobrado 12 del parking") es un gasto → apuntar_gasto, resta. Si dudas entre saldo e ingreso, pregunta. Consulta con ' +
+        'cobrado 12 del parking") es un gasto → apuntar_gasto, resta. Y separa banco y efectivo: lo pagado o recibido en ' +
+        'efectivo lleva cuenta="efectivo" (sin decirlo, banco); "llevo 40 en la cartera" es el saldo del efectivo; sacar del ' +
+        'cajero o ingresar efectivo en el banco → mover_dinero (no es gasto ni ingreso). Si dudas entre saldo e ingreso, pregunta. Consulta con ' +
         'ver_gastos (trae la previsión de los próximos meses). Al apuntar, confírmalo en una frase: «Apunto un gasto de 30 €», ' +
-        '«Sumo 1.850 € de nómina», «Tu saldo: 2.300 €»; si es fijo, di cada cuánto; si la respuesta trae una nota, cuéntala.'
+        '«Sumo 1.850 € de nómina», «Tu saldo: 2.300 €», «Pasan 50 € del banco al efectivo»; si es fijo, di cada cuánto; si la respuesta trae una nota, cuéntala.'
       : '',
     automatizaciones
       ? 'Puedes crear automatizaciones con crear_automatizacion: avisos y acciones que el servidor de Kitsune hace solo, ' +
@@ -1166,13 +1204,18 @@ export class ConversacionClaude {
       }
       case 'poner_saldo':
         return {
-          tipo: 'gasto', icono: 'cartera', pregunta: '¿Apunto este saldo?', titulo: `Tienes ${euros(Math.round(e.importe * 100))}`,
-          detalle: `En tu cuenta${e.fecha ? `, el ${e.fecha}` : ', hoy'}. No suma ni resta: es desde donde calculo cómo acabas el mes.`, boton: 'Apuntar', hecho: 'Apuntado',
+          tipo: 'gasto', icono: 'cartera', pregunta: '¿Apunto este saldo?', titulo: `Tienes ${euros(Math.round(e.importe * 100))}${e.cuenta === 'efectivo' ? ' en efectivo' : ' en el banco'}`,
+          detalle: `${e.fecha ? `El ${e.fecha}` : 'Hoy'}. No suma ni resta: es desde donde calculo cómo acabas el mes.`, boton: 'Apuntar', hecho: 'Apuntado',
+        };
+      case 'mover_dinero':
+        return {
+          tipo: 'gasto', icono: 'cartera', pregunta: '¿Lo apunto?', titulo: `${conceptoTraspaso(e.de)} · ${euros(Math.round(e.importe * 100))}`,
+          detalle: `${nombreCuenta(e.de)} → ${nombreCuenta(e.de === 'banco' ? 'efectivo' : 'banco')}${e.fecha ? `, el ${e.fecha}` : ', hoy'}. No es gasto ni ingreso.`, boton: 'Apuntar', hecho: 'Apuntado',
         };
       case 'apuntar_gasto':
         return {
           tipo: 'gasto', icono: 'cartera', pregunta: `¿Apunto este ${e.ingreso ? 'ingreso' : 'gasto'}${e.frecuencia ? ' fijo' : ''}?`,
-          titulo: `${e.concepto} · ${euros(Math.round(e.importe * 100))}`,
+          titulo: `${e.concepto} · ${euros(Math.round(e.importe * 100))}${e.cuenta === 'efectivo' ? ' en efectivo' : ''}`,
           detalle: e.frecuencia ? cuandoFijo({ frecuencia: e.frecuencia, dia: e.dia ?? (Number((e.fecha ?? '').slice(8)) || new Date().getDate()), diaSemana: 1, mes: 1 }) : e.fecha ?? 'Hoy',
           boton: 'Apuntar', hecho: 'Apuntado',
         };
@@ -1282,6 +1325,11 @@ export class ConversacionClaude {
         return this.gastos.resumen(entrada.mes);
       case 'poner_saldo': {
         const gasto = await this.gastos.saldo(entrada);
+        this.emitir({ tipo: 'gasto', gasto });
+        return gasto;
+      }
+      case 'mover_dinero': {
+        const gasto = await this.gastos.mover(entrada);
         this.emitir({ tipo: 'gasto', gasto });
         return gasto;
       }

@@ -18,7 +18,7 @@ export const PERMISOS = [
   { clave: 'permisoEventoBorrar', grupo: 'Agenda', nombre: 'Eliminar eventos', defecto: 'preguntar', herramientas: ['borrar_evento'] },
   { clave: 'permisoRecordatorioCrear', grupo: 'Avisos', nombre: 'Crear recordatorios', defecto: 'si', herramientas: ['crear_recordatorio'] },
   { clave: 'permisoRecordatorioBorrar', grupo: 'Avisos', nombre: 'Borrar recordatorios', defecto: 'si', herramientas: ['borrar_recordatorio'] },
-  { clave: 'permisoGastos', grupo: 'Gastos', nombre: 'Apuntar gastos, ingresos y tu saldo', defecto: 'si', herramientas: ['apuntar_gasto', 'poner_saldo'] },
+  { clave: 'permisoGastos', grupo: 'Gastos', nombre: 'Apuntar gastos, ingresos y saldos', defecto: 'si', herramientas: ['apuntar_gasto', 'poner_saldo', 'mover_dinero'] },
   { clave: 'permisoMemoria', grupo: 'Memoria', nombre: 'Apuntar y olvidar cosas sobre ti', defecto: 'si', herramientas: ['recordar', 'olvidar'] },
   { clave: 'permisoAutomatizacion', grupo: 'Automatizaciones', nombre: 'Crear automatizaciones', defecto: 'preguntar', herramientas: ['crear_automatizacion'] },
 ];

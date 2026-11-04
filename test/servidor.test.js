@@ -950,3 +950,87 @@ test('registro de la IA: guarda cifrado qué recibe y devuelve cada llamada, del
   const apagado = await (await pedir(env, '/ia/registro', { token })).json();
   assert.deepEqual([apagado.activo, apagado.entradas.length], [false, 0]);
 });
+
+test('sincronización de gastos: el efectivo y los traspasos llegan al otro y una versión antigua no los pisa', async () => {
+  const env = entorno();
+  const { token } = await vincular(env);
+  const pedirCodigo = async () => (await (await pedir(env, '/codigo', { metodo: 'POST', token })).json()).codigo;
+  const canjear = async (nombre) => (await (await pedir(env, '/canjear', { metodo: 'POST', cuerpo: { codigo: await pedirCodigo(), nombre } })).json()).token;
+  const tokenViejo = await canjear('Windows sin actualizar');
+  const tokenNuevo = await canjear('Windows actualizado');
+  internet();
+  const { coleccionGastos, coleccionCuentas } = await import('../src/compartido/sincro.js');
+  const { normalizarGastos } = await import('../src/compartido/gastos.js');
+  // Lo que hacía la versión anterior al guardar: no conoce la cuenta, los traspasos ni el efectivo.
+  const normalizarViejo = (d) => {
+    const n = normalizarGastos(d);
+    return { movimientos: n.movimientos.map(({ cuenta, ...m }) => m), fijos: n.fijos.map(({ cuenta, ...f }) => f), presupuesto: n.presupuesto, saldo: n.saldo };
+  };
+  const crear = (t, { viejo = false } = {}) => {
+    const d = { datos: null, estado: null, llave: null };
+    const almacen = { leer: async () => d.datos && structuredClone(d.datos), guardar: async (x) => (d.datos = structuredClone(x)), normalizar: viejo ? normalizarViejo : normalizarGastos };
+    d.sincro = new Sincronizador({
+      cliente: async () => new ClienteServidor({ url: 'https://kitsune.ejemplo.workers.dev', token: t, fetch: (u, init) => servidor.fetch(new Request(u, init), env) }),
+      // La versión anterior solo tenía «gastos».
+      colecciones: viejo ? { gastos: coleccionGastos(almacen) } : { gastos: coleccionGastos(almacen), cuentas: coleccionCuentas(almacen) },
+      leerEstado: async () => d.estado,
+      guardarEstado: async (e) => (d.estado = e && structuredClone(e)),
+      leerLlave: async () => d.llave,
+      guardarLlave: async (l) => (d.llave = l),
+      borrarLlave: async () => (d.llave = null),
+    });
+    return d;
+  };
+  const unir = async (origen, d) => {
+    await d.sincro.solicitar();
+    const esperando = d.sincro.esperar();
+    const [s] = (await origen.sincro.resumen()).solicitudes;
+    await origen.sincro.aprobar(s.id, s.publica);
+    await esperando;
+  };
+  const movil = crear(token);
+  const viejo = crear(tokenViejo, { viejo: true });
+  const nuevo = crear(tokenNuevo);
+  const HOY = '2026-11-14';
+  movil.datos = normalizarGastos({
+    movimientos: [
+      { id: 'gcafe01', concepto: 'Café', centimos: 240, fecha: HOY, cuenta: 'efectivo' },
+      { id: 'gsuper1', concepto: 'Mercadona', centimos: 6240, fecha: HOY },
+    ],
+    fijos: [{ id: 'fpeluq1', concepto: 'Peluquería', centimos: 1500, dia: 3, desde: '2026-01-01', cuenta: 'efectivo' }],
+    traspasos: [{ id: 'tcajero', centimos: 5000, fecha: HOY, de: 'banco' }],
+    saldo: { centimos: 230000, fecha: HOY },
+    saldoEfectivo: { centimos: 4500, fecha: HOY },
+  });
+  await movil.sincro.activar();
+  await unir(movil, viejo);
+  await unir(movil, nuevo);
+  const filas = (await env.DB.prepare('SELECT id FROM sincro').all()).results.map((f) => f.id);
+  assert.ok(filas.includes('cuentas/e:gcafe01') && filas.includes('cuentas/t:tcajero') && filas.includes('cuentas/efectivo'));
+
+  // El actualizado lo tiene todo.
+  assert.equal(nuevo.datos.movimientos.find((m) => m.id === 'gcafe01').cuenta, 'efectivo');
+  assert.equal(nuevo.datos.movimientos.find((m) => m.id === 'gsuper1').cuenta, 'banco');
+  assert.equal(nuevo.datos.fijos[0].cuenta, 'efectivo');
+  assert.equal(nuevo.datos.traspasos[0].centimos, 5000);
+  assert.deepEqual(nuevo.datos.saldoEfectivo, { centimos: 4500, fecha: HOY });
+  // El antiguo tiene los gastos (sin saber de dónde salen) y cambia uno.
+  assert.equal(viejo.datos.movimientos.length, 2);
+  viejo.datos = normalizarViejo({ ...viejo.datos, movimientos: viejo.datos.movimientos.map((m) => (m.id === 'gcafe01' ? { ...m, concepto: 'Café con leche' } : m)) });
+  for (let i = 0; i < 2; i++) for (const d of [viejo, movil, nuevo]) await d.sincro.sincronizar();
+  for (const d of [movil, nuevo]) {
+    const cafe = d.datos.movimientos.find((m) => m.id === 'gcafe01');
+    assert.equal(cafe.concepto, 'Café con leche', 'llega el cambio del antiguo');
+    assert.equal(cafe.cuenta, 'efectivo', 'y no se pierde que fue en efectivo');
+    assert.equal(d.datos.traspasos.length, 1);
+    assert.deepEqual(d.datos.saldoEfectivo, { centimos: 4500, fecha: HOY });
+  }
+  // Y nadie se queda subiendo lo mismo una y otra vez.
+  for (const d of [viejo, movil, nuevo]) assert.equal((await d.sincro.resumen()).pendientes, 0);
+
+  // Pasar un gasto del efectivo al banco también viaja.
+  movil.datos = normalizarGastos({ ...movil.datos, movimientos: movil.datos.movimientos.map((m) => (m.id === 'gcafe01' ? { ...m, cuenta: 'banco' } : m)) });
+  await movil.sincro.sincronizar();
+  await nuevo.sincro.sincronizar();
+  assert.equal(nuevo.datos.movimientos.find((m) => m.id === 'gcafe01').cuenta, 'banco');
+});
