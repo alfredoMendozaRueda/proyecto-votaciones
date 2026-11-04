@@ -6,6 +6,7 @@
 // datos ya van cifrados en el dispositivo, y esto evita que se vean tu correo,
 // tu agenda o tus candidaturas sin tu cara. Si un día no puedes desbloquear,
 // la salida de emergencia borra los datos de Kitsune de este dispositivo.
+import { sello } from '../sello.js';
 
 const CLAVE = 'kitsune.bloqueo';
 export const OPCIONES_TRAS = [
@@ -134,7 +135,7 @@ export function prepararBloqueo() {
     capa.setAttribute('aria-label', 'Kitsune está bloqueado');
     capa.innerHTML = `
       <div class="bloqueo__caja">
-        <div class="bloqueo__sello" aria-hidden="true">狐</div>
+        <div class="bloqueo__sello" aria-hidden="true">${sello()}</div>
         <h2>Kitsune está bloqueado</h2>
         <p>Usa ${nombreBiometria()} para entrar.</p>
         <button type="button" class="boton boton--primario bloqueo__abrir">Desbloquear</button>

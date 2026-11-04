@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <radialGradient id="noche" cx="50%" cy="42%" r="75%">
+      <stop offset="0" stop-color="#2a1210"/>
+      <stop offset=".55" stop-color="#140908"/>
+      <stop offset="1" stop-color="#070404"/>
+    </radialGradient>
+    <radialGradient id="sol" cx="42%" cy="36%" r="70%">
+      <stop offset="0" stop-color="#f05a3c"/>
+      <stop offset=".6" stop-color="#cf3527"/>
+      <stop offset="1" stop-color="#8f1c15"/>
+    </radialGradient>
+    <linearGradient id="oro" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f3d79a"/>
+      <stop offset=".5" stop-color="#c9a35e"/>
+      <stop offset="1" stop-color="#8a6a32"/>
+    </linearGradient>
+    <linearGradient id="mascara" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffaf3"/>
+      <stop offset=".7" stop-color="#f1e7da"/>
+      <stop offset="1" stop-color="#d9cbbb"/>
+    </linearGradient>
+    <filter id="sombra" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000" flood-opacity=".55"/>
+    </filter>
+    <!-- Asanoha (hoja de cáñamo), muy tenue. -->
+    <pattern id="asanoha" width="96" height="166" patternUnits="userSpaceOnUse">
+      <g fill="none" stroke="#c9a35e" stroke-width="2">
+        <path d="M0 0L48 28L96 0M0 166L48 138L96 166M48 28V83M48 138V83M0 55L48 83L96 55M0 111L48 83L96 111M0 0V55M96 0V55M0 111V166M96 111V166M0 55L0 111M96 55L96 111"/>
+      </g>
+    </pattern>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#noche)"/>
+  <rect width="1024" height="1024" fill="url(#asanoha)" opacity=".07"/>
+  <!-- El sol bermellón y el ensō de oro. -->
+  <circle cx="512" cy="470" r="318" fill="url(#sol)"/>
+  <circle cx="512" cy="470" r="372" fill="none" stroke="url(#oro)" stroke-width="12" stroke-linecap="round" stroke-dasharray="2100 240" transform="rotate(118 512 470)" opacity=".9"/>
+  <!-- La máscara de zorro. -->
+  <g filter="url(#sombra)">
+    <path d="M512 872 C466 834 386 744 336 642 C298 560 280 486 280 410 L318 150 L446 318 Q512 296 578 318 L706 150 L744 410 C744 486 726 560 688 642 C638 744 558 834 512 872 Z" fill="url(#mascara)" stroke="url(#oro)" stroke-width="7" stroke-linejoin="round"/>
+  </g>
+  <!-- Orejas por dentro. -->
+  <path d="M330 210 L352 392 L428 330 Z" fill="#c8342a"/>
+  <path d="M694 210 L672 392 L596 330 Z" fill="#c8342a"/>
+  <!-- La joya en llamas (hōju) de la frente, en oro. -->
+  <path d="M512 352 C536 386 548 412 548 436 C548 460 532 478 512 478 C492 478 476 460 476 436 C476 412 488 386 512 352 Z" fill="url(#oro)"/>
+  <path d="M512 396 C524 414 529 428 529 440 C529 452 521 461 512 461 C503 461 495 452 495 440 C495 428 500 414 512 396 Z" fill="#fff6e4" opacity=".55"/>
+  <!-- Cejas: dos llamas bermellón. -->
+  <path d="M404 470 C424 440 452 432 474 446 C452 452 432 466 418 490 Z" fill="#c8342a"/>
+  <path d="M620 470 C600 440 572 432 550 446 C572 452 592 466 606 490 Z" fill="#c8342a"/>
+  <!-- Ojos rasgados con su línea roja. -->
+  <path d="M358 536 C402 520 446 528 478 566 C432 576 392 566 358 536 Z" fill="#1a0c0b"/>
+  <path d="M666 536 C622 520 578 528 546 566 C592 576 632 566 666 536 Z" fill="#1a0c0b"/>
+  <path d="M334 512 C378 500 432 510 482 556 C430 530 384 522 340 530 Z" fill="#c8342a"/>
+  <path d="M690 512 C646 500 592 510 542 556 C594 530 640 522 684 530 Z" fill="#c8342a"/>
+  <!-- Mejillas: tres trazos finos. -->
+  <g stroke="#c8342a" stroke-width="7" stroke-linecap="round" opacity=".85">
+    <path d="M372 640 L418 652M366 672 L414 676M376 704 L420 698"/>
+    <path d="M652 640 L606 652M658 672 L610 676M648 704 L604 698"/>
+  </g>
+  <!-- Hocico. -->
+  <path d="M512 640 L512 800" stroke="#e2d5c5" stroke-width="5" stroke-linecap="round"/>
+  <path d="M488 812 C496 798 528 798 536 812 C532 834 516 846 512 846 C508 846 492 834 488 812 Z" fill="#1a0c0b"/>
+</svg>

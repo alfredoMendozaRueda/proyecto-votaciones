@@ -7,6 +7,7 @@ import { crearAjustes } from './ajustes.js';
 import { crearEmpleo } from './empleo.js';
 import { crearGastos } from './gastos.js';
 import { crearBiblia } from './biblia.js';
+import { sello } from './sello.js';
 import { crearHoy } from './hoy.js';
 import { crearBuscador } from './buscador.js';
 import { crearAgenda, crearRecordatorios, crearMemoria, crearHistorial } from './vistas.js';
@@ -45,6 +46,8 @@ const PADRE = { recordatorios: 'agenda', historial: 'chat', memoria: 'chat' };
 const subAgenda = document.getElementById('sub-agenda');
 const botonesChat = [...document.querySelectorAll('.solo-chat')];
 for (const span of document.querySelectorAll('.apartado__icono')) span.innerHTML = icono(span.dataset.icono, 18);
+// El sello de la cabecera: 狐 a pincel que se escribe en oro cada vez que se abre.
+for (const s of document.querySelectorAll('.marca__sello')) s.innerHTML = sello();
 document.getElementById('boton-ajustes').innerHTML = icono('ajustes');
 document.getElementById('boton-cerrar').innerHTML = icono('cerrar');
 document.getElementById('boton-nueva').innerHTML = icono('conversacion');
