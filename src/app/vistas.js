@@ -102,7 +102,7 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
     contenedor.innerHTML = `
       <div class="apartado desplazable">
         <div class="apartado__cabecera">
-          <h2>Agenda</h2>
+          <h2 class="titulo-repetido">Agenda</h2>
           <button type="button" class="boton boton--suave" id="agenda-hoy">Hoy</button>
           <button type="button" class="icono-boton" id="agenda-actualizar" aria-label="Actualizar" title="Actualizar">${icono('actualizar')}</button>
           <button type="button" class="boton boton--primario" id="agenda-nuevo" hidden>${icono('nueva', 15)} Nuevo</button>
@@ -398,7 +398,7 @@ export function crearRecordatorios({ contenedor, api, web, alCambiar, alConfigur
       <div class="apartado desplazable">
         ${barraPestanas()}
         <div class="apartado__cabecera">
-          <h2>Recordatorios</h2>
+          <h2 class="titulo-repetido">Recordatorios</h2>
           <button type="button" class="boton boton--primario" id="rec-nuevo">${icono('nueva', 15)} Nuevo</button>
         </div>
         <form class="formulario" id="rec-formulario" hidden>
@@ -539,7 +539,7 @@ export function crearMemoria({ contenedor, api, obtenerAjustes, guardarAjustes }
     const activa = obtenerAjustes().usarMemoria;
     contenedor.innerHTML = `
       <div class="apartado desplazable">
-        <div class="apartado__cabecera"><h2>Memoria</h2></div>
+        <div class="apartado__cabecera"><h2 class="titulo-repetido">Memoria</h2></div>
         <div class="ajuste ajuste--fila">
           <div>
             <div class="ajuste__etiqueta" id="et-memoria">Usar la memoria</div>
@@ -625,7 +625,7 @@ export function crearHistorial({ contenedor, api, alAbrir, alNueva }) {
     contenedor.innerHTML = `
       <div class="apartado desplazable">
         <div class="apartado__cabecera">
-          <h2>Historial</h2>
+          <h2 class="titulo-repetido">Historial</h2>
           <button type="button" class="boton boton--primario" id="historial-nueva">${icono('nueva', 15)} Nueva</button>
         </div>
         <label class="buscador">${icono('buscar', 16)}<input type="search" id="historial-buscar" placeholder="Buscar en tus conversaciones" aria-label="Buscar en tus conversaciones"></label>

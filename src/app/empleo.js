@@ -240,17 +240,11 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
       <div class="apartado desplazable empleo">
         <div class="apartado__cabecera">
           ${cancelable ? `<button type="button" class="icono-boton" id="empleo-volver" aria-label="Volver">${icono('volver')}</button>` : ''}
-          <h2>Empleo</h2>
+          <h2 class="titulo-repetido">Empleo</h2>
         </div>
         <section class="empleo-portada">
-          <p class="empleo-mono">kitsune <span>/</span> búsqueda de empleo</p>
-          <h3 class="empleo-titular">Busca trabajo con un agente <span>que adapta tu CV a cada oferta.</span></h3>
-          <p class="empleo-etiqueta">(qué hace)</p>
-          <ol class="empleo-pasos">
-            <li><span>01</span>Lee tu CV y rastrea portales de empleo buscando ofertas que encajen contigo.</li>
-            <li><span>02</span>Evalúa el encaje y redacta un CV y una carta a medida de cada oferta.</li>
-            <li><span>03</span>Un agente revisor critica y pule cada candidatura, sin inventar nada.</li>
-          </ol>
+          <h3 class="empleo-titular">Ofertas a tu medida</h3>
+          <p class="empleo-portada__texto">Sube tu CV y Kitsune busca ofertas que encajen contigo, les pone nota y prepara un CV y una carta para cada una. Un revisor los repasa sin inventar nada.</p>
         </section>
         <label class="empleo-subir" for="empleo-archivo">
           <span class="empleo-subir__icono">${icono('subir', 22)}</span>
@@ -306,7 +300,7 @@ export function crearEmpleo({ contenedor, api, abrirAjustes, alCambiar = () => {
     const porRevisar = datos.postulaciones.filter((p) => !p.revisada).length;
     contenedor.innerHTML = `
       <div class="apartado desplazable empleo">
-        <div class="apartado__cabecera"><h2>Empleo</h2></div>
+        <div class="apartado__cabecera"><h2 class="titulo-repetido">Empleo</h2></div>
         <div class="subapartados empleo-pestanas" role="tablist" aria-label="Empleo">
           <button type="button" role="tab" data-pestana-empleo="ofertas">Ofertas</button>
           <button type="button" role="tab" data-pestana-empleo="candidaturas">Candidaturas<span class="insignia" id="empleo-insignia"${porRevisar ? '' : ' hidden'}>${porRevisar}</span></button>

@@ -16,6 +16,8 @@ export const AJUSTES_POR_DEFECTO = {
   posicion: 'izquierda',
   calidadPelo: 'auto',
   fuegos: true,
+  // El zorro en pantalla (solo en el ordenador): sin él, Kitsune es solo la ventana.
+  mostrarZorro: false,
   seguirCursor: true,
   iniciarConWindows: false,
   dormirTrasMin: 5,

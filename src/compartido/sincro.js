@@ -42,6 +42,7 @@ export const AJUSTES_LOCALES = new Set([
   'ofrecerPortapapeles',
   'vozTipo',
   'abrirHablando',
+  'mostrarZorro',
   'voicestudioUrl',
   'voicestudioVoz',
   'googleClientId',

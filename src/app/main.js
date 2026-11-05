@@ -75,7 +75,70 @@ const enfocarChat = () => !tactil && chat.enfocar();
 // Un toque de vibración en móviles Android (iPhone no la permite en la web).
 const vibrar = (patron) => tactil && navigator.vibrate?.(patron);
 
+// El zorro es opcional y solo en el ordenador (Electron y su demostración): en la
+// web y el móvil Kitsune es la app, sin mascota. Sin zorro se usa este doble
+// mudo, para que el resto del código no tenga que preguntar.
+const zorroMudo = {
+  visible: false,
+  estado: 'reposo',
+  accion: null,
+  on() {},
+  setEstado(e) {
+    this.estado = e;
+  },
+  async reproducir(nombre) {
+    if (nombre === 'aparecer') this.visible = true;
+    if (nombre === 'desaparecer') this.visible = false;
+  },
+  pulsoHabla() {},
+  setPaleta() {},
+  setEstilo() {},
+  setBebe() {},
+  setOpcion() {},
+  setCalidad() {},
+  tocaEn: () => false,
+  actualizar() {},
+  destruir() {},
+};
+const admiteZorro = api.plataforma !== 'web';
+let conZorro = false;
+
+function ponerZorro(activo) {
+  activo = Boolean(activo) && admiteZorro;
+  if (kitsune && activo === conZorro) return;
+  conZorro = activo;
+  escena.classList.toggle('sin-zorro', !activo);
+  if (kitsune && kitsune !== zorroMudo) kitsune.destruir();
+  if (!activo) {
+    kitsune = zorroMudo;
+    return;
+  }
+  kitsune = new Kitsune(document.getElementById('zorro'), {
+    paleta: ajustes.paleta,
+    estilo: ajustes.estilo,
+    seguirCursor: ajustes.seguirCursor,
+    fuegos: ajustes.fuegos,
+    zoom: 1.22,
+  });
+  kitsune.on('caricia', () => {
+    actividad();
+    vibrar(12);
+  });
+  kitsune.on('toque', () => {
+    actividad();
+    vibrar(8);
+    if (dialogo.hidden) {
+      abrirDialogo();
+      kitsune.reproducir('saludar');
+    } else {
+      kitsune.reproducir('alegria');
+    }
+  });
+  if (manejarAlternar) kitsune.reproducir('aparecer');
+}
+
 function aplicarAjustes(a) {
+  ponerZorro(a.mostrarZorro);
   escena.dataset.tamano = a.tamano;
   escena.dataset.posicion = a.posicion;
   kitsune.setPaleta(a.paleta);
@@ -89,8 +152,14 @@ function aplicarAjustes(a) {
 const ORDEN_VISTAS = ['hoy', 'chat', 'historial', 'memoria', 'correo', 'agenda', 'recordatorios', 'empleo', 'gastos', 'biblia', 'ajustes'];
 let moverIndicador = null;
 
+// El título de la cabecera dice dónde estás.
+const TITULOS = { hoy: 'Hoy', chat: 'Chat', historial: 'Conversaciones', memoria: 'Lo que sé de ti', correo: 'Correo', agenda: 'Agenda', recordatorios: 'Avisos', empleo: 'Empleo', gastos: 'Gastos', biblia: 'Biblia', ajustes: 'Ajustes' };
+const tituloCabecera = document.querySelector('.marca__nombre');
+
 function mostrarVista(nombre, seccionAjustes = null) {
   if (!vistas[nombre]) nombre = 'hoy';
+  tituloCabecera.textContent = TITULOS[nombre] ?? 'Kitsune';
+  dialogo.dataset.vista = nombre;
   const anterior = vistaActual;
   if (nombre === 'ajustes' && anterior !== 'ajustes') vistaAntesDeAjustes = anterior;
   vistaActual = nombre;
@@ -387,13 +456,6 @@ async function alEstadoChat(estado, texto) {
 
 async function iniciar() {
   ajustes = await api.ajustes.obtener();
-  kitsune = new Kitsune(document.getElementById('zorro'), {
-    paleta: ajustes.paleta,
-    estilo: ajustes.estilo,
-    seguirCursor: ajustes.seguirCursor,
-    fuegos: ajustes.fuegos,
-    zoom: 1.22,
-  });
   aplicarAjustes(ajustes);
 
   // Modo conversación: lee la respuesta (siempre en voz alta) y avisa al terminar.
@@ -635,7 +697,8 @@ async function iniciar() {
   document.getElementById('boton-ajustes').addEventListener('click', () =>
     mostrarVista(vistaActual === 'ajustes' ? vistaAntesDeAjustes : 'ajustes'),
   );
-  document.getElementById('boton-cerrar').addEventListener('click', cerrarDialogo);
+  // Con el zorro, cerrar recoge el diálogo; sin él, esconde Kitsune (en la web no hay a dónde ir).
+  document.getElementById('boton-cerrar').addEventListener('click', () => (conZorro ? cerrarDialogo() : manejarAlternar?.('ocultar')));
   const nuevaConversacion = async () => {
     await chat.nueva();
     mostrarVista('chat');
@@ -645,38 +708,9 @@ async function iniciar() {
   moverIndicador = prepararIndicador(document.querySelector('.apartados'));
   prepararEnvio(document.getElementById('chat-formulario'), document.getElementById('chat-enviar'));
   if (api.plataforma !== 'electron') {
-    movil = prepararMovil({
-      escena,
-      dialogo,
-      zorro: document.getElementById('zorro'),
-      kitsune,
-      mostrarVista,
-      obtenerVista: () => vistaActual,
-      nuevaConversacion,
-      vibrar,
-    });
+    movil = prepararMovil({ escena, dialogo, obtenerVista: () => vistaActual });
   }
 
-  kitsune.on('caricia', () => {
-    actividad();
-    vibrar(12);
-  });
-
-  kitsune.on('toque', () => {
-    actividad();
-    vibrar(8);
-    // En el móvil tocar al zorro abre el diálogo o, si ya está abierto, lo recoge.
-    if (movil?.activo()) {
-      movil.alternar();
-      return;
-    }
-    if (dialogo.hidden) {
-      abrirDialogo();
-      kitsune.reproducir('saludar');
-    } else {
-      kitsune.reproducir('alegria');
-    }
-  });
 
   api.ventana.alAbrirAjustes(() => {
     abrirDialogo();
@@ -722,14 +756,8 @@ async function iniciar() {
 
   manejarAlternar = async (accion) => {
     if (accion === 'mostrar') {
-      // En el móvil el zorro vive dentro del diálogo: primero se abre y luego aparece.
-      // En el móvil la app empieza solo con el zorro: el diálogo se abre al tocarlo.
-      if (movil?.activo()) {
-        await kitsune.reproducir('aparecer');
-      } else {
-        await kitsune.reproducir('aparecer');
-        abrirDialogo();
-      }
+      await kitsune.reproducir('aparecer');
+      abrirDialogo();
       // Saludo solo la primera vez de cada día.
       const hoy = new Date().toDateString();
       try {
@@ -751,8 +779,9 @@ async function iniciar() {
   window.addEventListener('keydown', (e) => {
     actividad();
     if (e.key === 'Escape') {
-      if (!dialogo.hidden) cerrarDialogo();
-      // En la web no hay atajo global para volver a llamarlo: el zorro se queda.
+      // Sin zorro no queda nada a la vista: Escape esconde Kitsune entero.
+      if (!dialogo.hidden && conZorro) cerrarDialogo();
+      // En la web no hay atajo global para volver a llamarlo: se queda abierto.
       else if (api.plataforma !== 'web') manejarAlternar('ocultar');
     }
   });

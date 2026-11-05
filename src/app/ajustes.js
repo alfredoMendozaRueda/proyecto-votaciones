@@ -50,7 +50,7 @@ const ESTILOS = { ilustracion: 'Ilustración', realista: 'Realista', anime: 'Ani
 
 // Ajustes por temas: la portada enseña cada uno con su valor actual y lleva a su página.
 const TEMAS = [
-  { id: 'kitsune', nombre: 'Kitsune', icono: 'chispa', detalle: 'Aspecto, voz y comportamiento' },
+  { id: 'kitsune', nombre: 'General', icono: 'chispa', detalle: 'Voz, comportamiento y aspecto' },
   { id: 'ia', nombre: 'IA y gasto', icono: 'pulso', detalle: 'Claves, modo, modelo y lo gastado' },
   { id: 'cuentas', nombre: 'Cuentas', icono: 'sobre', detalle: 'Google: correo y calendario' },
   { id: 'avisos', nombre: 'Avisos y servidor', icono: 'campana', detalle: 'Avisos en el móvil y servidor propio' },
@@ -204,7 +204,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
     const dos = estadoClaude.claves?.groq && estadoClaude.claves?.openai && ajustes.proveedor !== 'claude';
     const voz = VOCES.find((v) => v.id === ajustes.vozNombre);
     const resumenes = {
-      kitsune: [ESTILOS[ajustes.estilo], PALETAS[ajustes.paleta]?.nombre, ajustes.voz ? `lee en voz alta${voz ? ` · ${voz.nombre}` : ''}` : 'sin voz'].filter(Boolean).join(' · '),
+      kitsune: [...(api.plataforma !== 'web' && ajustes.mostrarZorro ? [ESTILOS[ajustes.estilo], PALETAS[ajustes.paleta]?.nombre] : []), ajustes.voz ? `lee en voz alta${voz ? ` · ${voz.nombre}` : ''}` : 'sin voz'].filter(Boolean).join(' · '),
       ia: dos ? `${INFO_MODOS[normalizarModo(ajustes.modoIA)].nombre} · Groq + GPT-6 Luna` : `${ia.nombre}${estadoClaude.configurado ? '' : ' · falta la clave'}`,
       cuentas: estadoCorreo.conectado ? `Google: ${estadoCorreo.email}` : 'Google sin conectar',
       avisos: !estadoAvisos ? 'No disponible' : estadoAvisos.vinculado ? (estadoAvisos.pushAqui ? 'Avisos activos en este dispositivo' : 'Servidor vinculado') : 'Sin conectar',
@@ -236,8 +236,11 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
           <ul class="ajustes-resultados" id="ajustes-resultados" hidden></ul>
         </nav>
 
-        <section class="grupo" id="seccion-kitsune" aria-label="Kitsune">
-          <h3>Kitsune</h3>
+        ${
+          escritorio
+            ? `<section class="grupo" id="seccion-kitsune" aria-label="El zorro">
+          <h3>El zorro</h3>
+          ${interruptor('mostrarZorro', 'Mostrar el zorro', 'Kitsune aparece junto a la ventana y reacciona a lo que haces. Sin él, solo está la ventana.')}
           <div class="ajuste">
             <span class="ajuste__etiqueta">Pelaje</span>
             <div class="pelajes" role="group" aria-label="Pelaje">
@@ -269,7 +272,9 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
           </div>
           ${interruptor('fuegos', 'Fuegos fatuos alrededor')}
           ${tactil ? '' : interruptor('seguirCursor', 'Seguir el cursor con la mirada')}
-        </section>
+        </section>`
+            : ''
+        }
 
         <section class="grupo" id="seccion-comportamiento" aria-label="Comportamiento">
           <h3>Comportamiento</h3>

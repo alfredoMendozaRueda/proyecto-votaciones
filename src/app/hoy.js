@@ -33,6 +33,8 @@ function cuando(ms, { todoElDia = false } = {}) {
   return todoElDia ? nombre : `${nombre} a las ${hora(ms)}`;
 }
 
+const mayuscula = (t) => String(t ?? '').charAt(0).toUpperCase() + String(t ?? '').slice(1);
+
 export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir('chat'), abrirAjustes, instalacion = null, alEmpleo = () => {}, alBiblia = () => {} }) {
   let pintando = 0;
 
@@ -105,7 +107,7 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
     return `
       <div class="hoy-tarjeta hoy-biblia${hecha ? ' hoy-biblia--hecha' : ''}">
         <button type="button" class="hoy-biblia__ir" data-ir="biblia">
-          <span class="hoy-tarjeta__etiqueta">${icono('libro', 14)}${b.tocan.length ? 'hoy toca leer' : 'lectura bíblica'}</span>
+          <span class="hoy-tarjeta__etiqueta">${icono('libro', 14)}${b.tocan.length ? 'Hoy toca leer' : 'Lectura bíblica'}</span>
           <span class="hoy-tarjeta__valor">${escapar(valor)}</span>
           ${detalle ? `<span class="hoy-tarjeta__detalle">${escapar(detalle)}</span>` : ''}
         </button>
@@ -149,7 +151,7 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
 
   const tarjeta = ({ ir: destino, icono: ico, etiqueta, valor, detalle = '', destacada = false, accion = '' }) => `
     <button type="button" class="hoy-tarjeta${destacada ? ' hoy-tarjeta--destacada' : ''}" ${destino ? `data-ir="${destino}"` : ''} ${accion ? `data-accion="${accion}"` : ''}>
-      <span class="hoy-tarjeta__etiqueta">${icono(ico, 14)}${escapar(etiqueta)}</span>
+      <span class="hoy-tarjeta__etiqueta">${icono(ico, 14)}${escapar(mayuscula(etiqueta))}</span>
       <span class="hoy-tarjeta__valor">${escapar(valor)}</span>
       ${detalle ? `<span class="hoy-tarjeta__detalle">${escapar(detalle)}</span>` : ''}
     </button>`;
