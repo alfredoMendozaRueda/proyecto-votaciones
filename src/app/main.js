@@ -335,8 +335,85 @@ function contextoAudio() {
   audioCtx ??= new Contexto();
   return audioCtx;
 }
+// En la web la voz natural suena en un reproductor de audio normal (como la
+// música), no en Web Audio: así el iPhone la trata como «reproduciendo» y la
+// enseña en la isla dinámica y en la pantalla de bloqueo, con su título.
+const vozEnElemento = api.plataforma === 'web' && typeof Audio !== 'undefined';
+let elementoVoz = null;
+let elementoListo = false;
+
+// Un instante de silencio (WAV) para desbloquear el reproductor con el primer toque.
+function silencioWav() {
+  const muestras = 800;
+  const b = new Uint8Array(44 + muestras);
+  const v = new DataView(b.buffer);
+  const texto = (o, t) => [...t].forEach((c, i) => (b[o + i] = c.charCodeAt(0)));
+  texto(0, 'RIFF');
+  v.setUint32(4, 36 + muestras, true);
+  texto(8, 'WAVEfmt ');
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, 8000, true);
+  v.setUint32(28, 8000, true);
+  v.setUint16(32, 1, true);
+  v.setUint16(34, 8, true);
+  texto(36, 'data');
+  v.setUint32(40, muestras, true);
+  b.fill(128, 44);
+  return URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+}
+
+function reproductorVoz() {
+  if (!elementoVoz) {
+    elementoVoz = new Audio();
+    elementoVoz.preload = 'auto';
+    elementoVoz.setAttribute('playsinline', '');
+  }
+  return elementoVoz;
+}
+
+function desbloquearReproductor() {
+  if (!vozEnElemento || elementoListo) return;
+  const el = reproductorVoz();
+  el.src = silencioWav();
+  el.play()
+    .then(() => {
+      el.pause();
+      elementoListo = true;
+    })
+    .catch(() => {});
+}
+
+// Lo que enseña el iPhone mientras habla: «Kitsune» y el principio de la respuesta.
+function sesionMedia(texto) {
+  if (!('mediaSession' in navigator)) return;
+  try {
+    if (texto === null) {
+      navigator.mediaSession.playbackState = 'none';
+      navigator.mediaSession.metadata = null;
+      return;
+    }
+    const resumen = limpiarParaVoz(texto).replace(/\s+/g, ' ').trim();
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: 'Kitsune',
+      artist: resumen.length > 90 ? `${resumen.slice(0, 88)}…` : resumen,
+      album: 'Tu asistente',
+      artwork: [192, 512].map((t) => ({ src: new URL(`iconos/icono-${t}.png`, location.href).href, sizes: `${t}x${t}`, type: 'image/png' })),
+    });
+    navigator.mediaSession.playbackState = 'playing';
+    for (const accion of ['pause', 'stop']) navigator.mediaSession.setActionHandler(accion, () => callarVoz());
+  } catch {
+    // Sin sesión multimedia: suena igual.
+  }
+}
+
 // En el iPhone el audio solo puede empezar tras un toque: se despierta con el primero.
-const despertarAudio = () => ajustes && ajustes.vozTipo !== 'dispositivo' && contextoAudio()?.resume().catch(() => {});
+const despertarAudio = () => {
+  if (!ajustes || ajustes.vozTipo === 'dispositivo') return;
+  contextoAudio()?.resume().catch(() => {});
+  desbloquearReproductor();
+};
 document.addEventListener('pointerdown', despertarAudio, { passive: true });
 document.addEventListener('keydown', despertarAudio);
 
@@ -360,6 +437,7 @@ function callarVoz() {
     // Ya había terminado.
   }
   fuenteVoz = null;
+  if (elementoVoz && !elementoVoz.paused) elementoVoz.pause();
   if ('speechSynthesis' in window) speechSynthesis.cancel();
 }
 
@@ -384,6 +462,11 @@ async function hablarEnVoz(texto) {
 
 // Devuelve false si no llegó a sonar nada (para usar entonces la del dispositivo).
 async function hablarNatural(texto, turno, motor) {
+  if (vozEnElemento) {
+    const r = await hablarConReproductor(texto, turno, motor);
+    // Si el iPhone no deja usar el reproductor (sin toque previo), se usa Web Audio.
+    if (r !== 'bloqueado') return r;
+  }
   const ctx = contextoAudio();
   if (!ctx) return false;
   if (ctx.state !== 'running') await ctx.resume().catch(() => {});
@@ -414,6 +497,71 @@ async function hablarNatural(texto, turno, motor) {
     if (turno !== turnoVoz) return true;
   }
   return sonado;
+}
+
+async function hablarConReproductor(texto, turno, motor) {
+  const el = reproductorVoz();
+  if (navigator.audioSession) navigator.audioSession.type = 'playback';
+  const trozos = trozosDeVoz(texto);
+  const pedir = (i) => (i < trozos.length ? motor(trozos[i]) : null);
+  let siguiente = pedir(0);
+  let sonado = false;
+  try {
+    for (let i = 0; i < trozos.length; i++) {
+      let bytes;
+      try {
+        bytes = await siguiente;
+      } catch (error) {
+        if (!sonado) throw error;
+        break;
+      }
+      if (turno !== turnoVoz) return true;
+      siguiente = pedir(i + 1);
+      siguiente?.catch(() => {});
+      if (!sonado) sesionMedia(texto);
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }));
+      try {
+        await sonarEn(el, url);
+        sonado = true;
+      } catch (error) {
+        if (!sonado && error?.name === 'NotAllowedError') return 'bloqueado';
+        throw error;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+      if (turno !== turnoVoz) return true;
+    }
+    return sonado;
+  } finally {
+    if (turno === turnoVoz || !sonado) sesionMedia(null);
+  }
+}
+
+// Suena un trozo en el reproductor; termina al acabar o si se corta (pausa).
+function sonarEn(el, url) {
+  return new Promise((resolver, rechazar) => {
+    const limpiar = () => {
+      el.removeEventListener('ended', fin);
+      el.removeEventListener('pause', fin);
+      el.removeEventListener('error', fallo);
+    };
+    const fin = () => {
+      limpiar();
+      resolver();
+    };
+    const fallo = () => {
+      limpiar();
+      rechazar(new Error('No se pudo reproducir la voz.'));
+    };
+    el.addEventListener('ended', fin);
+    el.addEventListener('pause', fin);
+    el.addEventListener('error', fallo);
+    el.src = url;
+    el.play().catch((e) => {
+      limpiar();
+      rechazar(e);
+    });
+  });
 }
 
 // Suena un trozo y la boca del zorro sigue el volumen.
