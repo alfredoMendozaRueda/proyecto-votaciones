@@ -46,7 +46,13 @@ export function prepararMovil({ escena, dialogo, obtenerVista, alAbrir }) {
     const ajustar = () => {
       raiz.style.setProperty('--vv-alto', `${Math.round(vv.height)}px`);
       raiz.style.setProperty('--vv-arriba', `${Math.round(vv.offsetTop)}px`);
+      // En la app instalada del iPhone el alto que da el navegador se queda
+      // corto (no cuenta la barra de estado) y dejaba un hueco negro abajo:
+      // en vertical se usa el alto real de la pantalla.
+      const pantalla = enApp() && matchMedia('(orientation: portrait)').matches ? Math.max(screen.height, screen.width) : 0;
+      raiz.style.setProperty('--alto-app', `${Math.max(window.innerHeight, pantalla)}px`);
     };
+    window.addEventListener('resize', ajustar);
     vv.addEventListener('resize', ajustar);
     vv.addEventListener('scroll', ajustar);
     ajustar();

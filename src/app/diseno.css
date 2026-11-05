@@ -1302,3 +1302,16 @@ button.bloque--heroe:hover {
   background: transparent;
   color: var(--crema);
 }
+
+/* iPhone (app instalada): la app llega hasta abajo del todo; con teclado, al trozo visible. */
+:root.movil .escena:not(.teclado),
+:root.movil body.demo .escena:not(.teclado) {
+  inset: 0 0 auto 0;
+  height: var(--alto-app, 100dvh);
+}
+
+:root.movil,
+:root.movil body {
+  min-height: var(--alto-app, 100dvh);
+  background: var(--fondo);
+}
