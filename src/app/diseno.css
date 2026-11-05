@@ -1328,3 +1328,36 @@ button.bloque--heroe:hover {
     height: max(var(--alto-app, 0px), calc(100vh + env(safe-area-inset-top, 0px)));
   }
 }
+
+/* Citas cortas: título y hora en una sola línea, sin recortar. */
+.linea__evento.corta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.linea__evento.corta b {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 13.5px;
+}
+
+.linea__evento.corta small {
+  flex: none;
+}
+
+.linea__evento.corta .boton-borrar {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Los días sin nada guardan el hueco del punto: todos los números a la misma altura. */
+.semana-tira__dia {
+  align-content: start;
+}
+
+.semana-tira__dia i.vacio {
+  visibility: hidden;
+}

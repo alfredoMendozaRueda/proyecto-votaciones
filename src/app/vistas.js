@@ -371,7 +371,7 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
           const hay = delDia(dia).length + recordatoriosDel(dia).length;
           const nombre = `${NOMBRES_SEMANA[i]}, ${d.getDate()} de ${d.toLocaleDateString('es-ES', { month: 'long' })}`;
           return `<button type="button" class="semana-tira__dia${mismoDia(dia, Date.now()) ? ' es-hoy' : ''}" data-dia="${dia}" aria-pressed="${dia === seleccionado}" aria-label="${nombre}${hay ? `, ${hay} ${hay === 1 ? 'cosa' : 'cosas'}` : ''}" tabindex="${dia === seleccionado ? 0 : -1}">
-            <small>${DIAS_SEMANA[i]}</small><b>${d.getDate()}</b><i${hay ? '' : ' hidden'}></i></button>`;
+            <small>${DIAS_SEMANA[i]}</small><b>${d.getDate()}</b><i class="${hay ? '' : 'vacio'}"></i></button>`;
         })
         .join('')}</div>`;
     tira.querySelectorAll('[data-dia]').forEach((b) => b.addEventListener('click', () => irA(Number(b.dataset.dia))));
@@ -437,9 +437,12 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
         ${puestas
           .map(({ e, col }) => {
             const ini = horaDe(e.inicio);
-            const alto = Math.max((horaDe(e.fin) - ini) * ALTO - 4, 46);
+            // Las citas cortas (menos de ~45 min) van en una línea: título y hora juntos.
+            const natural = (horaDe(e.fin) - ini) * ALTO - 4;
+            const corta = natural < 50;
+            const alto = corta ? Math.max(natural, 34) : natural;
             const n = columnas.length;
-            return `<div class="linea__evento" data-id="${escapar(e.id)}" style="top:${y(ini) + 2}px;height:${alto}px;left:calc(54px + (100% - 54px) * ${col / n});width:calc((100% - 54px) / ${n} - 4px)">
+            return `<div class="linea__evento${corta ? ' corta' : ''}" data-id="${escapar(e.id)}" style="top:${y(ini) + 2}px;height:${alto}px;left:calc(54px + (100% - 54px) * ${col / n});width:calc((100% - 54px) / ${n} - 4px)">
               <b>${escapar(e.titulo || '(sin título)')}</b><small>${horaCorta(e.inicio)} – ${horaCorta(e.fin)}${e.lugar ? ` · ${escapar(e.lugar)}` : ''}</small></div>`;
           })
           .join('')}

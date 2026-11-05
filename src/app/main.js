@@ -194,7 +194,6 @@ function mostrarVista(nombre, seccionAjustes = null) {
   document.getElementById('boton-memoria').setAttribute('aria-pressed', String(nombre === 'memoria'));
   dialogo.dataset.apartado = destino;
   // El apartado activo, a la vista si la barra se ha desplazado (pantallas estrechas).
-  if (enBarra(pestanas[destino])) pestanas[destino].scrollIntoView({ block: 'nearest', inline: 'nearest' });
   document.getElementById('boton-ajustes').setAttribute('aria-pressed', String(nombre === 'ajustes'));
   movil?.alCambiarVista(nombre);
   moverIndicador?.();
