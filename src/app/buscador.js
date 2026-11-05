@@ -28,7 +28,6 @@ const AJUSTES = [
   ['Cuenta de Google: correo y calendario', 'correo', 'google gmail calendario cuenta conectar'],
   ['Avisos en el móvil y servidor', 'avisos', 'avisos push notificaciones servidor silencio'],
   ['Sincronizar iPhone y Windows', 'sincro', 'sincronizar iphone windows dispositivos'],
-  ['Bloqueo con Face ID', 'bloqueo', 'face id bloqueo huella cara privacidad'],
   ['Permisos: qué puede hacer Kitsune', 'permisos', 'permisos confirmar preguntar privacidad'],
   ['Atajo de teclado e inicio con Windows', 'comportamiento', 'atajo teclado windows iniciar'],
 ];

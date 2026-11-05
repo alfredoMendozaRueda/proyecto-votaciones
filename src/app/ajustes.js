@@ -2,7 +2,7 @@ import { icono } from './iconos.js';
 import { PALETAS } from '../kitsune/paletas.js';
 import { PERMISOS, NOMBRES_NIVEL, nivelesDe, nivel } from '../compartido/permisos.js';
 import { VOCES } from '../compartido/voz.js';
-import { leerBloqueo, bloqueoDisponible, activarBloqueo, desactivarBloqueo, cambiarTras, comprobarIdentidad, OPCIONES_TRAS, nombreBiometria } from './web/bloqueo.js';
+import { leerLlave, llaveDisponible, crearLlave, comprobarIdentidad, nombreBiometria } from './web/llave.js';
 import { COLECCIONES_SINCRO, codigoDe } from '../compartido/sincro.js';
 import { MODOS_IA, INFO_MODOS, normalizarModo } from '../compartido/modos.js';
 import { htmlRegistroIA } from './registro-ia.js';
@@ -55,7 +55,7 @@ const TEMAS = [
   { id: 'cuentas', nombre: 'Cuentas', icono: 'sobre', detalle: 'Google: correo y calendario' },
   { id: 'avisos', nombre: 'Avisos y servidor', icono: 'campana', detalle: 'Avisos en el móvil y servidor propio' },
   { id: 'dispositivos', nombre: 'Dispositivos', icono: 'actualizar', detalle: 'Sincronizar iPhone y Windows' },
-  { id: 'privacidad', nombre: 'Privacidad', icono: 'llave', detalle: 'Permisos y bloqueo' },
+  { id: 'privacidad', nombre: 'Privacidad', icono: 'llave', detalle: 'Qué puede hacer Kitsune' },
 ];
 // De qué tema es cada bloque (el id de su <section>, sin «seccion-»).
 const TEMA_DE_SECCION = {
@@ -66,7 +66,6 @@ const TEMA_DE_SECCION = {
   correo: 'cuentas',
   avisos: 'avisos',
   sincro: 'dispositivos',
-  bloqueo: 'privacidad',
   permisos: 'privacidad',
 };
 const sinTildes = (t) =>
@@ -329,29 +328,6 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
         ${estadoAvisos ? seccionAvisos(estadoAvisos) : ''}
 
         ${api.sincro && estadoAvisos ? '<section class="grupo sincro" id="seccion-sincro" aria-label="Sincronizar con tus dispositivos"></section>' : ''}
-
-        ${
-          api.plataforma === 'web' && !api.demo
-            ? `<section class="grupo" id="seccion-bloqueo" aria-label="Bloqueo">
-          <h3>Bloqueo</h3>
-          <div id="ajuste-bloqueo" hidden>
-            <div class="ajuste ajuste--fila">
-              <div>
-                <div class="ajuste__etiqueta" id="et-bloqueo">Bloquear con ${nombreBiometria() === 'Face ID' ? 'Face ID' : 'huella o cara'}</div>
-                <p class="ajuste__ayuda">Al abrir Kitsune, o al volver tras un rato, te pide ${nombreBiometria()} (o el código del dispositivo).</p>
-              </div>
-              <button type="button" class="interruptor" role="switch" aria-labelledby="et-bloqueo" id="bloqueo-interruptor" aria-checked="${Boolean(leerBloqueo())}"></button>
-            </div>
-            <div class="ajuste ajuste--fila" id="bloqueo-tras-fila" ${leerBloqueo() ? '' : 'hidden'}>
-              <label class="ajuste__etiqueta" for="bloqueo-tras">Pedirlo al volver</label>
-              <div style="width:170px"><select class="campo" id="bloqueo-tras">${OPCIONES_TRAS.map(([v, n]) => `<option value="${v}" ${leerBloqueo()?.tras === v ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-            </div>
-            <p class="mensaje-ajuste" id="mensaje-bloqueo" role="status"></p>
-          </div>
-          <p class="ajuste__ayuda" id="bloqueo-no-disponible">Este navegador no permite bloquear Kitsune con la cara o la huella.</p>
-        </section>`
-            : ''
-        }
 
         <section class="grupo" id="seccion-permisos" aria-label="Permisos">
           <h3>Permisos</h3>
@@ -697,18 +673,11 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
     return min < 1 ? 'hace un momento' : min < 60 ? `hace ${min} min` : min < 1440 ? `hace ${Math.round(min / 60)} h` : `hace ${Math.round(min / 1440)} d`;
   };
 
-  // En el iPhone, todo lo que da acceso a tus datos sincronizados pasa por Face ID:
-  // si el bloqueo no está activado, se activa (Kitsune lleva tus claves).
+  // En el iPhone, todo lo que da acceso a tus datos sincronizados pasa por Face ID
+  // (Kitsune lleva tus claves): la primera vez se crea la llave de acceso.
   async function comprobarConCara() {
-    if (!conBiometria || !(await bloqueoDisponible())) return;
-    if (!leerBloqueo()) {
-      await activarBloqueo(1);
-      const bloque = contenedor.querySelector('#ajuste-bloqueo');
-      bloque?.querySelector('#bloqueo-interruptor')?.setAttribute('aria-checked', 'true');
-      const fila = bloque?.querySelector('#bloqueo-tras-fila');
-      if (fila) fila.hidden = false;
-      return;
-    }
+    if (!conBiometria || !(await llaveDisponible())) return;
+    if (!leerLlave()) return crearLlave();
     if (!(await comprobarIdentidad())) throw new Error('No se ha podido comprobar que eres tú.');
   }
   const errorCara = (error) => (error?.name === 'NotAllowedError' ? new Error(`Cancelado: hace falta ${nombreBiometria()}.`) : error);
@@ -731,8 +700,8 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
       return;
     }
     sincroAqui = r.aqui;
-    const conCara = conBiometria && (await bloqueoDisponible());
-    const notaCara = conCara ? `<p class="ajuste__ayuda sincro__cara">${icono('llave', 14)} En este iPhone va con ${nombreBiometria()}: se activa el bloqueo de Kitsune y cada dispositivo nuevo se aprueba con tu cara.</p>` : '';
+    const conCara = conBiometria && (await llaveDisponible());
+    const notaCara = conCara ? `<p class="ajuste__ayuda sincro__cara">${icono('llave', 14)} En este iPhone va con ${nombreBiometria()}: cada dispositivo nuevo se aprueba con tu cara.</p>` : '';
 
     if (!r.aqui && esperandoSincro && r.esperando) {
       caja.innerHTML = `${cabecera}
@@ -1197,35 +1166,6 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
         boton.disabled = false;
       }
     });
-    const bloque = contenedor.querySelector('#ajuste-bloqueo');
-    if (bloque) {
-      bloqueoDisponible().then((ok) => {
-        bloque.hidden = !ok;
-        const aviso = contenedor.querySelector('#bloqueo-no-disponible');
-        if (aviso) aviso.hidden = ok;
-      });
-      const interruptorBloqueo = bloque.querySelector('#bloqueo-interruptor');
-      interruptorBloqueo.addEventListener('click', async () => {
-        const activo = interruptorBloqueo.getAttribute('aria-checked') === 'true';
-        try {
-          if (activo) {
-            if (sincroAqui) throw new Error('Mientras sincronizas, Kitsune va protegido con Face ID en este iPhone (lleva tus claves). Deja de sincronizar para quitarlo.');
-            // Para quitarlo también hay que ser tú.
-            if (!(await comprobarIdentidad())) throw new Error('No se ha podido comprobar que eres tú.');
-            desactivarBloqueo();
-          } else {
-            await activarBloqueo(Number(bloque.querySelector('#bloqueo-tras').value) || 1);
-          }
-          const ahora = Boolean(leerBloqueo());
-          interruptorBloqueo.setAttribute('aria-checked', String(ahora));
-          bloque.querySelector('#bloqueo-tras-fila').hidden = !ahora;
-          mostrarMensaje('mensaje-bloqueo', ahora ? `Listo: Kitsune te pedirá ${nombreBiometria()}.` : 'Bloqueo quitado.', true);
-        } catch (error) {
-          mostrarMensaje('mensaje-bloqueo', error.name === 'NotAllowedError' ? 'Cancelado.' : error.message, false);
-        }
-      });
-      bloque.querySelector('#bloqueo-tras').addEventListener('change', (e) => cambiarTras(Number(e.target.value)));
-    }
     contenedor.querySelector('#vs-cargar')?.addEventListener('click', async () => {
       const selector = contenedor.querySelector('#ajuste-vs-voz');
       try {

@@ -14,7 +14,6 @@ import { crearAgenda, crearRecordatorios, crearMemoria, crearHistorial } from '.
 import { icono } from './iconos.js';
 import { trozosDeVoz, limpiarParaVoz } from '../compartido/voz.js';
 import { prepararMovil } from './movil.js';
-import { prepararBloqueo } from './web/bloqueo.js';
 import { prepararOndas, prepararIndicador, entrarVista, saltar, prepararEnvio } from './animaciones.js';
 
 // Electron trae window.asistente (preload). En el navegador se usa la versión
@@ -23,7 +22,6 @@ const modoEjemplo = window.KITSUNE_DEMO === true || new URLSearchParams(location
 const api = window.asistente ?? (modoEjemplo ? crearDemo() : crearBackendWeb());
 document.documentElement.dataset.plataforma = api.plataforma;
 // Face ID: lo primero, antes de enseñar nada.
-if (api.plataforma === 'web' && !modoEjemplo) prepararBloqueo();
 
 // El proceso principal puede pedir "mostrar" antes de que todo esté listo.
 const pendientes = [];

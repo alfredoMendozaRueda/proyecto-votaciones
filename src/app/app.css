@@ -5248,101 +5248,6 @@ html {
   }
 }
 
-/* ---------- Bloqueo con Face ID ---------- */
-:root.bloqueada body {
-  overflow: hidden;
-}
-
-.bloqueo {
-  position: fixed;
-  inset: 0;
-  z-index: 2147483000;
-  display: grid;
-  place-items: center;
-  padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
-  background:
-    radial-gradient(120% 70% at 50% 30%, rgba(210, 58, 44, 0.16), transparent 60%),
-    var(--yoru);
-  color: var(--texto);
-  animation: bloqueo-entra 0.2s ease;
-}
-
-@keyframes bloqueo-entra {
-  from {
-    opacity: 0;
-  }
-}
-
-.bloqueo__caja {
-  display: grid;
-  justify-items: center;
-  gap: 12px;
-  width: min(360px, 100%);
-  text-align: center;
-}
-
-.bloqueo__sello {
-  display: grid;
-  place-items: center;
-  width: 76px;
-  height: 76px;
-  border-radius: 22px;
-  background: var(--acento);
-  color: #fff;
-  font-size: 40px;
-  box-shadow: 0 18px 40px rgba(210, 58, 44, 0.35);
-}
-
-.bloqueo h2 {
-  margin: 8px 0 0;
-  font-size: 22px;
-  letter-spacing: -0.015em;
-}
-
-.bloqueo p {
-  margin: 0;
-  color: var(--texto-2);
-  font-size: 14.5px;
-  line-height: 1.45;
-}
-
-.bloqueo__abrir {
-  justify-content: center;
-  width: 100%;
-  min-height: 50px;
-  margin-top: 10px;
-  font-size: 16px;
-}
-
-.bloqueo__mensaje {
-  min-height: 1.4em;
-  color: var(--acento-vivo) !important;
-  font-size: 13.5px !important;
-}
-
-.bloqueo__ayuda {
-  width: 100%;
-  margin-top: 18px;
-  color: var(--texto-3);
-  font-size: 13px;
-  text-align: left;
-}
-
-.bloqueo__ayuda summary {
-  cursor: pointer;
-  text-align: center;
-}
-
-.bloqueo__ayuda p {
-  margin: 10px 0;
-  font-size: 13px;
-}
-
-.bloqueo__borrar {
-  width: 100%;
-  justify-content: center;
-}
-
 /* ---------- Empleo: alerta diaria ---------- */
 
 .empleo-alerta {
@@ -8791,7 +8696,7 @@ p.gastos__dia {
   font-size: 24px;
 }
 
-/* ---------- El sello 狐 (cabecera y bloqueo) ---------- */
+/* ---------- El sello 狐 (cabecera) ---------- */
 .marca__sello,
 :root.movil .marca__sello {
   width: 30px;
@@ -8839,18 +8744,15 @@ p.gastos__dia {
 }
 
 /* Al abrir: se estampa, el kanji se escribe en oro, se rellena y lo cruza un brillo. */
-.dialogo:not([hidden]) .marca__sello .sello__cuerpo,
-.bloqueo .sello__cuerpo {
+.dialogo:not([hidden]) .marca__sello .sello__cuerpo {
   animation: sello-estampa 0.62s cubic-bezier(0.3, 1.45, 0.5, 1) 0.12s backwards;
 }
 
-.dialogo:not([hidden]) .marca__sello .sello__kanji,
-.bloqueo .sello__kanji {
+.dialogo:not([hidden]) .marca__sello .sello__kanji {
   animation: sello-trazo 1.5s cubic-bezier(0.55, 0.1, 0.35, 1) 0.32s backwards;
 }
 
-.dialogo:not([hidden]) .marca__sello .sello__brillo,
-.bloqueo .sello__brillo {
+.dialogo:not([hidden]) .marca__sello .sello__brillo {
   animation: sello-brillo 0.9s ease-in-out 1.55s backwards;
 }
 
@@ -8913,23 +8815,10 @@ p.gastos__dia {
   animation-delay: 1.95s;
 }
 
-/* Bloqueo: el sello en grande. */
-.bloqueo__sello {
-  width: 96px;
-  height: 96px;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  filter: drop-shadow(0 18px 30px rgba(200, 52, 42, 0.38));
-}
-
 @media (prefers-reduced-motion: reduce) {
   .dialogo:not([hidden]) .marca__sello .sello__cuerpo,
   .dialogo:not([hidden]) .marca__sello .sello__kanji,
-  .dialogo:not([hidden]) .marca__sello .sello__brillo,
-  .bloqueo .sello__cuerpo,
-  .bloqueo .sello__kanji,
-  .bloqueo .sello__brillo {
+  .dialogo:not([hidden]) .marca__sello .sello__brillo {
     animation: none;
   }
 }
