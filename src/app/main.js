@@ -117,6 +117,7 @@ function mostrarVista(nombre, seccionAjustes = null) {
   if (anterior !== nombre) entrarVista(vistas[nombre], Math.sign(ORDEN_VISTAS.indexOf(nombre) - ORDEN_VISTAS.indexOf(anterior)));
   if (nombre === 'ajustes') panelAjustes.abrir(seccionAjustes);
   if (nombre === 'chat') enfocarChat();
+  else chat?.retirarConversacion();
   apartados[nombre]?.mostrar();
 }
 
@@ -510,6 +511,10 @@ async function iniciar() {
       mostrarVista('chat');
       chat.preguntar(texto);
     },
+    conversar: () => {
+      mostrarVista('chat');
+      chat.empezarConversacion();
+    },
     abrirAjustes: (seccion) => mostrarVista('ajustes', seccion),
     instalacion: { puedeInstalar: () => movil?.puedeInstalar() ?? null, instalar: () => movil?.instalar() ?? false },
     alEmpleo: ponerInsigniaEmpleo,
@@ -805,7 +810,13 @@ function vigilarTeclado() {
 function prepararWeb() {
   ajustarEscala();
   manejarAlternar('mostrar');
-  atenderParametros();
+  if (!atenderParametros() && ajustes.abrirHablando) abrirParaHablar();
+  // «Abrir para hablar»: también al volver a la app tras un rato fuera.
+  let fuera = null;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') fuera = Date.now();
+    else if (fuera !== null && Date.now() - fuera >= 60_000 && ajustes.abrirHablando) abrirParaHablar();
+  });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
     navigator.serviceWorker.addEventListener('message', (e) => {
@@ -819,12 +830,24 @@ function prepararWeb() {
   }
 }
 
+// El chat con el botón grande de «Toca para hablar» (el toque hace falta para
+// que el iPhone deje sonar la respuesta).
+function abrirParaHablar() {
+  if (chat.enConversacion()) return;
+  mostrarVista('chat');
+  abrirDialogo();
+  chat.ofrecerConversacion();
+}
+
 // Llegadas desde fuera: el aviso de correo (?correo), los atajos del icono
-// (?pulso) o "Compartir" desde otra app (?texto, ?enlace, ?titulo).
+// (?pulso, ?voz) o "Compartir" desde otra app (?texto, ?enlace, ?titulo).
+// Devuelve si había alguna.
+const PARAMETROS = ['correo', 'agenda', 'recordatorios', 'ajustes', 'sincro', 'empleo', 'biblia', 'pulso', 'chat', 'voz', 'hablar', 'titulo', 'texto', 'enlace'];
 function atenderParametros() {
   const parametros = new URLSearchParams(location.search);
   const compartido = ['titulo', 'texto', 'enlace'].map((c) => parametros.get(c)?.trim()).filter(Boolean);
-  if (parametros.has('chat')) mostrarVista('chat');
+  if (parametros.has('voz') || parametros.has('hablar')) abrirParaHablar();
+  else if (parametros.has('chat')) mostrarVista('chat');
   else if (parametros.has('correo')) mostrarVista('correo');
   else if (parametros.has('agenda')) mostrarVista('agenda');
   else if (parametros.has('recordatorios')) mostrarVista('recordatorios');
@@ -838,10 +861,10 @@ function atenderParametros() {
     chat.ofrecerTexto([...new Set(compartido)].join('\n'), 'compartido');
   }
   // Llegar con una acción abre el diálogo directamente; que recargar no la repita.
-  if ([...parametros.keys()].some((c) => ['correo', 'agenda', 'recordatorios', 'ajustes', 'sincro', 'empleo', 'biblia', 'pulso', 'chat', 'titulo', 'texto', 'enlace'].includes(c))) {
-    abrirDialogo();
-    history.replaceState(null, '', location.pathname);
-  }
+  if (![...parametros.keys()].some((c) => PARAMETROS.includes(c))) return false;
+  abrirDialogo();
+  history.replaceState(null, '', location.pathname);
+  return true;
 }
 
 // Solo en el navegador: escritorio simulado y el atajo funcionando dentro de la página.
@@ -854,7 +877,7 @@ function prepararDemo() {
       api.simular.alternar(kitsune.visible ? 'ocultar' : 'mostrar');
     }
   });
-  window.kitsuneDemo = { api, kitsune, mostrarVista, abrirDialogo, cerrarDialogo, correo, chat };
+  window.kitsuneDemo = { api, kitsune, mostrarVista, abrirDialogo, cerrarDialogo, abrirParaHablar, correo, chat };
   api.simular.alternar('mostrar');
 }
 

@@ -33,7 +33,7 @@ function cuando(ms, { todoElDia = false } = {}) {
   return todoElDia ? nombre : `${nombre} a las ${hora(ms)}`;
 }
 
-export function crearHoy({ contenedor, api, ir, preguntar, abrirAjustes, instalacion = null, alEmpleo = () => {}, alBiblia = () => {} }) {
+export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir('chat'), abrirAjustes, instalacion = null, alEmpleo = () => {}, alBiblia = () => {} }) {
   let pintando = 0;
 
   // Cada tarjeta se calcula por su cuenta: si una falla, las demás salen igual.
@@ -253,6 +253,7 @@ export function crearHoy({ contenedor, api, ir, preguntar, abrirAjustes, instala
             ${api.gastos ? `<button type="button" class="chip" data-accion="gasto">${icono('cartera', 14)} Apuntar gasto</button>` : ''}
             <button type="button" class="chip" data-accion="pulso">${icono('sol', 14)} Pulso del día</button>
             <button type="button" class="chip" data-accion="hablar">${icono('chat', 14)} Preguntar</button>
+            <button type="button" class="chip" data-accion="conversar">${icono('ondas', 14)} Hablar</button>
           </div>
           <p class="hoy__ayuda" id="hoy-ayuda-iphone" hidden>En el iPhone: pulsa ${icono('compartir', 14)} <strong>Compartir</strong> en Safari y luego <strong>Añadir a pantalla de inicio</strong>.</p>
         </div>`;
@@ -295,6 +296,8 @@ export function crearHoy({ contenedor, api, ir, preguntar, abrirAjustes, instala
         return preguntar('Prepárame el pulso de hoy');
       case 'hablar':
         return ir('chat');
+      case 'conversar':
+        return conversar();
       case 'conectar-google':
         return abrirAjustes('correo');
       case 'ajustes-ia':

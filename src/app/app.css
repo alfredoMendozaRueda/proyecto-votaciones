@@ -8953,3 +8953,144 @@ p.gastos__dia {
   flex: 1 1 220px;
   margin: 0;
 }
+
+/* ---------- «Toca para hablar»: llegar al chat para conversar en voz ---------- */
+
+.llamar {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 24px 24px calc(24px + env(safe-area-inset-bottom, 0px));
+  background:
+    radial-gradient(120% 70% at 50% 42%, var(--acento-velo), transparent 70%),
+    color-mix(in srgb, var(--negro) 94%, transparent);
+  animation: llamar-entra 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.llamar[hidden] {
+  display: none;
+}
+
+@keyframes llamar-entra {
+  from {
+    opacity: 0;
+  }
+}
+
+.llamar__boton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 320px);
+  padding: 28px 16px 22px;
+  border: 0;
+  border-radius: 28px;
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.llamar__circulo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 132px;
+  height: 132px;
+  margin-bottom: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, var(--acento-vivo), var(--acento) 55%, var(--acento-hondo));
+  color: var(--tinta);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--kin) 55%, transparent),
+    0 18px 44px color-mix(in srgb, var(--acento-hondo) 70%, transparent);
+  transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.llamar__circulo svg {
+  position: relative;
+}
+
+.llamar__boton:active .llamar__circulo {
+  transform: scale(0.95);
+}
+
+.llamar__boton:focus-visible {
+  outline: none;
+}
+
+.llamar__boton:focus-visible .llamar__circulo {
+  outline: 2px solid var(--kin-vivo);
+  outline-offset: 6px;
+}
+
+/* Dos ondas que salen del círculo, como una llamada entrante. */
+.llamar__eco {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--acento-vivo);
+  border-radius: 50%;
+  opacity: 0;
+  animation: llamar-eco 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.llamar__eco + .llamar__eco {
+  animation-delay: 1.2s;
+}
+
+@keyframes llamar-eco {
+  0% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+.llamar__titulo {
+  font-family: var(--display);
+  font-size: 1.45rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.llamar__detalle {
+  max-width: 26ch;
+  color: var(--texto-2);
+  font-size: 0.95rem;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.llamar__escribir {
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--texto-3);
+  font: inherit;
+  font-size: 0.92rem;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.llamar__escribir:hover {
+  background: var(--carbon-2);
+  color: var(--texto-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .llamar,
+  .llamar__eco {
+    animation: none;
+  }
+}

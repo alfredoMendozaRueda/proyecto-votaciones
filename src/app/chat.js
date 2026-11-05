@@ -99,6 +99,14 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
       <button type="button" class="conversacion__estado"></button>
       <button type="button" class="boton conversacion__terminar" id="conversacion-terminar">Terminar</button>
     </div>
+    <div class="llamar" id="chat-llamar" hidden>
+      <button type="button" class="llamar__boton" id="chat-llamar-empezar">
+        <span class="llamar__circulo" aria-hidden="true"><span class="llamar__eco"></span><span class="llamar__eco"></span>${icono('ondas', 38)}</span>
+        <span class="llamar__titulo">Toca para hablar</span>
+        <span class="llamar__detalle">Te escucho y te contesto en voz alta</span>
+      </button>
+      <button type="button" class="llamar__escribir" id="chat-llamar-escribir">Prefiero escribir</button>
+    </div>
     <form class="compositor" id="chat-formulario">
       <button type="button" class="icono-boton" id="chat-nueva" aria-label="Nueva conversación" title="Nueva conversación">${icono('nueva')}</button>
       <textarea id="chat-entrada" rows="1" placeholder="Escribe a Kitsune…" aria-label="Mensaje para Kitsune"></textarea>
@@ -861,6 +869,7 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
   };
 
   async function conversar() {
+    ocultarLlamar();
     conversando = true;
     hablar.preparar?.();
     marcarConversacion('escuchando');
@@ -909,6 +918,27 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     if (conversando) terminarConversacion();
     else if (!entrada.disabled) conversar();
   });
+
+  // Llegar para hablar (atajo «Hablar con Kitsune» o al abrir la app): un botón
+  // que ocupa el chat. Hace falta ese toque: sin él el iPhone no deja sonar la respuesta.
+  const llamar = contenedor.querySelector('#chat-llamar');
+  const ocultarLlamar = () => {
+    llamar.hidden = true;
+  };
+  function ofrecerConversacion() {
+    if (!botonConversar || entrada.disabled || conversando) return false;
+    llamar.hidden = false;
+    llamar.querySelector('#chat-llamar-empezar').focus({ preventScroll: true });
+    return true;
+  }
+  llamar.querySelector('#chat-llamar-empezar').addEventListener('click', () => {
+    ocultarLlamar();
+    if (!conversando && !entrada.disabled) conversar();
+  });
+  llamar.querySelector('#chat-llamar-escribir').addEventListener('click', () => {
+    ocultarLlamar();
+    entrada.focus();
+  });
   barra?.querySelector('#conversacion-terminar').addEventListener('click', terminarConversacion);
   // Tocar la barra mientras habla corta la voz y vuelve a escuchar.
   barra?.querySelector('.conversacion__estado').addEventListener('click', () => {
@@ -917,7 +947,10 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
 
   async function comprobarClave() {
     const { configurado } = await api.claude.estado();
-    if (!configurado) sinClave();
+    if (!configurado) {
+      sinClave();
+      ocultarLlamar();
+    }
     else if (!mensajes.querySelector('.burbuja') && !(!restaurado && (await restaurar()))) vacio();
     entrada.disabled = !configurado;
     if (botonMicro) botonMicro.disabled = !configurado;
@@ -929,6 +962,15 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     enfocar: () => entrada.focus(),
     terminarConversacion,
     enConversacion: () => conversando,
+    ofrecerConversacion,
+    // Desde un toque (p. ej. «Hablar» en Hoy): empieza a escuchar sin más.
+    empezarConversacion: () => {
+      if (!botonConversar || entrada.disabled || conversando) return false;
+      conversar();
+      return true;
+    },
+    // Si se está ofreciendo hablar y no se usa: se quita al ir a otro sitio.
+    retirarConversacion: ocultarLlamar,
     preguntar,
     comprobarClave,
     // Texto compartido desde otra app: se deja escrito para que el usuario lo envíe.

@@ -41,6 +41,7 @@ export const AJUSTES_LOCALES = new Set([
   'dormirTrasMin',
   'ofrecerPortapapeles',
   'vozTipo',
+  'abrirHablando',
   'voicestudioUrl',
   'voicestudioVoz',
   'googleClientId',

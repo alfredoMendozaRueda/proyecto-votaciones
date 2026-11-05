@@ -297,6 +297,7 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
             <div style="width:150px">${selector('dormirTrasMin', 'ajuste-dormir', [[0, 'Nunca'], [2, 'A los 2 min'], [5, 'A los 5 min'], [10, 'A los 10 min'], [30, 'A los 30 min']])}</div>
           </div>
           ${interruptor('voz', 'Leer las respuestas en voz alta')}
+          ${escritorio ? '' : interruptor('abrirHablando', 'Abrir Kitsune para hablar', 'Al abrir la app, o al volver a ella tras un minuto, te recibe el botón «Toca para hablar»: lo tocas y conversáis en voz alta.')}
           <div class="ajuste">
             <div class="ajuste__etiqueta">Tipo de voz</div>
             ${segmentado('vozTipo', [['natural', 'Natural'], ...(vocesVoiceStudio ? [['voicestudio', 'VoiceStudio']] : []), ['dispositivo', escritorio ? 'De Windows' : 'Del dispositivo']])}

@@ -20,6 +20,8 @@ export const AJUSTES_POR_DEFECTO = {
   iniciarConWindows: false,
   dormirTrasMin: 5,
   voz: false,
+  // Web: al abrir (o volver tras un rato) sale el botón de hablar.
+  abrirHablando: false,
   pulsoDiario: true,
   usarMemoria: true,
   busquedaWeb: true,
