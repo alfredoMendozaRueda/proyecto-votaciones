@@ -51,6 +51,7 @@ export function prepararMovil({ escena, dialogo, obtenerVista, alAbrir }) {
       // en vertical se usa el alto real de la pantalla.
       const pantalla = enApp() && matchMedia('(orientation: portrait)').matches ? Math.max(screen.height, screen.width) : 0;
       raiz.style.setProperty('--alto-app', `${Math.max(window.innerHeight, pantalla)}px`);
+      raiz.classList.toggle('app-instalada', enApp());
     };
     window.addEventListener('resize', ajustar);
     vv.addEventListener('resize', ajustar);

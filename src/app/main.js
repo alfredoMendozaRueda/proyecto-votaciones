@@ -762,6 +762,8 @@ async function iniciar() {
     alBiblia: () => apartados.biblia?.recargar(),
   });
   apartados.hoy.mostrar();
+  // La cabecera de Hoy (la fecha) también al abrir, no solo al volver a Hoy.
+  if (vistaActual === 'hoy') mostrarVista('hoy');
 
   // El buscador (lupa de arriba o Ctrl+K): lleva directo a lo que eliges.
   const buscador = crearBuscador({

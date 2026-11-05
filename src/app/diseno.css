@@ -1315,3 +1315,16 @@ button.bloque--heroe:hover {
   min-height: var(--alto-app, 100dvh);
   background: var(--fondo);
 }
+
+/* iPhone, app instalada: el alto del navegador no cuenta la zona de arriba
+   (isla y hora); se le suma para llegar al borde de abajo. Dos vías por si
+   una falla: la clase que pone movil.js y la consulta de modo app. */
+:root.movil.app-instalada .escena:not(.teclado) {
+  height: max(var(--alto-app, 0px), calc(100vh + env(safe-area-inset-top, 0px)));
+}
+
+@media all and (display-mode: standalone) {
+  :root.movil .escena:not(.teclado) {
+    height: max(var(--alto-app, 0px), calc(100vh + env(safe-area-inset-top, 0px)));
+  }
+}

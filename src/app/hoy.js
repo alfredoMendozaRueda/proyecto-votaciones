@@ -155,7 +155,7 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
     if (!a) return '';
     const usado = a.proximos.length ? null : a.recordatorios[0];
     const r = a.recordatorios.find((x) => x !== usado);
-    if (!r) return bloque({ ir: 'recordatorios', etiqueta: 'Recordatorios', contenido: titulo('Ninguno pendiente') + detalle('Pídeme «recuérdame…»') });
+    if (!r) return bloque({ ir: 'recordatorios', etiqueta: 'Recordatorios', contenido: titulo(usado ? 'Nada más pendiente' : 'Ninguno pendiente') + detalle('Pídeme «recuérdame…»') });
     return bloque({ ir: 'recordatorios', etiqueta: `Recordatorio · ${cuando(r.cuando)}`, contenido: titulo(r.texto) + detalle(a.deHoy.length > 1 ? `${a.deHoy.length} para hoy` : faltan(r.cuando)) });
   }
 
