@@ -1348,3 +1348,14 @@ button.bloque--heroe:hover {
 .semana-tira__dia i.vacio {
   visibility: hidden;
 }
+
+/* La barra y la voz, siempre por encima del contenido (que nada se quede su toque);
+   las hojas y el buscador, por encima de ellas. */
+:root:not(.x) .apartados,
+.boton-voz {
+  z-index: 25;
+}
+
+.hoja-mas {
+  z-index: 50;
+}

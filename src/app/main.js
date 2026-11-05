@@ -1033,6 +1033,18 @@ function vigilarTeclado() {
       if (!esCampo(document.activeElement)) escena.classList.remove('teclado');
     }, 120);
   });
+  // En el iPhone el campo puede seguir enfocado con el teclado ya cerrado: si el
+  // trozo visible vuelve a ser casi toda la pantalla, la barra vuelve.
+  window.visualViewport?.addEventListener('resize', () => {
+    if (window.visualViewport.height > window.innerHeight * 0.85) escena.classList.remove('teclado');
+  });
+  // Tocar la barra (o la voz) cierra antes el campo que estuviera abierto.
+  for (const el of [document.querySelector('.apartados'), document.getElementById('boton-voz')]) {
+    el?.addEventListener('pointerdown', () => {
+      if (esCampo(document.activeElement)) document.activeElement.blur();
+      escena.classList.remove('teclado');
+    });
+  }
 }
 
 // Versión web: no hay atajo global; el zorro aparece al abrir la app.
