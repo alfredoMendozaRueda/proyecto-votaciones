@@ -1,3 +1,4 @@
+import '@fontsource-variable/geist';
 import { Kitsune } from '../kitsune/Kitsune.js';
 import { crearDemo } from './demo.js';
 import { crearBackendWeb } from './web/backend.js';

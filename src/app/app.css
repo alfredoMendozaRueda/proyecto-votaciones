@@ -9588,3 +9588,584 @@ p.gastos__dia,
 .hoy-grupo:not(:has(.hoy-tarjeta)) {
   display: none;
 }
+
+/* ==========================================================================
+   Rediseño «Laca editorial» (nov. 2026)
+   Referencias estudiadas: Hatypo (finanzas: tipografía grande y fina,
+   píldoras con filo y contadores), Aura (asistente oscuro: acento solo en lo
+   importante), NoirAI (saludo enorme, botones circulares, campo en píldora) y
+   Axel (cifras en fila separadas por filos). Mismos colores: negro laca,
+   bermellón para la acción, crema para el texto y oro solo en el sello.
+   Tipografía: Geist (OFL). Formas: píldoras para controles y filas, 22 px
+   para bloques, filos de 1 px en vez de rellenos.
+   ========================================================================== */
+
+:root {
+  --ui: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --display: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --filo: rgba(242, 232, 224, 0.1);
+  --filo-fuerte: rgba(242, 232, 224, 0.18);
+  --r-bloque: 22px;
+  --crema: #f2e8e0;
+}
+
+html,
+body,
+button,
+input,
+textarea,
+select {
+  font-family: var(--ui);
+  font-feature-settings: 'ss01', 'tnum' 0;
+}
+
+body {
+  letter-spacing: -0.005em;
+}
+
+/* ---------- Cabecera: título editorial y botones circulares ---------- */
+
+.marca__nombre {
+  font-weight: 400;
+  letter-spacing: -0.035em;
+}
+
+:root.movil .dialogo__cabecera {
+  min-height: 64px;
+  padding: 10px 14px 4px 20px;
+  gap: 8px;
+}
+
+:root.movil .marca__sello {
+  display: none;
+}
+
+:root.movil .marca__nombre {
+  font-size: 34px;
+  font-weight: 350;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+/* En Hoy manda la fecha grande: la cabecera solo lleva el sello. */
+:root.movil .dialogo[data-vista='hoy'] .marca__nombre {
+  display: none;
+}
+
+:root.movil .dialogo[data-vista='hoy'] .marca__sello {
+  display: block;
+  width: 30px;
+  height: 30px;
+}
+
+:root.movil .dialogo__cabecera .icono-boton {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--filo);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--texto);
+}
+
+:root.movil .dialogo__cabecera .icono-boton[aria-pressed='true'] {
+  border-color: transparent;
+  background: var(--crema);
+  color: var(--yoru);
+}
+
+/* ---------- Barra de apartados: una cápsula flotante ---------- */
+
+:root.movil .apartados {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  z-index: 6;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--filo);
+  border-radius: 999px;
+  background: rgba(22, 16, 16, 0.82);
+  -webkit-backdrop-filter: saturate(150%) blur(22px);
+  backdrop-filter: saturate(150%) blur(22px);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+}
+
+:root.movil .apartados button {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  flex-direction: row;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: var(--texto-2);
+  transition: background-color 0.25s ease, color 0.25s ease, padding 0.25s ease;
+}
+
+/* Solo el apartado activo enseña su nombre: crema sobre la cápsula. */
+:root.movil .apartados button .apartado__nombre {
+  display: none;
+}
+
+:root.movil .apartados button[aria-selected='true'] {
+  flex: 1 0 auto;
+  background: var(--crema);
+  color: var(--yoru);
+}
+
+:root.movil .apartados button[aria-selected='true'] .apartado__nombre {
+  display: inline;
+  color: var(--yoru);
+  font-size: 13.5px;
+  font-weight: 550;
+}
+
+:root.movil .apartados button[aria-selected='true'] .apartado__icono {
+  color: var(--yoru);
+}
+
+:root.movil .apartados .insignia {
+  top: 4px;
+  right: 4px;
+  min-width: 15px;
+  height: 15px;
+  font-size: 9.5px;
+  border: 2px solid rgba(22, 16, 16, 0.95);
+}
+
+/* El contenido pasa por debajo de la cápsula: hueco al final de cada vista. */
+:root.movil .dialogo__cuerpo {
+  padding-bottom: 0;
+}
+
+:root.movil .vista > .apartado,
+:root.movil .vista > .desplazable,
+:root.movil .chat__mensajes {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+}
+
+:root.movil #vista-chat .compositor {
+  margin-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+}
+
+:root.movil #vista-chat .chat__mensajes {
+  padding-bottom: 12px;
+}
+
+:root.movil .escena.teclado .apartados {
+  display: none;
+}
+
+:root.movil .escena.teclado #vista-chat .compositor {
+  margin-bottom: 8px;
+}
+
+/* ---------- Bloques: sin relleno, con filo y esquinas amplias ---------- */
+
+.grupo,
+.tarjeta-aviso,
+.gastos__cifra,
+.biblia__lectura,
+.biblia__plan,
+.biblia__versiculo,
+.biblia__crear,
+.biblia__plantilla,
+.empleo-portada,
+.empleo-perfil,
+.empleo-alerta,
+.empleo-correo,
+.empleo-star,
+.oferta,
+.calendario,
+.claves,
+.avanzado,
+.estado-cuenta,
+.cv-estilo,
+.plantilla,
+.sincro__espera,
+.gastos__previa,
+.registro-ia__fila,
+.pulso {
+  border: 1px solid var(--filo);
+  border-radius: var(--r-bloque);
+  background: transparent;
+  box-shadow: none;
+}
+
+.biblia__atraso {
+  border: 1px solid rgba(210, 58, 44, 0.35);
+  border-radius: var(--r-bloque);
+  background: rgba(210, 58, 44, 0.06);
+}
+
+/* ---------- Controles: píldoras ---------- */
+
+.boton {
+  min-height: 40px;
+  padding-inline: 18px;
+  border: 1px solid var(--filo-fuerte);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--texto);
+  font-weight: 500;
+}
+
+.boton:hover {
+  background: rgba(242, 232, 224, 0.05);
+}
+
+.boton--primario,
+.boton--primario:hover {
+  border-color: transparent;
+  background: var(--acento);
+  color: #fff;
+}
+
+.chip,
+.hoy-biblia__casilla,
+.biblia__casilla {
+  border: 1px solid var(--filo-fuerte);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--texto);
+}
+
+.chip--acento {
+  border-color: transparent;
+  background: var(--acento);
+  color: #fff;
+}
+
+.hoy-biblia__casilla[aria-pressed='true'],
+.biblia__casilla[aria-pressed='true'] {
+  border-color: transparent;
+  background: var(--crema);
+  color: var(--yoru);
+}
+
+/* Pestañas: píldoras sueltas; la elegida, en crema. */
+.segmentado,
+.subapartados {
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.segmentado button,
+.subapartados button {
+  min-height: 36px;
+  border: 1px solid var(--filo-fuerte);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--texto-2);
+}
+
+.segmentado button[aria-pressed='true'],
+.segmentado button[aria-selected='true'],
+.subapartados button[aria-selected='true'] {
+  border-color: transparent;
+  background: var(--crema);
+  color: var(--yoru);
+  box-shadow: none;
+}
+
+.segmentado--permiso [data-nivel='no'][aria-pressed='true'] {
+  background: var(--acento);
+  color: #fff;
+}
+
+.campo,
+.buscador,
+.correo__buscar,
+.ajustes-buscar {
+  border: 1px solid var(--filo);
+  border-radius: 999px;
+  background: transparent;
+}
+
+textarea.campo {
+  border-radius: 18px;
+}
+
+.compositor {
+  border: 1px solid var(--filo-fuerte);
+  border-radius: 28px;
+  background: rgba(22, 16, 16, 0.9);
+}
+
+.compositor .icono-boton,
+.boton-enviar {
+  border-radius: 50%;
+}
+
+.boton-enviar:not(:disabled) {
+  background: var(--acento);
+  color: #fff;
+}
+
+/* ---------- Hoy: fecha editorial y filas en píldora ---------- */
+
+.hoy__saludo {
+  margin: 4px 0 26px;
+  padding: 0 4px;
+}
+
+.hoy__hola {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--texto-2);
+}
+
+.hoy__hola::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--acento);
+  vertical-align: 1px;
+}
+
+.hoy__fecha {
+  display: grid;
+  margin: 0;
+  font-family: var(--display);
+  font-size: 46px;
+  font-weight: 300;
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+  color: var(--crema);
+}
+
+.hoy__fecha span {
+  color: var(--texto-3);
+}
+
+.hoy__seccion {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 10px 6px;
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: 0;
+  color: var(--texto-3);
+}
+
+.hoy-grupo {
+  gap: 8px;
+  margin-bottom: 26px;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.hoy-grupo .hoy-dos {
+  display: contents;
+}
+
+.hoy-grupo > div {
+  display: contents;
+}
+
+.hoy-grupo .hoy-tarjeta,
+.hoy-grupo .hoy-biblia {
+  border: 1px solid var(--filo);
+  border-radius: var(--r-bloque);
+  background: transparent;
+  box-shadow: none !important;
+}
+
+.hoy-grupo button.hoy-tarjeta,
+.hoy-biblia__ir {
+  grid-template-columns: 38px minmax(0, 1fr) 18px;
+  padding: 14px 16px 14px 12px;
+}
+
+.hoy-tarjeta__icono {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--filo);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--texto);
+}
+
+.hoy-grupo .hoy-tarjeta__etiqueta {
+  font-size: 12.5px;
+  font-weight: 450;
+}
+
+.hoy-grupo .hoy-tarjeta__valor {
+  font-size: 17px;
+  font-weight: 450;
+  letter-spacing: -0.02em;
+}
+
+.hoy-grupo .hoy-tarjeta__detalle {
+  font-size: 13.5px;
+}
+
+.hoy-tarjeta--destacada .hoy-tarjeta__icono {
+  border-color: transparent;
+  background: var(--acento);
+}
+
+.hoy-biblia__casillas {
+  padding: 0 16px 14px 64px;
+}
+
+.hoy-grupo button.hoy-tarjeta:hover,
+.hoy-biblia__ir:hover {
+  background: transparent;
+}
+
+.hoy-grupo .hoy-tarjeta:has(> .hoy-tarjeta__icono):active,
+.hoy-grupo .hoy-biblia:active {
+  background: rgba(242, 232, 224, 0.04);
+}
+
+.hoy-grupo .hoy-tarjeta--cargando {
+  min-height: 70px;
+}
+
+.hoy__acciones {
+  gap: 8px;
+}
+
+/* ---------- Chat: saludo grande, como una página en blanco ---------- */
+
+.chat__saludo,
+.chat__vacio h2 {
+  font-family: var(--display);
+  font-size: 38px;
+  font-weight: 300;
+  line-height: 1.02;
+  letter-spacing: -0.05em;
+  color: var(--crema);
+}
+
+.burbuja--usuario,
+.burbuja.burbuja--usuario {
+  border-radius: 22px 22px 6px 22px;
+}
+
+/* ---------- Cifras grandes: finas y tabulares ---------- */
+
+.gastos__total,
+.gastos__mes-cifra,
+.balance__saldo {
+  font-weight: 300;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+
+.gastos__total {
+  font-size: 44px;
+}
+
+/* Títulos de las vistas internas (lectura de correo, Biblia, Gastos). */
+.lectura__asunto,
+.biblia__pasaje,
+#gastos-mes,
+.gastos__mes h2 {
+  font-weight: 400;
+  letter-spacing: -0.035em;
+}
+
+/* Filas de listas (correo, avisos): más aire y filo fino. */
+.filas .fila {
+  border-color: var(--filo);
+}
+
+/* ---------- Escritorio (Windows): la misma piel ---------- */
+
+.dialogo {
+  border-radius: 26px;
+}
+
+:root:not(.movil) .apartados button[aria-selected='true'] .apartado__icono {
+  color: var(--acento-vivo);
+}
+
+/* ---------- Ajustes de la capa editorial ---------- */
+
+/* La cápsula: todos caben; el activo enseña su nombre sin empujar al resto. */
+:root.movil .apartados button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0;
+}
+
+:root.movil .apartados button[aria-selected='true'] {
+  flex: 0 0 auto;
+  padding: 0 13px 0 11px;
+}
+
+:root.movil .apartados button[aria-selected='true'] .apartado__nombre {
+  font-size: 13px;
+}
+
+/* La fecha grande de Hoy (manda sobre el estilo antiguo del saludo). */
+.hoy__saludo .hoy__fecha {
+  font-size: 46px;
+  font-weight: 300;
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.hoy__saludo .hoy__hola {
+  font-size: 14px;
+  font-weight: 400;
+}
+
+/* Listas de Ajustes y movimientos de Gastos: filo, sin relleno. */
+.ajustes-temas,
+.ajustes-resultados {
+  border: 1px solid var(--filo);
+  border-radius: var(--r-bloque);
+  background: transparent;
+}
+
+.ajustes-temas li + li,
+.ajustes-resultados li + li {
+  border-top-color: var(--filo);
+}
+
+.ajustes-tema__icono {
+  border: 1px solid var(--filo);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--texto);
+}
+
+.gasto {
+  border: 1px solid var(--filo);
+  border-radius: var(--r-bloque);
+  background: transparent;
+}
+
+/* Filtros del correo y ofertas: píldoras como el resto de pestañas. */
+.filtros {
+  gap: 6px;
+  padding: 4px 14px 10px;
+  border-bottom: 0;
+}
+
+.filtros button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--filo-fuerte);
+  border-radius: 999px;
+  color: var(--texto-2);
+}
+
+.filtros button[aria-pressed='true'] {
+  border-color: transparent;
+  background: var(--crema);
+  color: var(--yoru);
+}

@@ -248,8 +248,8 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
       contenedor.innerHTML = `
         <div class="apartado desplazable hoy">
           <header class="hoy__saludo">
-            <h2 id="hoy-saludo"></h2>
-            <p id="hoy-fecha"></p>
+            <p class="hoy__hola" id="hoy-saludo"></p>
+            <h2 class="hoy__fecha" id="hoy-fecha"></h2>
           </header>
           <h3 class="hoy__seccion">Para hoy</h3>
           <div class="hoy-grupo">
@@ -277,7 +277,9 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
       contenedor.querySelector('.hoy').addEventListener('click', alPulsar);
     }
     contenedor.querySelector('#hoy-saludo').textContent = saludo(ahora);
-    contenedor.querySelector('#hoy-fecha').textContent = fecha.charAt(0).toUpperCase() + fecha.slice(1);
+    // «Jueves» grande y «5 de noviembre» debajo, en un tono más apagado.
+    const [diaSemana, ...resto] = fecha.split(', ');
+    contenedor.querySelector('#hoy-fecha').innerHTML = `${escapar(mayuscula(diaSemana))}<span>${escapar(resto.join(', '))}</span>`;
     const poner = (id, html) => {
       if (turno !== pintando) return;
       const caja = contenedor.querySelector(`#${id}`);
