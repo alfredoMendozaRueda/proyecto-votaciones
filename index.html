@@ -18,6 +18,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="./iconos/favicon-32.png" />
     <link rel="apple-touch-icon" href="./iconos/apple-touch-icon.png" />
     <link rel="stylesheet" href="/src/app/app.css" />
+    <link rel="stylesheet" href="/src/app/diseno.css" />
   </head>
   <body>
     <div class="escena" id="escena" data-tamano="mediano" data-posicion="izquierda">
@@ -36,14 +37,32 @@
           <button type="button" class="icono-boton" id="boton-cerrar" aria-label="Cerrar el diálogo" title="Cerrar"></button>
         </header>
         <nav class="apartados" role="tablist" aria-label="Apartados">
-          <button type="button" role="tab" id="pestana-hoy" data-vista="hoy" aria-selected="true" aria-controls="vista-hoy" title="Hoy"><span class="apartado__icono" data-icono="sol"></span><span class="apartado__nombre">Hoy</span></button>
+          <button type="button" role="tab" id="pestana-hoy" data-vista="hoy" aria-selected="true" aria-controls="vista-hoy" title="Hoy"><span class="apartado__icono" data-icono="cuadricula"></span><span class="apartado__nombre">Hoy</span></button>
           <button type="button" role="tab" id="pestana-chat" data-vista="chat" aria-selected="false" aria-controls="vista-chat" title="Chat"><span class="apartado__icono" data-icono="chat"></span><span class="apartado__nombre">Chat</span></button>
           <button type="button" role="tab" id="pestana-correo" data-vista="correo" aria-selected="false" aria-controls="vista-correo" title="Correo"><span class="apartado__icono" data-icono="sobre"></span><span class="apartado__nombre">Correo</span><span class="insignia" id="insignia-correo" hidden></span></button>
           <button type="button" role="tab" id="pestana-agenda" data-vista="agenda" aria-selected="false" aria-controls="vista-agenda" title="Agenda"><span class="apartado__icono" data-icono="calendario"></span><span class="apartado__nombre">Agenda</span><span class="insignia" id="insignia-agenda" hidden></span></button>
-          <button type="button" role="tab" id="pestana-empleo" data-vista="empleo" aria-selected="false" aria-controls="vista-empleo" title="Empleo"><span class="apartado__icono" data-icono="maletin"></span><span class="apartado__nombre">Empleo</span><span class="insignia" id="insignia-empleo" hidden></span></button>
-          <button type="button" role="tab" id="pestana-gastos" data-vista="gastos" aria-selected="false" aria-controls="vista-gastos" title="Gastos"><span class="apartado__icono" data-icono="cartera"></span><span class="apartado__nombre">Gastos</span></button>
-          <button type="button" role="tab" id="pestana-biblia" data-vista="biblia" aria-selected="false" aria-controls="vista-biblia" title="Lectura bíblica"><span class="apartado__icono" data-icono="libro"></span><span class="apartado__nombre">Biblia</span></button>
+          <button type="button" id="pestana-mas" aria-haspopup="dialog" aria-expanded="false" aria-controls="hoja-mas" title="Más apartados"><span class="apartado__icono" data-icono="mas"></span><span class="apartado__nombre">Más</span><span class="insignia" id="insignia-empleo" hidden></span></button>
         </nav>
+        <!-- Hablar con Kitsune: siempre a mano, al lado de la barra. -->
+        <button type="button" class="boton-voz" id="boton-voz" aria-label="Hablar con Kitsune" title="Hablar con Kitsune"><span class="apartado__icono" data-icono="ondas"></span></button>
+        <!-- Más: el resto de apartados, en una hoja que sube desde abajo. -->
+        <div class="hoja-mas" id="hoja-mas" role="dialog" aria-modal="true" aria-label="Más apartados" hidden>
+          <div class="hoja-mas__fondo" data-cerrar-mas></div>
+          <div class="hoja-mas__panel">
+            <span class="hoja-mas__asa" aria-hidden="true"></span>
+            <p class="hoja-mas__titulo">Más</p>
+            <div class="hoja-mas__rejilla">
+              <button type="button" class="hoja-mas__item" id="pestana-empleo" data-vista="empleo"><span class="apartado__icono" data-icono="maletin"></span><span class="apartado__nombre">Empleo</span><span class="hoja-mas__cuenta" id="cuenta-empleo" hidden></span></button>
+              <button type="button" class="hoja-mas__item" id="pestana-gastos" data-vista="gastos"><span class="apartado__icono" data-icono="cartera"></span><span class="apartado__nombre">Gastos</span></button>
+              <button type="button" class="hoja-mas__item" id="pestana-biblia" data-vista="biblia"><span class="apartado__icono" data-icono="libro"></span><span class="apartado__nombre">Biblia</span></button>
+              <button type="button" class="hoja-mas__item" data-ir-mas="recordatorios"><span class="apartado__icono" data-icono="campana"></span><span class="apartado__nombre">Avisos</span></button>
+              <button type="button" class="hoja-mas__item" data-ir-mas="historial"><span class="apartado__icono" data-icono="historial"></span><span class="apartado__nombre">Conversaciones</span></button>
+              <button type="button" class="hoja-mas__item" data-ir-mas="memoria"><span class="apartado__icono" data-icono="memoria"></span><span class="apartado__nombre">Lo que sé de ti</span></button>
+              <button type="button" class="hoja-mas__item" data-ir-mas="buscar"><span class="apartado__icono" data-icono="buscar"></span><span class="apartado__nombre">Buscar</span></button>
+              <button type="button" class="hoja-mas__item" data-ir-mas="ajustes"><span class="apartado__icono" data-icono="ajustes"></span><span class="apartado__nombre">Ajustes</span></button>
+            </div>
+          </div>
+        </div>
         <!-- Agenda: el calendario y los avisos (recordatorios, automatizaciones y actividad). -->
         <div class="subapartados" id="sub-agenda" role="tablist" aria-label="Agenda" hidden>
           <button type="button" role="tab" data-vista="agenda" aria-selected="true">Calendario</button>

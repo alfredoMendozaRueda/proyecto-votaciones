@@ -1,8 +1,10 @@
 import { icono } from './iconos.js';
 import { markdownAHtml } from './markdown.js';
 import { cuandoLegible } from './fechas.js';
-import { normalizarGastos, deshacerApunte } from '../compartido/gastos.js';
-import { normalizarBiblia, marcarCasilla, sumarMinutos } from '../compartido/biblia.js';
+import { normalizarGastos, deshacerApunte, euros, fechaISO } from '../compartido/gastos.js';
+import { normalizarBiblia, marcarCasilla, sumarMinutos, textoLectura, minutosDe } from '../compartido/biblia.js';
+
+const escaparTexto = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const PEDIR_PULSO = 'Prepárame el pulso de hoy';
 const CLAVE_PULSO = 'kitsune.pulso';
@@ -78,7 +80,7 @@ function saludoDeLaHora(ahora = new Date()) {
   return 'Buenas noches.';
 }
 
-export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjustes, hablar = async () => {} }) {
+export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjustes, obtenerResumen = async () => null, alMarcarBiblia = () => {}, hablar = async () => {} }) {
   // El dictado del navegador no funciona dentro de Electron (necesita los servicios de Google).
   const Reconocimiento = api.plataforma === 'electron' ? null : window.SpeechRecognition || window.webkitSpeechRecognition;
   // Lo normal es grabar y pasarlo a texto con Whisper: el reconocimiento del
@@ -156,27 +158,116 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     mensajes.scrollTo({ top: mensajes.scrollHeight, behavior: suave ? 'smooth' : 'auto' });
   });
 
+  // Sin conversación: Kitsune te recibe con lo que tienes hoy, cada cosa con su acción.
   function vacio() {
     const pulso = obtenerAjustes().pulsoDiario && leerPulso() !== new Date().toDateString();
+    const fecha = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+    const atajos = [...(pulso ? [{ texto: PEDIR_PULSO, icono: 'pulso' }] : []), ...sugerencias];
     mensajes.innerHTML = `
-      <div class="chat__vacio">
-        ${
-          pulso
-            ? `<div class="pulso">
-          <span class="pulso__latido" aria-hidden="true">${icono('pulso', 18)}</span>
-          <div class="pulso__texto"><p class="pulso__titulo">Tu pulso de hoy</p><p>Lo urgente del correo y tus recordatorios, en un vistazo.</p></div>
-          <button type="button" class="boton boton--primario" id="chat-pulso">Prepárame el día</button>
-        </div>`
-            : ''
-        }
-        <p class="chat__saludo">${saludoDeLaHora()}</p>
-        <p>Pregúntame lo que quieras, o pídeme que mire tu correo, tu agenda o el tiempo.</p>
-        <div class="sugerencias">${(pulso ? sugerencias : [{ texto: PEDIR_PULSO, icono: 'pulso' }, ...sugerencias])
-          .map((s) => `<button type="button" data-texto="${s.texto}">${icono(s.icono, 16)}<span>${s.texto}</span></button>`)
+      <div class="chat__vacio asistente">
+        <p class="asistente__fecha">${fecha.charAt(0).toUpperCase() + fecha.slice(1)}</p>
+        <h2 class="asistente__hola">${saludoDeLaHora()}<span>Esto es lo que tienes hoy.</span></h2>
+        <div class="asistente__cartas" id="chat-cartas"><div class="asistente__carta asistente__carta--cargando" aria-hidden="true"></div><div class="asistente__carta asistente__carta--cargando" aria-hidden="true"></div></div>
+        <div class="sugerencias asistente__sugerencias">${atajos
+          .map((s) => `<button type="button" data-texto="${s.texto}">${icono(s.icono, 15)}<span>${s.texto}</span></button>`)
           .join('')}</div>
       </div>`;
-    mensajes.querySelector('#chat-pulso')?.addEventListener('click', () => preguntar(PEDIR_PULSO));
     mensajes.querySelectorAll('.sugerencias button').forEach((b) => b.addEventListener('click', () => preguntar(b.dataset.texto)));
+    pintarCartas();
+  }
+
+  async function pintarCartas() {
+    const caja = mensajes.querySelector('#chat-cartas');
+    if (!caja) return;
+    const r = await Promise.resolve(obtenerResumen()).catch(() => null);
+    if (!mensajes.contains(caja)) return;
+    const cartas = r ? cartasDeHoy(r) : [];
+    if (!cartas.length) {
+      caja.remove();
+      mensajes.querySelector('.asistente__hola span')?.replaceChildren('¿En qué te ayudo?');
+      return;
+    }
+    caja.innerHTML = cartas
+      .map(
+        (c, i) => `<div class="asistente__carta asistente__carta--${c.tono}">
+          <span class="asistente__raya" aria-hidden="true"></span>
+          <div class="asistente__texto"><b>${escaparTexto(c.titulo)}</b>${c.detalle ? `<span>${escaparTexto(c.detalle)}</span>` : ''}</div>
+          <button type="button" class="asistente__accion" data-carta="${i}">${escaparTexto(c.accion)}</button>
+        </div>`,
+      )
+      .join('');
+    caja.querySelectorAll('[data-carta]').forEach((b) => b.addEventListener('click', () => cartas[Number(b.dataset.carta)].hacer(b)));
+  }
+
+  const horaDe = (ms) => new Date(ms).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  const cuandoCorto = (ms) => {
+    const hoy = new Date();
+    const d = new Date(ms);
+    if (d.toDateString() === hoy.toDateString()) return horaDe(ms);
+    const manana = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);
+    return d.toDateString() === manana.toDateString() ? `mañana, ${horaDe(ms)}` : d.toLocaleDateString('es-ES', { weekday: 'long', hour: '2-digit', minute: '2-digit' });
+  };
+
+  function cartasDeHoy({ agenda, biblia, correo, gastos }) {
+    const cartas = [];
+    const [cita] = agenda?.proximos ?? [];
+    if (cita) {
+      const titulo = cita.titulo || '(sin título)';
+      cartas.push({
+        tono: 'urgente',
+        titulo: `${titulo} · ${cita.todoElDia ? 'todo el día' : cuandoCorto(cita.inicio)}`,
+        detalle: cita.lugar || (agenda.proximos.length > 1 ? `y ${agenda.proximos.length - 1} más` : ''),
+        accion: 'Preparar',
+        hacer: () => preguntar(`Ayúdame a preparar «${titulo}» (${cita.todoElDia ? 'todo el día' : cuandoCorto(cita.inicio)}).`),
+      });
+    } else if (agenda?.recordatorios?.[0]) {
+      const r = agenda.recordatorios[0];
+      cartas.push({ tono: 'urgente', titulo: `${r.texto} · ${cuandoCorto(r.cuando)}`, detalle: 'Recordatorio', accion: 'Posponer', hacer: () => preguntar(`Pospón una hora el recordatorio «${r.texto}».`) });
+    }
+    if (biblia && !biblia.vacio && biblia.tocan?.length) {
+      const caps = biblia.tocan.flatMap((x) => x.lectura.caps);
+      const leida = Boolean(biblia.dia?.leido);
+      cartas.push({
+        tono: 'oro',
+        titulo: textoLectura(caps),
+        detalle: [leida ? 'Leída hoy' : `${minutosDe(caps)} min`, biblia.racha > 1 ? `llevas ${biblia.racha} días seguidos` : ''].filter(Boolean).join(' · '),
+        accion: leida ? 'Leída ✓' : 'He leído',
+        hacer: async (boton) => {
+          const datos = normalizarBiblia((await api.biblia.leer().catch(() => null)) ?? {});
+          const hoy = fechaISO();
+          await api.biblia.guardar(marcarCasilla(datos, hoy, 'leido', !datos.dias[hoy]?.leido));
+          alMarcarBiblia();
+          boton.textContent = datos.dias[hoy]?.leido ? 'He leído' : 'Leída ✓';
+        },
+      });
+    }
+    if (correo?.conectado && correo.sinLeer.length) {
+      const nombres = [...new Set(correo.sinLeer.map((m) => m.de?.nombre || m.de?.email).filter(Boolean))].slice(0, 3);
+      cartas.push({
+        tono: 'normal',
+        titulo: correo.sinLeer.length === 1 ? '1 correo sin leer' : `${correo.sinLeer.length} correos sin leer`,
+        detalle: nombres.join(', '),
+        accion: 'Resumir',
+        hacer: () => preguntar('Resúmeme los correos sin leer.'),
+      });
+    }
+    if (gastos && !gastos.vacio) {
+      const r = gastos.resumen;
+      const [p] = gastos.proximos ?? [];
+      cartas.push({
+        tono: 'normal',
+        titulo: r.presupuesto ? `${euros(Math.max(0, r.disponible), { redondo: true })} libres este mes` : `${euros(r.gastado, { redondo: true })} gastados este mes`,
+        detalle: p ? `${p.fecha === gastos.hoy ? 'Hoy' : 'Próximo'}: ${p.concepto} · ${euros(p.centimos, { redondo: true })}` : '',
+        accion: 'Apuntar',
+        hacer: () => {
+          entrada.value = 'Apunta un gasto de ';
+          ajustarAltura();
+          actualizarBoton();
+          entrada.focus();
+        },
+      });
+    }
+    return cartas;
   }
 
   // Nota pequeña en el chat (recordatorio, memoria, cita), con un botón opcional para deshacer.

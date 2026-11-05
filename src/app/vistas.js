@@ -97,12 +97,18 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
   let cargado = null; // clave del mes cuyos eventos hay en memoria
   // Los recordatorios pendientes también salen en su día, junto a las citas.
   let recordatorios = [];
+  // «dia»: la semana y el día en una línea de horas; «mes»: el calendario del mes.
+  let modo = 'dia';
 
   async function mostrar() {
     contenedor.innerHTML = `
       <div class="apartado desplazable">
         <div class="apartado__cabecera">
           <h2 class="titulo-repetido">Agenda</h2>
+          <div class="segmentado agenda-modo" role="group" aria-label="Ver">
+            <button type="button" data-modo="dia" aria-pressed="${modo === 'dia'}">Día</button>
+            <button type="button" data-modo="mes" aria-pressed="${modo === 'mes'}">Mes</button>
+          </div>
           <button type="button" class="boton boton--suave" id="agenda-hoy">Hoy</button>
           <button type="button" class="icono-boton" id="agenda-actualizar" aria-label="Actualizar" title="Actualizar">${icono('actualizar')}</button>
           <button type="button" class="boton boton--primario" id="agenda-nuevo" hidden>${icono('nueva', 15)} Nuevo</button>
@@ -131,6 +137,13 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
       pintar();
     });
     contenedor.querySelector('#agenda-hoy').addEventListener('click', () => irA(hoy()));
+    contenedor.querySelectorAll('[data-modo]').forEach((b) =>
+      b.addEventListener('click', () => {
+        modo = b.dataset.modo;
+        contenedor.querySelectorAll('[data-modo]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+        pintarCalendario();
+      }),
+    );
     const formulario = contenedor.querySelector('#agenda-formulario');
     contenedor.querySelector('#agenda-nuevo').addEventListener('click', () => abrirFormulario(formulario));
     formulario.querySelector('[data-cancelar]').addEventListener('click', () => (formulario.hidden = true));
@@ -243,6 +256,8 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
     const clave = `${mesVisible.anio}-${mesVisible.mes}`;
     if (!lista.querySelector('.calendario')) {
       lista.innerHTML = `
+        <section class="semana-tira" aria-label="Semana"></section>
+        <section class="linea-dia" aria-live="polite"></section>
         <section class="calendario" aria-label="Calendario">
           <div class="calendario__cabecera">
             <button type="button" class="icono-boton" data-mes="-1" aria-label="Mes anterior" title="Mes anterior">${icono('volver')}</button>
@@ -315,8 +330,141 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
       const d = new Date(seleccionado);
       irA(new Date(d.getFullYear(), d.getMonth(), d.getDate() + pasos).getTime(), { enfocar: true });
     };
-    if (enfocar) rejilla.querySelector('[aria-pressed="true"]')?.focus();
-    pintarDia();
+    if (enfocar && modo === 'mes') rejilla.querySelector('[aria-pressed="true"]')?.focus();
+    const enDia = modo === 'dia';
+    lista.querySelector('.calendario').hidden = enDia;
+    lista.querySelector('.calendario__dia').hidden = enDia;
+    lista.querySelector('.semana-tira').hidden = !enDia;
+    lista.querySelector('.linea-dia').hidden = !enDia;
+    if (enDia) {
+      pintarSemana({ enfocar });
+      pintarLinea();
+    } else pintarDia();
+  }
+
+  // ---------- Día: la semana arriba y el día en una línea de horas ----------
+
+  const lunesDe = (dia) => {
+    const d = new Date(dia);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)).getTime();
+  };
+  const masDias = (dia, n) => {
+    const d = new Date(dia);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n).getTime();
+  };
+
+  function pintarSemana({ enfocar = false } = {}) {
+    const tira = contenedor.querySelector('.semana-tira');
+    if (!tira) return;
+    const lunes = lunesDe(seleccionado);
+    const dias = Array.from({ length: 7 }, (_, i) => masDias(lunes, i));
+    const mes = new Date(seleccionado).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    tira.innerHTML = `
+      <div class="semana-tira__cabecera">
+        <span class="semana-tira__mes">${escapar(mes)}</span>
+        <button type="button" class="icono-boton" data-semana="-1" aria-label="Semana anterior">${icono('volver')}</button>
+        <button type="button" class="icono-boton semana-tira__siguiente" data-semana="1" aria-label="Semana siguiente">${icono('volver')}</button>
+      </div>
+      <div class="semana-tira__dias" role="group">${dias
+        .map((dia, i) => {
+          const d = new Date(dia);
+          const hay = delDia(dia).length + recordatoriosDel(dia).length;
+          const nombre = `${NOMBRES_SEMANA[i]}, ${d.getDate()} de ${d.toLocaleDateString('es-ES', { month: 'long' })}`;
+          return `<button type="button" class="semana-tira__dia${mismoDia(dia, Date.now()) ? ' es-hoy' : ''}" data-dia="${dia}" aria-pressed="${dia === seleccionado}" aria-label="${nombre}${hay ? `, ${hay} ${hay === 1 ? 'cosa' : 'cosas'}` : ''}" tabindex="${dia === seleccionado ? 0 : -1}">
+            <small>${DIAS_SEMANA[i]}</small><b>${d.getDate()}</b><i${hay ? '' : ' hidden'}></i></button>`;
+        })
+        .join('')}</div>`;
+    tira.querySelectorAll('[data-dia]').forEach((b) => b.addEventListener('click', () => irA(Number(b.dataset.dia))));
+    tira.querySelectorAll('[data-semana]').forEach((b) => b.addEventListener('click', () => irA(masDias(seleccionado, 7 * Number(b.dataset.semana)))));
+    const fila = tira.querySelector('.semana-tira__dias');
+    fila.onkeydown = (e) => {
+      const paso = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+      if (!paso) return;
+      e.preventDefault();
+      irA(masDias(seleccionado, paso), { enfocar: true });
+    };
+    // Deslizar la semana a los lados cambia de semana.
+    let x0 = null;
+    fila.onpointerdown = (e) => (x0 = e.pointerType === 'mouse' ? null : e.clientX);
+    fila.onpointerup = (e) => {
+      if (x0 === null) return;
+      const dx = e.clientX - x0;
+      x0 = null;
+      if (Math.abs(dx) > 50) irA(masDias(seleccionado, dx < 0 ? 7 : -7));
+    };
+    if (enfocar) fila.querySelector('[aria-pressed="true"]')?.focus();
+  }
+
+  function pintarLinea() {
+    const caja = contenedor.querySelector('.linea-dia');
+    if (!caja) return;
+    if (cargado === null) {
+      caja.innerHTML = cargando;
+      return;
+    }
+    const todoElDia = delDia(seleccionado).filter((e) => e.todoElDia);
+    const citas = delDia(seleccionado)
+      .filter((e) => !e.todoElDia)
+      .sort((a, b) => a.inicio - b.inicio);
+    const avisos = recordatoriosDel(seleccionado);
+    const horaDe = (ms) => {
+      const d = new Date(ms);
+      return mismoDia(ms, seleccionado) ? d.getHours() + d.getMinutes() / 60 : ms < seleccionado ? 0 : 24;
+    };
+    const momentos = [...citas.map((e) => horaDe(e.inicio)), ...avisos.map((r) => horaDe(r.cuando))];
+    const finales = [...citas.map((e) => horaDe(e.fin)), ...avisos.map((r) => horaDe(r.cuando) + 0.5)];
+    const ahora = Date.now();
+    const esHoy = mismoDia(seleccionado, ahora);
+    // Hoy la línea empieza una hora antes de ahora (o antes, si hay algo más temprano).
+    const desde = Math.max(0, Math.min(esHoy ? Math.max(0, Math.floor(horaDe(ahora)) - 1) : 8, ...momentos.map(Math.floor)));
+    const hasta = Math.min(24, Math.max(21, ...finales.map(Math.ceil)));
+    const ALTO = 64;
+    const y = (h) => (h - desde) * ALTO;
+    // Citas que se pisan: una al lado de otra.
+    const columnas = [];
+    const puestas = citas.map((e) => {
+      const ini = horaDe(e.inicio);
+      let col = columnas.findIndex((fin) => fin <= ini);
+      if (col < 0) col = columnas.push(0) - 1;
+      columnas[col] = horaDe(e.fin);
+      return { e, col };
+    });
+    caja.innerHTML = `
+      ${todoElDia.length ? `<div class="linea-dia__todo">${todoElDia.map((e) => `<span>${escapar(e.titulo || '(sin título)')}</span>`).join('')}</div>` : ''}
+      ${!citas.length && !avisos.length && !todoElDia.length ? `<p class="linea-dia__libre">${esHoy ? 'Día libre' : 'Nada este día'}</p>` : ''}
+      <div class="linea" style="height:${(hasta - desde) * ALTO}px">
+        ${Array.from({ length: hasta - desde }, (_, i) => `<div class="linea__hora" style="top:${i * ALTO}px"><span>${String(desde + i).padStart(2, '0')}:00</span></div>`).join('')}
+        ${puestas
+          .map(({ e, col }) => {
+            const ini = horaDe(e.inicio);
+            const alto = Math.max((horaDe(e.fin) - ini) * ALTO - 4, 46);
+            const n = columnas.length;
+            return `<div class="linea__evento" data-id="${escapar(e.id)}" style="top:${y(ini) + 2}px;height:${alto}px;left:calc(54px + (100% - 54px) * ${col / n});width:calc((100% - 54px) / ${n} - 4px)">
+              <b>${escapar(e.titulo || '(sin título)')}</b><small>${horaCorta(e.inicio)} – ${horaCorta(e.fin)}${e.lugar ? ` · ${escapar(e.lugar)}` : ''}</small></div>`;
+          })
+          .join('')}
+        ${avisos
+          .map((r) => `<div class="linea__aviso" style="top:${y(horaDe(r.cuando)) - 13}px">${icono('campana', 13)}<span>${horaCorta(r.cuando)}</span><b>${escapar(r.texto)}</b></div>`)
+          .join('')}
+        ${esHoy && horaDe(ahora) >= desde && horaDe(ahora) <= hasta ? `<div class="linea__ahora" style="top:${y(horaDe(ahora))}px"><em>${horaCorta(ahora)}</em></div>` : ''}
+      </div>`;
+    // Borrar una cita: el mismo botón de siempre, dentro de su bloque.
+    for (const div of caja.querySelectorAll('.linea__evento')) {
+      const e = citas.find((x) => String(x.id) === div.dataset.id);
+      if (!e) continue;
+      div.append(
+        botonBorrar(`Borrar «${e.titulo}» del calendario`, async () => {
+          await api.calendario.borrar(e.id);
+          eventos = eventos.filter((x) => x.id !== e.id);
+          pintarCalendario();
+        }),
+      );
+    }
+    const pie = document.createElement('div');
+    pie.className = 'apartado__pie';
+    pie.innerHTML = `<button type="button" class="boton" data-preguntar>${icono('chispa', 15)} Pregúntale a Kitsune por tu semana</button>`;
+    pie.querySelector('[data-preguntar]').addEventListener('click', () => preguntar('¿Qué tengo esta semana en el calendario?'));
+    caja.append(pie);
   }
 
   // Los eventos del día elegido, debajo del calendario.

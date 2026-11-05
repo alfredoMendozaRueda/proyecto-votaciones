@@ -33,8 +33,6 @@ function cuando(ms, { todoElDia = false } = {}) {
   return todoElDia ? nombre : `${nombre} a las ${hora(ms)}`;
 }
 
-const mayuscula = (t) => String(t ?? '').charAt(0).toUpperCase() + String(t ?? '').slice(1);
-
 export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir('chat'), abrirAjustes, instalacion = null, alEmpleo = () => {}, alBiblia = () => {} }) {
   let pintando = 0;
 
@@ -93,33 +91,153 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
     const datos = normalizarBiblia((await seguro(api.biblia.leer())) ?? {});
     const hoy = fechaISO();
     if (!datos.planes.some((p) => !p.archivado) && !Object.keys(datos.dias).length) return { vacio: true };
-    return { tocan: lecturasDelDia(datos, hoy), dia: datos.dias[hoy], racha: racha(datos, hoy) };
+    // Los últimos siete días: si ese día leíste u oraste.
+    const semana = Array.from({ length: 7 }, (_, i) => {
+      const f = sumarDias(hoy, i - 6);
+      const d = datos.dias[f];
+      return { hecho: Boolean(d?.leido || d?.orado), hoy: i === 6, nombre: new Date(`${f}T12:00`).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' }) };
+    });
+    return { tocan: lecturasDelDia(datos, hoy), dia: datos.dias[hoy], racha: racha(datos, hoy), semana };
   }
 
-  function tarjetaBiblia(b) {
+  // ---------- Bloques ----------
+  // Cada bloque es un botón (lleva a su apartado) o una caja con sus propios botones.
+  const bloque = ({ clase = '', ir: destino = '', accion = '', etiqueta, contenido }) => `
+    <button type="button" class="bloque ${clase}" ${destino ? `data-ir="${destino}"` : ''} ${accion ? `data-accion="${accion}"` : ''}>
+      <span class="bloque__etiqueta">${escapar(etiqueta)}</span>
+      ${contenido}
+    </button>`;
+  const grande = (t) => `<span class="bloque__grande">${t}</span>`;
+  const titulo = (t) => `<span class="bloque__titulo">${escapar(t)}</span>`;
+  const detalle = (t) => (t ? `<span class="bloque__detalle">${escapar(t)}</span>` : '');
+  const cifra = (euros) => {
+    // «1.190,65 €» → la parte entera grande y los céntimos y el símbolo, pequeños.
+    const m = String(euros).match(/^(.*?)(,\d+)?\s*€$/);
+    return m ? `${escapar(m[1])}<small>${escapar(m[2] ?? '')} €</small>` : escapar(euros);
+  };
+  const faltan = (ms) => {
+    const min = Math.round((ms - Date.now()) / 60_000);
+    if (min <= 0) return 'ahora';
+    if (min < 60) return `en ${min} min`;
+    if (min < 24 * 60 && inicioDelDia(ms) === inicioDelDia()) return `en ${Math.round(min / 60)} h`;
+    return cuando(ms);
+  };
+
+  // Lo siguiente, en grande y en bermellón: la próxima cita o, si no hay, el próximo recordatorio.
+  function bloqueHeroe(a) {
+    if (!a) return '';
+    const [cita] = a.proximos;
+    const aviso = a.recordatorios[0];
+    const kanji = '<span class="heroe__kanji" aria-hidden="true">狐</span>';
+    if (cita) {
+      const lugar = [cita.lugar, a.proximos.length > 1 ? `y ${a.proximos.length - 1} más` : ''].filter(Boolean).join(' · ');
+      return `<button type="button" class="bloque bloque--heroe" data-ir="agenda">
+        <span class="bloque__etiqueta">Siguiente · ${escapar(cita.todoElDia ? cuando(cita.inicio, { todoElDia: true }) : faltan(cita.inicio))}</span>
+        <span class="heroe__cuerpo">${cita.todoElDia ? '' : `<span class="heroe__hora">${hora(cita.inicio)}</span>`}${titulo(cita.titulo || '(sin título)')}${detalle(lugar)}</span>${kanji}</button>`;
+    }
+    if (aviso) {
+      return `<button type="button" class="bloque bloque--heroe" data-ir="recordatorios">
+        <span class="bloque__etiqueta">Recordatorio · ${escapar(faltan(aviso.cuando))}</span>
+        <span class="heroe__cuerpo"><span class="heroe__hora">${hora(aviso.cuando)}</span>${titulo(aviso.texto)}${detalle(cuando(aviso.cuando))}</span>${kanji}</button>`;
+    }
+    if (!a.conCalendario) {
+      return `<button type="button" class="bloque bloque--heroe" data-accion="conectar-google">
+        <span class="bloque__etiqueta">${escapar(saludo())}</span>
+        <span class="heroe__cuerpo">${titulo('Conecta tu calendario')}${detalle('y aquí verás siempre lo siguiente que tienes')}</span>${kanji}</button>`;
+    }
+    return `<button type="button" class="bloque bloque--heroe" data-ir="agenda">
+      <span class="bloque__etiqueta">${escapar(saludo())}</span>
+      <span class="heroe__cuerpo">${titulo('Día despejado')}${detalle('Nada más en la agenda hoy ni mañana')}</span>${kanji}</button>`;
+  }
+
+  // El recordatorio que sigue (si el héroe ya enseña uno, el siguiente).
+  function bloqueAviso(a) {
+    if (!a) return '';
+    const usado = a.proximos.length ? null : a.recordatorios[0];
+    const r = a.recordatorios.find((x) => x !== usado);
+    if (!r) return bloque({ ir: 'recordatorios', etiqueta: 'Recordatorios', contenido: titulo('Ninguno pendiente') + detalle('Pídeme «recuérdame…»') });
+    return bloque({ ir: 'recordatorios', etiqueta: `Recordatorio · ${cuando(r.cuando)}`, contenido: titulo(r.texto) + detalle(a.deHoy.length > 1 ? `${a.deHoy.length} para hoy` : faltan(r.cuando)) });
+  }
+
+  function anillo(fraccion) {
+    const f = Math.max(0, Math.min(1, fraccion));
+    const c = 2 * Math.PI * 15;
+    return `<svg class="bloque__anillo" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15"/><circle cx="18" cy="18" r="15" class="lleno" stroke-dasharray="${(c * f).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 18 18)"/></svg>`;
+  }
+
+  function bloqueGastos(g) {
+    if (!g) return '';
+    if (g.vacio) return bloque({ accion: 'gasto', etiqueta: 'Gastos', contenido: titulo('Apunta tu primer gasto') + detalle('Escribe «12,50 súper»') });
+    const r = g.resumen;
+    const pie = r.presupuesto ? (r.disponible >= 0 ? `quedan ${euros(r.disponible, { redondo: true })} de ${euros(r.presupuesto, { redondo: true })}` : `te pasas ${euros(-r.disponible, { redondo: true })}`) : '';
+    return bloque({
+      ir: 'gastos',
+      clase: 'bloque--cifra',
+      etiqueta: `Gastado en ${nombreMes(r.mes, { corto: true })}`,
+      contenido: `${r.presupuesto ? anillo(r.gastado / r.presupuesto) : ''}${grande(cifra(euros(r.gastado)))}${detalle(pie)}`,
+    });
+  }
+
+  function bloqueBiblia(b) {
     if (!b) return '';
-    if (b.vacio) return tarjeta({ ir: 'biblia', icono: 'libro', etiqueta: 'lectura bíblica', valor: 'Empieza un plan de lectura', detalle: 'La Biblia en un año, el Nuevo Testamento en 90 días… a tu ritmo' });
+    if (b.vacio) return bloque({ ir: 'biblia', clase: 'bloque--ancho', etiqueta: 'Lectura bíblica', contenido: titulo('Empieza un plan de lectura') + detalle('La Biblia en un año, el Nuevo Testamento en 90 días… a tu ritmo') });
     const caps = b.tocan.flatMap((x) => x.lectura.caps);
     const hecha = b.tocan.length && b.tocan.every((x) => x.hecha);
-    const valor = b.tocan.length ? textoLectura(caps) : 'Hoy no toca lectura';
-    const detalle = [b.tocan.length && !hecha ? `unos ${minutosDe(caps)} min` : hecha ? 'leída' : '', b.racha > 1 ? `${b.racha} días seguidos` : ''].filter(Boolean).join(' · ');
-    const casilla = (id, nombre, si) => `<button type="button" class="hoy-biblia__casilla" data-biblia="${id}" aria-pressed="${si}">${icono(si ? 'hecho' : id === 'leido' ? 'libro' : 'chispa', 14)} ${nombre}</button>`;
+    const etiqueta = b.tocan.length ? `Hoy toca leer${hecha ? ' · leída' : ` · unos ${minutosDe(caps)} min`}` : 'Lectura bíblica';
+    const casilla = (id, nombre, si) => `<button type="button" class="bloque__marca" data-biblia="${id}" aria-pressed="${si}">${si ? icono('hecho', 14) : ''}${nombre}</button>`;
+    const semana = b.semana.map((d) => `<i class="${d.hecho ? 'si' : ''}${d.hoy ? ' hoy' : ''}" title="${escapar(d.nombre)}"></i>`).join('');
     return `
-      <div class="hoy-tarjeta hoy-biblia${hecha ? ' hoy-biblia--hecha' : ''}">
-        <button type="button" class="hoy-biblia__ir" data-ir="biblia">
-          <span class="hoy-tarjeta__icono" aria-hidden="true">${icono('libro', 17)}</span>
-          <span class="hoy-tarjeta__texto">
-            <span class="hoy-tarjeta__etiqueta">${b.tocan.length ? 'Hoy toca leer' : 'Lectura bíblica'}</span>
-            <span class="hoy-tarjeta__valor">${escapar(valor)}</span>
-            ${detalle ? `<span class="hoy-tarjeta__detalle">${escapar(detalle)}</span>` : ''}
-          </span>
-          <span class="hoy-tarjeta__flecha" aria-hidden="true">${icono('siguiente', 15)}</span>
+      <div class="bloque bloque--ancho bloque--biblia${hecha ? ' hecha' : ''}">
+        <button type="button" class="bloque__ir" data-ir="biblia">
+          <span class="bloque__etiqueta">${escapar(etiqueta)}</span>
+          ${titulo(b.tocan.length ? textoLectura(caps) : 'Hoy no toca lectura')}
         </button>
-        <div class="hoy-biblia__casillas" role="group" aria-label="Lo de hoy">
+        <div class="bloque__marcas" role="group" aria-label="Lo de hoy">
           ${casilla('leido', 'He leído', Boolean(b.dia?.leido))}
           ${casilla('orado', 'He orado', Boolean(b.dia?.orado))}
         </div>
+        <div class="bloque__racha" role="img" aria-label="${b.racha > 1 ? `${b.racha} días seguidos` : 'Tu última semana'}">${semana}</div>
       </div>`;
+  }
+
+  function bloqueCorreo(c) {
+    if (!c) return '';
+    if (!c.conectado) return bloque({ accion: 'conectar-google', clase: 'bloque--ancho', etiqueta: 'Correo', contenido: titulo('Conecta tu Gmail') + detalle('y te aviso de lo importante') });
+    if (!c.sinLeer.length) return bloque({ ir: 'correo', clase: 'bloque--ancho', etiqueta: 'Correo', contenido: titulo('Todo leído') });
+    const filas = c.sinLeer
+      .slice(0, 2)
+      .map((m) => {
+        const nombre = m.de?.nombre || m.de?.email || '';
+        return `<span class="bloque__correo"><span class="bloque__inicial" aria-hidden="true">${escapar(nombre.trim().charAt(0).toUpperCase() || '·')}</span><span><b>${escapar(nombre)}</b><span>${escapar(m.asunto || '(sin asunto)')}</span></span></span>`;
+      })
+      .join('');
+    return bloque({ ir: 'correo', clase: 'bloque--ancho', etiqueta: `Correo · ${c.sinLeer.length} sin leer`, contenido: filas });
+  }
+
+  function bloqueEmpleo(e) {
+    if (!e) return '';
+    if (e.sinCV) return bloque({ ir: 'empleo', etiqueta: 'Empleo', contenido: titulo('Sube tu CV') + detalle('y te busco ofertas') });
+    if (e.listas.length) return bloque({ ir: 'empleo', clase: 'bloque--aviso', etiqueta: 'Empleo', contenido: grande(String(e.listas.length)) + detalle(e.listas.length === 1 ? 'candidatura por revisar' : 'candidaturas por revisar') });
+    if (e.enCola) return bloque({ ir: 'empleo', etiqueta: 'Empleo', contenido: titulo(`Preparando ${e.enCola}`) + detalle('te aviso al móvil') });
+    if (e.nuevas) return bloque({ ir: 'empleo', etiqueta: 'Empleo', contenido: grande(String(e.nuevas)) + detalle(e.nuevas === 1 ? 'oferta nueva' : 'ofertas nuevas') });
+    return bloque({ ir: 'empleo', etiqueta: 'Empleo', contenido: titulo('Nada por revisar') + detalle(e.enviadas ? `${e.enviadas} ${e.enviadas === 1 ? 'enviada' : 'enviadas'}` : '') });
+  }
+
+  function bloqueIA(g) {
+    if (!g) return '';
+    const usd = g.usd.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return bloque({ accion: 'ajustes-ia', clase: 'bloque--cifra', etiqueta: 'IA este mes', contenido: grande(`${escapar(usd)}<small> $</small>`) + detalle(g.detalle) });
+  }
+
+  function bloqueInstalar() {
+    const tipo = instalacion?.puedeInstalar();
+    if (!tipo) return '';
+    return bloque({
+      accion: tipo === 'aviso' ? 'instalar' : 'instalar-iphone',
+      clase: 'bloque--ancho',
+      etiqueta: 'Kitsune',
+      contenido: titulo('Instálala como app') + detalle(tipo === 'aviso' ? 'con su icono y sin la barra del navegador' : 'Compartir → Añadir a pantalla de inicio'),
+    });
   }
 
   async function marcarBiblia(id) {
@@ -129,7 +247,7 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
     await api.biblia.guardar(marcarCasilla(datos, hoy, id, !ahora));
     alBiblia();
     const caja = contenedor.querySelector('#hoy-biblia');
-    if (caja) caja.innerHTML = tarjetaBiblia(await datosBiblia());
+    if (caja) caja.innerHTML = bloqueBiblia(await datosBiblia());
   }
 
   async function datosGastos() {
@@ -140,162 +258,53 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
     return { hoy, resumen: resumenMes(datos, mesDe(hoy), hoy), proximos: proximosFijos(datos, hoy, 3) };
   }
 
-  function tarjetaGastos(g) {
-    if (!g) return '';
-    if (g.vacio) return tarjeta({ accion: 'gasto', icono: 'cartera', etiqueta: 'gastos', valor: 'Lleva tus gastos', detalle: 'Escribe «12,50 súper» y mira en qué se va el mes' });
-    const r = g.resumen;
-    const [p] = g.proximos;
-    const cuando = p ? (p.fecha === g.hoy ? 'hoy' : p.fecha === sumarDias(g.hoy, 1) ? 'mañana' : `el ${Number(p.fecha.slice(8))}`) : '';
-    const detalle = [
-      r.presupuesto ? (r.disponible >= 0 ? `quedan ${euros(r.disponible, { redondo: true })} de ${euros(r.presupuesto, { redondo: true })}` : `te pasas ${euros(-r.disponible, { redondo: true })}`) : '',
-      p ? `${cuando}: ${p.concepto} ${euros(p.centimos, { redondo: true })}` : '',
-    ].filter(Boolean);
-    return tarjeta({ ir: 'gastos', icono: 'cartera', etiqueta: `gastos de ${nombreMes(r.mes, { corto: true })}`, valor: euros(r.gastado), detalle: detalle.join(' · ') });
-  }
-
-  // Una fila: icono, lo que es (etiqueta), lo importante (valor) y el detalle.
-  const tarjeta = ({ ir: destino, icono: ico, etiqueta, valor, detalle = '', destacada = false, accion = '' }) => `
-    <button type="button" class="hoy-tarjeta${destacada ? ' hoy-tarjeta--destacada' : ''}" ${destino ? `data-ir="${destino}"` : ''} ${accion ? `data-accion="${accion}"` : ''}>
-      <span class="hoy-tarjeta__icono" aria-hidden="true">${icono(ico, 17)}</span>
-      <span class="hoy-tarjeta__texto">
-        <span class="hoy-tarjeta__etiqueta">${escapar(mayuscula(etiqueta))}</span>
-        <span class="hoy-tarjeta__valor">${escapar(valor)}</span>
-        ${detalle ? `<span class="hoy-tarjeta__detalle">${escapar(detalle)}</span>` : ''}
-      </span>
-      <span class="hoy-tarjeta__flecha" aria-hidden="true">${icono('siguiente', 15)}</span>
-    </button>`;
-
-  function tarjetaEmpleo(e) {
-    if (!e) return '';
-    if (e.sinCV) return tarjeta({ ir: 'empleo', icono: 'maletin', etiqueta: 'empleo', valor: 'Sube tu CV', detalle: 'y te busco ofertas que encajen contigo' });
-    if (e.listas.length) {
-      const nombres = e.listas.slice(0, 2).map((o) => `${o.puesto}${o.empresa ? ` · ${o.empresa}` : ''}${o.encaje != null ? ` (${o.encaje})` : ''}`);
-      return tarjeta({
-        ir: 'empleo',
-        icono: 'maletin',
-        etiqueta: 'empleo',
-        valor: e.listas.length === 1 ? '1 candidatura lista para revisar' : `${e.listas.length} candidaturas listas para revisar`,
-        detalle: nombres.join(' · '),
-        destacada: true,
-      });
-    }
-    if (e.enCola) return tarjeta({ ir: 'empleo', icono: 'maletin', etiqueta: 'empleo', valor: `Preparando ${e.enCola === 1 ? '1 candidatura' : `${e.enCola} candidaturas`}`, detalle: 'en el servidor; te aviso al móvil' });
-    if (e.nuevas) return tarjeta({ ir: 'empleo', icono: 'maletin', etiqueta: 'empleo', valor: e.nuevas === 1 ? '1 oferta nueva para ti' : `${e.nuevas} ofertas nuevas para ti`, detalle: 'de la alerta de esta mañana' });
-    return tarjeta({ ir: 'empleo', icono: 'maletin', etiqueta: 'empleo', valor: 'Nada por revisar', detalle: e.enviadas ? `${e.enviadas} ${e.enviadas === 1 ? 'candidatura enviada' : 'candidaturas enviadas'}` : 'Busca y prepara candidaturas cuando quieras' });
-  }
-
-  function tarjetasAgenda(a) {
-    if (!a) return '';
-    const [primero, ...resto] = a.proximos;
-    const cita = a.conCalendario
-      ? primero
-        ? tarjeta({
-            ir: 'agenda',
-            icono: 'calendario',
-            etiqueta: 'próximo',
-            valor: `${primero.todoElDia ? '' : `${hora(primero.inicio)} `}${primero.titulo || '(sin título)'}`,
-            detalle: [primero.todoElDia ? cuando(primero.inicio, { todoElDia: true }) : inicioDelDia(primero.inicio) !== inicioDelDia() ? cuando(primero.inicio) : '', resto.length ? `y ${resto.length} más` : primero.lugar].filter(Boolean).join(' · '),
-          })
-        : tarjeta({ ir: 'agenda', icono: 'calendario', etiqueta: 'agenda', valor: 'Nada más hoy', detalle: 'ni mañana' })
-      : tarjeta({ accion: 'conectar-google', icono: 'calendario', etiqueta: 'agenda', valor: 'Conecta tu calendario', detalle: 'para ver aquí tus citas' });
-    const siguiente = a.recordatorios[0];
-    const aviso = siguiente
-      ? tarjeta({
-          ir: 'recordatorios',
-          icono: 'campana',
-          etiqueta: a.deHoy.length > 1 ? `${a.deHoy.length} recordatorios hoy` : 'recordatorio',
-          valor: siguiente.texto,
-          detalle: cuando(siguiente.cuando),
-        })
-      : tarjeta({ ir: 'recordatorios', icono: 'campana', etiqueta: 'recordatorios', valor: 'Ninguno pendiente', detalle: 'Pídeme «recuérdame…» en el chat' });
-    return `<div class="hoy-dos">${cita}${aviso}</div>`;
-  }
-
-  function tarjetaCorreo(c) {
-    if (!c) return '';
-    if (!c.conectado) return tarjeta({ accion: 'conectar-google', icono: 'sobre', etiqueta: 'correo', valor: 'Conecta tu Gmail', detalle: 'y te aviso de lo importante' });
-    if (!c.sinLeer.length) return tarjeta({ ir: 'correo', icono: 'sobre', etiqueta: 'correo', valor: 'Todo leído' });
-    const [m] = c.sinLeer;
-    return tarjeta({
-      ir: 'correo',
-      icono: 'sobre',
-      etiqueta: 'correo',
-      valor: c.sinLeer.length === 1 ? '1 correo sin leer' : `${c.sinLeer.length} correos sin leer`,
-      detalle: `${m.de?.nombre || m.de?.email || ''}: «${m.asunto || '(sin asunto)'}»`,
-    });
-  }
-
-  function tarjetaGasto(g) {
-    if (!g) return '';
-    const usd = g.usd.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return tarjeta({ accion: 'ajustes-ia', icono: 'pulso', etiqueta: 'IA este mes', valor: `${usd} $`, detalle: g.detalle });
-  }
-
-  function tarjetaInstalar() {
-    const tipo = instalacion?.puedeInstalar();
-    if (!tipo) return '';
-    return tipo === 'aviso'
-      ? tarjeta({ accion: 'instalar', icono: 'instalar', etiqueta: 'kitsune', valor: 'Instálala como app', detalle: 'con su icono y sin la barra del navegador' })
-      : tarjeta({ accion: 'instalar-iphone', icono: 'instalar', etiqueta: 'kitsune', valor: 'Instálala como app', detalle: 'Compartir → Añadir a pantalla de inicio' });
-  }
+  const cargando = (clase = '') => `<div class="bloque bloque--cargando ${clase}" aria-hidden="true"></div>`;
 
   async function mostrar() {
     const turno = ++pintando;
-    const ahora = new Date();
-    const fecha = ahora.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-    // Primero el esqueleto (sale al instante); luego cada tarjeta según llega.
+    // Primero el esqueleto (sale al instante); luego cada bloque según llega.
     if (!contenedor.querySelector('.hoy')) {
       contenedor.innerHTML = `
         <div class="apartado desplazable hoy">
-          <header class="hoy__saludo">
-            <p class="hoy__hola" id="hoy-saludo"></p>
-            <h2 class="hoy__fecha" id="hoy-fecha"></h2>
-          </header>
-          <h3 class="hoy__seccion">Para hoy</h3>
-          <div class="hoy-grupo">
-            <div id="hoy-agenda"><div class="hoy-dos"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div></div>
-            <div id="hoy-biblia"></div>
-            <div id="hoy-correo"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div>
-          </div>
-          <h3 class="hoy__seccion">Este mes</h3>
-          <div class="hoy-grupo">
-            <div id="hoy-empleo"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div>
-            <div id="hoy-gastos"></div>
+          <div class="bento">
+            <div id="hoy-heroe" class="bento__ancho">${cargando('bloque--heroe')}</div>
+            <div id="hoy-gastos">${api.gastos ? cargando() : ''}</div>
+            <div id="hoy-aviso">${cargando()}</div>
+            <div id="hoy-biblia" class="bento__ancho"></div>
+            <div id="hoy-correo" class="bento__ancho">${cargando('bloque--ancho')}</div>
+            <div id="hoy-empleo">${api.empleo ? cargando() : ''}</div>
             <div id="hoy-gasto"></div>
+            <div id="hoy-instalar" class="bento__ancho"></div>
           </div>
-          <div class="hoy-grupo"><div id="hoy-instalar"></div></div>
           <div class="hoy__acciones" role="group" aria-label="Accesos rápidos">
-            <button type="button" class="chip chip--acento" data-accion="preparar">${icono('chispa', 14)} Buscar y preparar</button>
             <button type="button" class="chip" data-accion="recordatorio">${icono('nueva', 14)} Recordatorio</button>
             ${api.gastos ? `<button type="button" class="chip" data-accion="gasto">${icono('cartera', 14)} Apuntar gasto</button>` : ''}
             <button type="button" class="chip" data-accion="pulso">${icono('sol', 14)} Pulso del día</button>
-            <button type="button" class="chip" data-accion="hablar">${icono('chat', 14)} Preguntar</button>
-            <button type="button" class="chip" data-accion="conversar">${icono('ondas', 14)} Hablar</button>
+            <button type="button" class="chip" data-accion="preparar">${icono('chispa', 14)} Buscar ofertas</button>
           </div>
           <p class="hoy__ayuda" id="hoy-ayuda-iphone" hidden>En el iPhone: pulsa ${icono('compartir', 14)} <strong>Compartir</strong> en Safari y luego <strong>Añadir a pantalla de inicio</strong>.</p>
         </div>`;
       contenedor.querySelector('.hoy').addEventListener('click', alPulsar);
     }
-    contenedor.querySelector('#hoy-saludo').textContent = saludo(ahora);
-    // «Jueves» grande y «5 de noviembre» debajo, en un tono más apagado.
-    const [diaSemana, ...resto] = fecha.split(', ');
-    contenedor.querySelector('#hoy-fecha').innerHTML = `${escapar(mayuscula(diaSemana))}<span>${escapar(resto.join(', '))}</span>`;
     const poner = (id, html) => {
       if (turno !== pintando) return;
       const caja = contenedor.querySelector(`#${id}`);
       if (caja) caja.innerHTML = html;
     };
-    poner('hoy-instalar', tarjetaInstalar());
+    poner('hoy-instalar', bloqueInstalar());
     await Promise.all([
       datosEmpleo().then((e) => {
-        poner('hoy-empleo', tarjetaEmpleo(e));
+        poner('hoy-empleo', bloqueEmpleo(e));
         if (e && !e.sinCV) alEmpleo(e.listas.length);
       }),
-      datosAgenda().then((a) => poner('hoy-agenda', tarjetasAgenda(a))),
-      datosCorreo().then((c) => poner('hoy-correo', tarjetaCorreo(c))),
-      datosGasto().then((g) => poner('hoy-gasto', tarjetaGasto(g))),
-      datosGastos().then((g) => poner('hoy-gastos', tarjetaGastos(g))),
-      datosBiblia().then((b) => poner('hoy-biblia', tarjetaBiblia(b))),
+      datosAgenda().then((a) => {
+        poner('hoy-heroe', bloqueHeroe(a));
+        poner('hoy-aviso', bloqueAviso(a));
+      }),
+      datosCorreo().then((c) => poner('hoy-correo', bloqueCorreo(c))),
+      datosGasto().then((g) => poner('hoy-gasto', bloqueIA(g))),
+      datosGastos().then((g) => poner('hoy-gastos', bloqueGastos(g))),
+      datosBiblia().then((b) => poner('hoy-biblia', bloqueBiblia(b))),
     ]);
   }
 
@@ -330,5 +339,11 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
     }
   }
 
-  return { mostrar };
+  // Lo de hoy, en datos, para que el Chat lo enseñe a su manera.
+  const resumen = async () => {
+    const [agenda, biblia, correo, gastos] = await Promise.all([datosAgenda(), datosBiblia(), datosCorreo(), datosGastos()]);
+    return { agenda, biblia, correo, gastos };
+  };
+
+  return { mostrar, resumen };
 }

@@ -40,7 +40,12 @@ const vistas = Object.fromEntries(
 );
 // Los cinco apartados de la barra. Recordatorios vive dentro de Agenda; las
 // conversaciones y la memoria, dentro del Chat (botones de la cabecera).
-const pestanas = Object.fromEntries([...document.querySelectorAll('.apartados [data-vista]')].map((b) => [b.dataset.vista, b]));
+// Los de la barra (Hoy, Chat, Correo, Agenda) y los de la hoja «Más» (Empleo, Gastos, Biblia).
+const pestanas = Object.fromEntries([...document.querySelectorAll('.apartados [data-vista], .hoja-mas [data-vista]')].map((b) => [b.dataset.vista, b]));
+const enBarra = (b) => Boolean(b?.closest('.apartados'));
+const botonMas = document.getElementById('pestana-mas');
+const hojaMas = document.getElementById('hoja-mas');
+const EN_MAS = new Set(['empleo', 'gastos', 'biblia', 'ajustes']);
 const PADRE = { recordatorios: 'agenda', historial: 'chat', memoria: 'chat' };
 const subAgenda = document.getElementById('sub-agenda');
 const botonesChat = [...document.querySelectorAll('.solo-chat')];
@@ -159,7 +164,13 @@ const tituloCabecera = document.querySelector('.marca__nombre');
 
 function mostrarVista(nombre, seccionAjustes = null) {
   if (!vistas[nombre]) nombre = 'hoy';
-  tituloCabecera.textContent = TITULOS[nombre] ?? 'Kitsune';
+  if (nombre === 'hoy') {
+    // En Hoy, la cabecera es la fecha: «Jueves 5 · noviembre».
+    const ahora = new Date();
+    const dia = ahora.toLocaleDateString('es-ES', { weekday: 'long' });
+    const mes = ahora.toLocaleDateString('es-ES', { month: 'long' });
+    tituloCabecera.innerHTML = `<b>${dia.charAt(0).toUpperCase() + dia.slice(1)} ${ahora.getDate()}</b> · ${mes}`;
+  } else tituloCabecera.textContent = TITULOS[nombre] ?? 'Kitsune';
   dialogo.dataset.vista = nombre;
   const anterior = vistaActual;
   if (nombre === 'ajustes' && anterior !== 'ajustes') vistaAntesDeAjustes = anterior;
@@ -167,9 +178,14 @@ function mostrarVista(nombre, seccionAjustes = null) {
   const destino = PADRE[nombre] ?? nombre;
   for (const [clave, vista] of Object.entries(vistas)) vista.hidden = clave !== nombre;
   for (const [clave, pestana] of Object.entries(pestanas)) {
-    pestana.setAttribute('aria-selected', String(clave === destino));
-    pestana.tabIndex = clave === destino ? 0 : -1;
+    const activa = clave === destino;
+    if (enBarra(pestana)) {
+      pestana.setAttribute('aria-selected', String(activa));
+      pestana.tabIndex = activa ? 0 : -1;
+    } else pestana.setAttribute('aria-current', activa ? 'page' : 'false');
   }
+  botonMas.classList.toggle('activo', EN_MAS.has(destino));
+  cerrarMas();
   // Agenda: sus dos pestañas. Chat: sus botones de la cabecera.
   subAgenda.hidden = destino !== 'agenda';
   for (const b of subAgenda.querySelectorAll('[data-vista]')) b.setAttribute('aria-selected', String(b.dataset.vista === nombre));
@@ -178,7 +194,7 @@ function mostrarVista(nombre, seccionAjustes = null) {
   document.getElementById('boton-memoria').setAttribute('aria-pressed', String(nombre === 'memoria'));
   dialogo.dataset.apartado = destino;
   // El apartado activo, a la vista si la barra se ha desplazado (pantallas estrechas).
-  pestanas[destino]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  if (enBarra(pestanas[destino])) pestanas[destino].scrollIntoView({ block: 'nearest', inline: 'nearest' });
   document.getElementById('boton-ajustes').setAttribute('aria-pressed', String(nombre === 'ajustes'));
   movil?.alCambiarVista(nombre);
   moverIndicador?.();
@@ -187,6 +203,19 @@ function mostrarVista(nombre, seccionAjustes = null) {
   if (nombre === 'chat') enfocarChat();
   else chat?.retirarConversacion();
   apartados[nombre]?.mostrar();
+}
+
+// ---------- Hoja «Más» ----------
+function abrirMas() {
+  hojaMas.hidden = false;
+  botonMas.setAttribute('aria-expanded', 'true');
+  hojaMas.querySelector('.hoja-mas__item')?.focus({ preventScroll: true });
+}
+
+function cerrarMas() {
+  if (hojaMas.hidden) return;
+  hojaMas.hidden = true;
+  botonMas.setAttribute('aria-expanded', 'false');
 }
 
 // Insignia de Recordatorios: los que quedan para hoy.
@@ -481,6 +510,9 @@ async function iniciar() {
     hablar: hablarEnConversacion,
     abrirAjustes: (seccion) => mostrarVista('ajustes', seccion),
     obtenerAjustes: () => ajustes,
+    // Lo de hoy (citas, lectura, correo, gastos) para las tarjetas del Chat.
+    obtenerResumen: () => apartados.hoy?.resumen() ?? Promise.resolve(null),
+    alMarcarBiblia: () => apartados.biblia?.recargar(),
   });
   correo = crearCorreo({
     contenedor: vistas.correo,
@@ -648,10 +680,29 @@ async function iniciar() {
     correo.recargar();
     if (vistaActual === 'agenda') apartados.agenda.mostrar();
   });
+  botonMas.addEventListener('click', () => {
+    vibrar(6);
+    if (hojaMas.hidden) abrirMas();
+    else cerrarMas();
+  });
+  hojaMas.addEventListener('click', (e) => {
+    if (e.target.closest('[data-cerrar-mas]')) return cerrarMas();
+    const ir = e.target.closest('[data-ir-mas]')?.dataset.irMas;
+    if (!ir) return;
+    cerrarMas();
+    if (ir === 'buscar') document.getElementById('boton-buscar').click();
+    else mostrarVista(ir);
+  });
+  // El botón de voz: con el mismo toque empieza a escucharte (el iPhone lo exige).
+  document.getElementById('boton-voz').addEventListener('click', () => {
+    vibrar(10);
+    mostrarVista('chat');
+    if (!chat.empezarConversacion()) chat.enfocar();
+  });
   // Flechas para moverse entre apartados, como en cualquier lista de pestañas.
   document.querySelector('.apartados').addEventListener('keydown', (e) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
-    const orden = Object.keys(pestanas);
+    const orden = Object.keys(pestanas).filter((k) => enBarra(pestanas[k]));
     const actual = orden.indexOf(document.activeElement?.dataset.vista);
     if (actual < 0) return;
     e.preventDefault();
@@ -779,6 +830,7 @@ async function iniciar() {
 
   window.addEventListener('keydown', (e) => {
     actividad();
+    if (e.key === 'Escape' && !hojaMas.hidden) return cerrarMas();
     if (e.key === 'Escape') {
       // Sin zorro no queda nada a la vista: Escape esconde Kitsune entero.
       if (!dialogo.hidden && conZorro) cerrarDialogo();
