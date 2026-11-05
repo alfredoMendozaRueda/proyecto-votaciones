@@ -9412,3 +9412,179 @@ p.gastos__dia,
   font-weight: 600;
   letter-spacing: 0;
 }
+
+/* ---------- iPhone: la app llega hasta abajo ----------
+   En la app instalada del iPhone el alto del viewport no cuenta la barra de
+   estado, y la escena se quedaba corta por abajo. Sin teclado se ancla a los
+   cuatro bordes; con el teclado abierto, al trozo visible. */
+:root.movil .escena,
+:root.movil body.demo .escena {
+  inset: 0;
+  height: auto;
+}
+
+:root.movil .escena.teclado {
+  inset: var(--vv-arriba, 0px) 0 auto;
+  height: var(--vv-alto, 100dvh);
+}
+
+/* ---------- Hoy: dos listas agrupadas, filas como las del sistema ---------- */
+
+.hoy {
+  gap: 0;
+}
+
+.hoy__saludo {
+  margin-bottom: 18px;
+}
+
+.hoy__seccion {
+  margin: 0 0 8px 4px;
+  font-family: var(--ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texto-3);
+}
+
+.hoy-grupo {
+  display: grid;
+  margin-bottom: 22px;
+  border-radius: var(--r-grupo);
+  background: var(--sup-1);
+  overflow: hidden;
+}
+
+.hoy-grupo > div:empty {
+  display: none;
+}
+
+.hoy-grupo .hoy-dos {
+  display: contents;
+}
+
+/* Cada fila: icono · texto · flecha; separadas por un filo que empieza tras el icono. */
+.hoy-grupo .hoy-tarjeta,
+.hoy-grupo .hoy-biblia {
+  display: block;
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.hoy-grupo .hoy-tarjeta + .hoy-tarjeta,
+.hoy-grupo > div + div .hoy-tarjeta,
+.hoy-grupo > div + div .hoy-biblia {
+  box-shadow: inset 60px 0 0 var(--sup-1), inset 0 1px 0 var(--separador);
+}
+
+.hoy-grupo button.hoy-tarjeta,
+.hoy-biblia__ir {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 16px;
+  align-items: center;
+  column-gap: 14px;
+  width: 100%;
+  padding: 13px 14px;
+  text-align: left;
+}
+
+.hoy-grupo button.hoy-tarjeta:active,
+.hoy-biblia__ir:active {
+  transform: none;
+  background: var(--sup-2);
+}
+
+.hoy-grupo button.hoy-tarjeta:hover {
+  background: rgba(242, 232, 224, 0.025);
+}
+
+.hoy-tarjeta__icono {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--sup-3);
+  color: var(--texto);
+}
+
+.hoy-tarjeta__texto {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.hoy-grupo .hoy-tarjeta__etiqueta {
+  font-size: 12.5px;
+  color: var(--texto-3);
+}
+
+.hoy-grupo .hoy-tarjeta__valor {
+  font-size: 15.5px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.hoy-grupo .hoy-tarjeta__detalle {
+  font-size: 13.5px;
+  color: var(--texto-2);
+}
+
+.hoy-tarjeta__flecha {
+  color: var(--texto-3);
+  opacity: 0.7;
+}
+
+/* Lo destacado (una oferta lista, una cita pronto): el icono en bermellón. */
+.hoy-grupo .hoy-tarjeta--destacada {
+  box-shadow: none;
+}
+
+.hoy-tarjeta--destacada .hoy-tarjeta__icono {
+  background: var(--acento);
+  color: #fff;
+}
+
+/* Biblia: las casillas bajo el texto, alineadas con él. */
+.hoy-biblia__casillas {
+  margin: -4px 0 0;
+  padding: 0 14px 13px 60px;
+}
+
+.hoy-biblia__casilla {
+  border: 0;
+  background: var(--sup-3);
+  color: var(--texto-2);
+  font-size: 13px;
+}
+
+.hoy-biblia__casilla[aria-pressed='true'] {
+  border: 0;
+  background: rgba(210, 58, 44, 0.16);
+  color: var(--acento-vivo);
+}
+
+.hoy-grupo .hoy-tarjeta--cargando {
+  min-height: 62px;
+  background: linear-gradient(100deg, transparent 30%, var(--sup-2) 50%, transparent 70%) 0 0 / 300% 100%;
+}
+
+/* Las acciones rápidas, al final y sin competir. */
+.hoy__acciones {
+  margin-top: 2px;
+}
+
+/* Las filas de la rejilla miden lo que su contenido (si no, los grupos se encogían). */
+.hoy {
+  grid-auto-rows: max-content;
+}
+
+.hoy-grupo:not(:has(.hoy-tarjeta)) {
+  display: none;
+}

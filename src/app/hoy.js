@@ -107,9 +107,13 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
     return `
       <div class="hoy-tarjeta hoy-biblia${hecha ? ' hoy-biblia--hecha' : ''}">
         <button type="button" class="hoy-biblia__ir" data-ir="biblia">
-          <span class="hoy-tarjeta__etiqueta">${icono('libro', 14)}${b.tocan.length ? 'Hoy toca leer' : 'Lectura bíblica'}</span>
-          <span class="hoy-tarjeta__valor">${escapar(valor)}</span>
-          ${detalle ? `<span class="hoy-tarjeta__detalle">${escapar(detalle)}</span>` : ''}
+          <span class="hoy-tarjeta__icono" aria-hidden="true">${icono('libro', 17)}</span>
+          <span class="hoy-tarjeta__texto">
+            <span class="hoy-tarjeta__etiqueta">${b.tocan.length ? 'Hoy toca leer' : 'Lectura bíblica'}</span>
+            <span class="hoy-tarjeta__valor">${escapar(valor)}</span>
+            ${detalle ? `<span class="hoy-tarjeta__detalle">${escapar(detalle)}</span>` : ''}
+          </span>
+          <span class="hoy-tarjeta__flecha" aria-hidden="true">${icono('siguiente', 15)}</span>
         </button>
         <div class="hoy-biblia__casillas" role="group" aria-label="Lo de hoy">
           ${casilla('leido', 'He leído', Boolean(b.dia?.leido))}
@@ -149,11 +153,16 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
     return tarjeta({ ir: 'gastos', icono: 'cartera', etiqueta: `gastos de ${nombreMes(r.mes, { corto: true })}`, valor: euros(r.gastado), detalle: detalle.join(' · ') });
   }
 
+  // Una fila: icono, lo que es (etiqueta), lo importante (valor) y el detalle.
   const tarjeta = ({ ir: destino, icono: ico, etiqueta, valor, detalle = '', destacada = false, accion = '' }) => `
     <button type="button" class="hoy-tarjeta${destacada ? ' hoy-tarjeta--destacada' : ''}" ${destino ? `data-ir="${destino}"` : ''} ${accion ? `data-accion="${accion}"` : ''}>
-      <span class="hoy-tarjeta__etiqueta">${icono(ico, 14)}${escapar(mayuscula(etiqueta))}</span>
-      <span class="hoy-tarjeta__valor">${escapar(valor)}</span>
-      ${detalle ? `<span class="hoy-tarjeta__detalle">${escapar(detalle)}</span>` : ''}
+      <span class="hoy-tarjeta__icono" aria-hidden="true">${icono(ico, 17)}</span>
+      <span class="hoy-tarjeta__texto">
+        <span class="hoy-tarjeta__etiqueta">${escapar(mayuscula(etiqueta))}</span>
+        <span class="hoy-tarjeta__valor">${escapar(valor)}</span>
+        ${detalle ? `<span class="hoy-tarjeta__detalle">${escapar(detalle)}</span>` : ''}
+      </span>
+      <span class="hoy-tarjeta__flecha" aria-hidden="true">${icono('siguiente', 15)}</span>
     </button>`;
 
   function tarjetaEmpleo(e) {
@@ -219,7 +228,7 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
   function tarjetaGasto(g) {
     if (!g) return '';
     const usd = g.usd.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return tarjeta({ accion: 'ajustes-ia', icono: 'pulso', etiqueta: 'ia este mes', valor: `${usd} $`, detalle: g.detalle });
+    return tarjeta({ accion: 'ajustes-ia', icono: 'pulso', etiqueta: 'IA este mes', valor: `${usd} $`, detalle: g.detalle });
   }
 
   function tarjetaInstalar() {
@@ -242,13 +251,19 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
             <h2 id="hoy-saludo"></h2>
             <p id="hoy-fecha"></p>
           </header>
-          <div id="hoy-empleo"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div>
-          <div id="hoy-agenda"><div class="hoy-dos"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div></div>
-          <div id="hoy-biblia"></div>
-          <div id="hoy-correo"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div>
-          <div id="hoy-gastos"></div>
-          <div id="hoy-gasto"></div>
-          <div id="hoy-instalar"></div>
+          <h3 class="hoy__seccion">Para hoy</h3>
+          <div class="hoy-grupo">
+            <div id="hoy-agenda"><div class="hoy-dos"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div></div>
+            <div id="hoy-biblia"></div>
+            <div id="hoy-correo"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div>
+          </div>
+          <h3 class="hoy__seccion">Este mes</h3>
+          <div class="hoy-grupo">
+            <div id="hoy-empleo"><div class="hoy-tarjeta hoy-tarjeta--cargando" aria-hidden="true"></div></div>
+            <div id="hoy-gastos"></div>
+            <div id="hoy-gasto"></div>
+          </div>
+          <div class="hoy-grupo"><div id="hoy-instalar"></div></div>
           <div class="hoy__acciones" role="group" aria-label="Accesos rápidos">
             <button type="button" class="chip chip--acento" data-accion="preparar">${icono('chispa', 14)} Buscar y preparar</button>
             <button type="button" class="chip" data-accion="recordatorio">${icono('nueva', 14)} Recordatorio</button>
