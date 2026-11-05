@@ -148,20 +148,7 @@ export function prepararBloqueo() {
       </div>`;
     document.body.append(capa);
     document.documentElement.classList.add('bloqueada');
-    const mensaje = capa.querySelector('.bloqueo__mensaje');
-    capa.querySelector('.bloqueo__abrir').addEventListener('click', async () => {
-      if (comprobando) return;
-      comprobando = true;
-      mensaje.textContent = '';
-      try {
-        if (await comprobarIdentidad()) quitar();
-        else mensaje.textContent = 'No se ha podido comprobar que eres tú.';
-      } catch (error) {
-        mensaje.textContent = error.name === 'NotAllowedError' ? 'Cancelado. Toca «Desbloquear» para intentarlo otra vez.' : `No se ha podido usar ${nombreBiometria()}.`;
-      } finally {
-        comprobando = false;
-      }
-    });
+    capa.querySelector('.bloqueo__abrir').addEventListener('click', () => desbloquear(false));
     const borrar = capa.querySelector('.bloqueo__borrar');
     borrar.addEventListener('click', async () => {
       if (borrar.dataset.confirmar !== 'si') {
@@ -174,6 +161,33 @@ export function prepararBloqueo() {
       location.reload();
     });
   }
+
+  // automatico: sin toque. Safari deja pedir Face ID una vez por carga sin
+  // que se pulse nada; si no lo deja (o se cancela), queda el botón.
+  async function desbloquear(automatico) {
+    if (comprobando || !capa) return;
+    comprobando = true;
+    const mensaje = capa.querySelector('.bloqueo__mensaje');
+    mensaje.textContent = '';
+    try {
+      if (await comprobarIdentidad()) quitar();
+      else mensaje.textContent = 'No se ha podido comprobar que eres tú.';
+    } catch (error) {
+      if (!capa) return;
+      mensaje.textContent =
+        error.name !== 'NotAllowedError'
+          ? `No se ha podido usar ${nombreBiometria()}.`
+          : automatico
+            ? `Toca «Desbloquear» para usar ${nombreBiometria()}.`
+            : 'Cancelado. Toca «Desbloquear» para intentarlo otra vez.';
+    } finally {
+      comprobando = false;
+    }
+  }
+  // Con la app ya a la vista (el iPhone no enseña Face ID a una app en segundo plano).
+  const desbloquearSolo = () => {
+    if (capa && document.visibilityState === 'visible') setTimeout(() => desbloquear(true), 250);
+  };
 
   function quitar() {
     capa?.remove();
@@ -188,11 +202,13 @@ export function prepararBloqueo() {
       fuera = Date.now();
       // «Al instante»: se tapa ya, así la vista previa del selector de apps no enseña nada.
       if (b.tras === 0) mostrar();
-    } else if (fuera !== null && Date.now() - fuera >= b.tras * 60_000) {
-      mostrar();
+    } else {
+      if (fuera !== null && Date.now() - fuera >= b.tras * 60_000) mostrar();
+      desbloquearSolo();
     }
   });
 
   mostrar();
+  desbloquearSolo();
   return { mostrar, bloqueada: () => Boolean(capa) };
 }
