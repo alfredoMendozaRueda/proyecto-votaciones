@@ -70,6 +70,9 @@ contextBridge.exposeInMainWorld('asistente', {
   },
   consumo: {
     resumen: () => invocar('consumo:resumen'),
+    tieneClaveAdmin: () => invocar('consumo:tieneClaveAdmin'),
+    real: () => invocar('consumo:real'),
+    guardarClaveAdmin: (clave) => invocar('consumo:guardarClaveAdmin', clave),
   },
   formulario: {
     abrir: (datos) => invocar('formulario:abrir', datos),

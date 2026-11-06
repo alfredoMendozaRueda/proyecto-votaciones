@@ -41,6 +41,7 @@ import {
   coleccionConsumo,
 } from '../src/compartido/sincro.js';
 import { Consumo } from '../src/compartido/consumo.js';
+import { costeRealOpenAI } from '../src/compartido/costes-openai.js';
 import { abrirFormulario } from './formulario.js';
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
@@ -537,6 +538,22 @@ function registrarCanales() {
   manejar('gastos:guardar', (datos) => gastos.guardar(datos));
   manejar('biblia:leer', () => biblia.leer());
   manejar('biblia:guardar', (datos) => biblia.guardar(datos));
+  // Lo cobrado de verdad (Costs API de OpenAI) con la clave de administrador, solo en este equipo.
+  manejar('consumo:tieneClaveAdmin', async () => Boolean(leerSecreto('claveOpenAIAdmin')));
+  manejar('consumo:real', async () => {
+    const clave = leerSecreto('claveOpenAIAdmin');
+    return clave ? costeRealOpenAI({ claveAdmin: clave }) : null;
+  });
+  manejar('consumo:guardarClaveAdmin', async (clave) => {
+    if (!clave) {
+      borrarSecreto('claveOpenAIAdmin');
+      return false;
+    }
+    const limpia = String(clave).trim().slice(0, 300);
+    await costeRealOpenAI({ claveAdmin: limpia });
+    guardarSecreto('claveOpenAIAdmin', limpia);
+    return true;
+  });
   manejar('consumo:resumen', async () => {
     const servidorConsumo = leerSecreto('servidorToken') ? await Promise.resolve().then(() => clienteServidor().consumo()).catch(() => null) : null;
     return consumo.resumen({ servidor: servidorConsumo?.meses ?? null });

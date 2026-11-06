@@ -661,6 +661,26 @@ export function crearBackendWeb() {
         const servidor = (await avisos.vinculado()) ? await avisos.cliente().then((c) => c.consumo()).catch(() => null) : null;
         return consumo.resumen({ servidor: servidor?.meses ?? null });
       },
+      // Lo cobrado de verdad (Costs API de OpenAI), con la clave de administrador.
+      // Esa clave se queda en este dispositivo: no se sincroniza.
+      tieneClaveAdmin: async () => Boolean(await leerSecreto('claveOpenAIAdmin')),
+      async real() {
+        const clave = await leerSecreto('claveOpenAIAdmin');
+        if (!clave) return null;
+        const { costeRealOpenAI } = await import('../../compartido/costes-openai.js');
+        return costeRealOpenAI({ claveAdmin: clave });
+      },
+      async guardarClaveAdmin(clave) {
+        if (!clave) {
+          await borrarSecreto('claveOpenAIAdmin');
+          return false;
+        }
+        const limpia = String(clave).trim().slice(0, 300);
+        const { costeRealOpenAI } = await import('../../compartido/costes-openai.js');
+        await costeRealOpenAI({ claveAdmin: limpia });
+        await guardarSecreto('claveOpenAIAdmin', limpia);
+        return true;
+      },
     },
     sincro: {
       resumen: () => sincro.resumen(),

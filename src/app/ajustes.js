@@ -664,7 +664,74 @@ export function crearAjustes({ contenedor, api, alCambiar, alCerrar, probarVoz =
       }
       <p class="ajuste__ayuda">Lo calcula Kitsune con los precios oficiales, sin IVA. ${
         api.sincro ? 'Con la sincronización activa se suman tus otros dispositivos. ' : ''
-      }La cifra exacta está en platform.openai.com/usage.</p>`;
+      }La cifra exacta está en platform.openai.com/usage.</p>
+      ${api.consumo.real ? '<div class="gasto__real" id="gasto-real"></div>' : ''}`;
+    if (api.consumo.real) pintarGastoReal(t.usd);
+  }
+
+  // Lo cobrado de verdad, con la clave de administrador de OpenAI (opcional).
+  async function pintarGastoReal(estimado) {
+    const caja = contenedor.querySelector('#gasto-real');
+    if (!caja) return;
+    const tiene = await api.consumo.tieneClaveAdmin().catch(() => false);
+    const editor = `
+      <div class="clave__campo" id="admin-editor" hidden>
+        <input class="campo" id="admin-clave" type="password" placeholder="sk-admin-…" autocomplete="off" spellcheck="false" aria-label="Clave de administrador de OpenAI">
+        <button type="button" class="boton boton--primario" id="admin-guardar">Guardar</button>
+      </div>
+      <p class="mensaje-ajuste" id="mensaje-admin" role="status"></p>`;
+    if (!tiene) {
+      caja.innerHTML = `
+        <p class="ajuste__ayuda">¿No cuadra con lo que te cobra OpenAI? Añade una <strong>clave de administrador</strong> (platform.openai.com → Settings → Admin keys, de solo lectura) y aquí verás lo cobrado de verdad. Se queda solo en este dispositivo.</p>
+        <div class="botonera"><button type="button" class="boton" id="admin-abrir">Añadir clave de administrador</button></div>${editor}`;
+    } else {
+      caja.innerHTML = `<p class="ajuste__ayuda">Consultando lo cobrado a OpenAI…</p>`;
+      let real = null;
+      let fallo = '';
+      try {
+        real = await api.consumo.real();
+      } catch (e) {
+        fallo = e.message;
+      }
+      const dif = real ? real.usd - estimado : 0;
+      caja.innerHTML = `
+        ${
+          real
+            ? `<p class="gasto__total gasto__total--real">${dinero(real.usd)} <span>cobrado por OpenAI este mes</span></p>
+        <p class="ajuste__ayuda">${
+          Math.abs(dif) < 0.005
+            ? 'Coincide con lo que calcula Kitsune.'
+            : `${dif > 0 ? 'OpenAI ha cobrado' : 'Kitsune calcula'} ${dinero(Math.abs(dif))} más. ${
+                dif > 0 ? 'Puede ser uso de esta clave fuera de Kitsune, un dispositivo sin sincronizar o precios distintos de los apuntados.' : 'OpenAI suele tardar unas horas en apuntar lo último.'
+              }`
+        }</p>`
+            : `<p class="mensaje-ajuste error">${escapar(fallo || 'No se pudo consultar lo cobrado.')}</p>`
+        }
+        <div class="botonera"><button type="button" class="boton" id="admin-abrir">Cambiar clave de administrador</button><button type="button" class="boton boton--texto" id="admin-quitar">Quitar</button></div>${editor}`;
+    }
+    caja.querySelector('#admin-abrir')?.addEventListener('click', () => {
+      const ed = caja.querySelector('#admin-editor');
+      ed.hidden = !ed.hidden;
+      if (!ed.hidden) ed.querySelector('input').focus();
+    });
+    caja.querySelector('#admin-quitar')?.addEventListener('click', async () => {
+      await api.consumo.guardarClaveAdmin('');
+      pintarGastoReal(estimado);
+    });
+    const guardarAdmin = async () => {
+      const campo = caja.querySelector('#admin-clave');
+      if (!campo.value.trim()) return mostrarMensaje('mensaje-admin', 'Pega primero la clave.', false);
+      mostrarMensaje('mensaje-admin', 'Comprobando la clave con OpenAI…', true);
+      try {
+        await api.consumo.guardarClaveAdmin(campo.value.trim());
+        campo.value = '';
+        pintarGastoReal(estimado);
+      } catch (e) {
+        mostrarMensaje('mensaje-admin', e.message, false);
+      }
+    };
+    caja.querySelector('#admin-guardar').addEventListener('click', guardarAdmin);
+    caja.querySelector('#admin-clave').addEventListener('keydown', (e) => e.key === 'Enter' && guardarAdmin());
   }
 
   // ---------- Sincronizar con tus otros dispositivos ----------

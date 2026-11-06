@@ -325,6 +325,7 @@ function respuestaPara(texto) {
 }
 
 export function crearDemo() {
+  let demoClaveAdmin = '';
   const correos = CORREOS.map((c) => ({ ...c }));
   const oyentes = { claude: [], nuevo: [], alternar: [], ajustes: [], aviso: [], cita: [], texto: [] };
   let ajustes = {
@@ -618,6 +619,13 @@ export function crearDemo() {
         ];
         const total = dispositivos.reduce((t, x) => Object.fromEntries(Object.keys(t).map((k) => [k, t[k] + x[k]])), d(0, 0, 0, 0, 0, 0));
         return { mes, total, dispositivos, historial: [{ mes: anterior, ...d(0.3912, 640, 3_900_000, 2_100_000, 180_000, 9) }] };
+      },
+      // Lo cobrado de verdad (ejemplo): con «clave de administrador» de mentira.
+      tieneClaveAdmin: async () => Boolean(demoClaveAdmin),
+      real: async () => (demoClaveAdmin ? { usd: 0.2431, dias: [] } : null),
+      async guardarClaveAdmin(clave) {
+        demoClaveAdmin = clave ? String(clave) : '';
+        return Boolean(demoClaveAdmin);
       },
     },
     // Sincronización simulada: al activarla, «Windows (CASA)» pide unirse.
