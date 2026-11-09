@@ -6,7 +6,7 @@ import { icono } from './iconos.js';
 import { normalizarDatosEmpleo } from '../compartido/empleo.js';
 import { INFO_MODOS, normalizarModo } from '../compartido/modos.js';
 import { normalizarGastos, resumenMes, proximosFijos, euros, fechaISO, mesDe, nombreMes, sumarDias } from '../compartido/gastos.js';
-import { normalizarBiblia, lecturasDelDia, textoLectura, minutosDe, racha, marcarCasilla } from '../compartido/biblia.js';
+import { normalizarBiblia, lecturasDelDia, lecturasDeGrupo, estadoPlan, textoLectura, minutosDe, racha, marcarCasilla } from '../compartido/biblia.js';
 
 const escapar = (t = '') => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const hora = (ms) => new Date(ms).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -90,14 +90,15 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
     if (!api.biblia) return null;
     const datos = normalizarBiblia((await seguro(api.biblia.leer())) ?? {});
     const hoy = fechaISO();
-    if (!datos.planes.some((p) => !p.archivado) && !Object.keys(datos.dias).length) return { vacio: true };
+    const grupo = lecturasDeGrupo(datos, hoy).map((x) => ({ ...x, estado: estadoPlan(x.plan, hoy), dia: x.plan.lecturas.findIndex((l) => l.fecha === hoy) + 1 }));
+    if (!datos.planes.some((p) => !p.archivado && !p.grupo) && !Object.keys(datos.dias).length) return { vacio: true, grupo };
     // Los últimos siete días: si ese día leíste u oraste.
     const semana = Array.from({ length: 7 }, (_, i) => {
       const f = sumarDias(hoy, i - 6);
       const d = datos.dias[f];
       return { hecho: Boolean(d?.leido || d?.orado), hoy: i === 6, nombre: new Date(`${f}T12:00`).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' }) };
     });
-    return { tocan: lecturasDelDia(datos, hoy), dia: datos.dias[hoy], racha: racha(datos, hoy), semana };
+    return { tocan: lecturasDelDia(datos, hoy), dia: datos.dias[hoy], racha: racha(datos, hoy), semana, grupo };
   }
 
   // ---------- Bloques ----------
@@ -178,9 +179,28 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
     });
   }
 
+  // Lectura Jóvenes: lo que toca hoy con el grupo, aparte de tu lectura.
+  function bloqueJovenes(b) {
+    return (b?.grupo ?? [])
+      .map(
+        ({ plan, lectura, hecha, estado, dia }) => `
+      <div class="bloque bloque--ancho bloque--biblia bloque--grupo${hecha ? ' hecha' : ''}">
+        <button type="button" class="bloque__ir" data-ir="biblia">
+          <span class="bloque__etiqueta"><span class="bloque__insignia">Grupo</span>${escapar(plan.nombre)} · día ${dia} de ${plan.lecturas.length}</span>
+          ${titulo(textoLectura(lectura.caps))}
+        </button>
+        <span class="bloque__progreso" role="img" aria-label="${Math.round(estado.parte * 100)} % del plan"><span style="width:${Math.max(1, Math.round(estado.parte * 100))}%"></span></span>
+        <div class="bloque__marcas">
+          <button type="button" class="bloque__marca" data-biblia="jovenes" aria-pressed="${hecha}">${hecha ? icono('hecho', 14) : ''}${hecha ? 'Leída con el grupo' : `Leída · ${lectura.caps.length} capítulos, unos ${minutosDe(lectura.caps)} min`}</button>
+        </div>
+      </div>`,
+      )
+      .join('');
+  }
+
   function bloqueBiblia(b) {
     if (!b) return '';
-    if (b.vacio) return bloque({ ir: 'biblia', clase: 'bloque--ancho', etiqueta: 'Lectura bíblica', contenido: titulo('Empieza un plan de lectura') + detalle('La Biblia en un año, el Nuevo Testamento en 90 días… a tu ritmo') });
+    if (b.vacio) return bloqueJovenes(b) + bloque({ ir: 'biblia', clase: 'bloque--ancho', etiqueta: 'Lectura bíblica', contenido: titulo('Empieza un plan de lectura') + detalle('La Biblia en un año, el Nuevo Testamento en 90 días… a tu ritmo') });
     const caps = b.tocan.flatMap((x) => x.lectura.caps);
     const hecha = b.tocan.length && b.tocan.every((x) => x.hecha);
     const etiqueta = b.tocan.length ? `Hoy toca leer${hecha ? ' · leída' : ` · unos ${minutosDe(caps)} min`}` : 'Lectura bíblica';
@@ -197,7 +217,7 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
           ${casilla('orado', 'He orado', Boolean(b.dia?.orado))}
         </div>
         <div class="bloque__racha" role="img" aria-label="${b.racha > 1 ? `${b.racha} días seguidos` : 'Tu última semana'}">${semana}</div>
-      </div>`;
+      </div>${bloqueJovenes(b)}`;
   }
 
   function bloqueCorreo(c) {
@@ -243,7 +263,7 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
   async function marcarBiblia(id) {
     const datos = normalizarBiblia((await seguro(api.biblia.leer())) ?? {});
     const hoy = fechaISO();
-    const ahora = id === 'leido' ? Boolean(datos.dias[hoy]?.leido) : Boolean(datos.dias[hoy]?.orado);
+    const ahora = id === 'jovenes' ? lecturasDeGrupo(datos, hoy).every((x) => x.hecha) : id === 'leido' ? Boolean(datos.dias[hoy]?.leido) : Boolean(datos.dias[hoy]?.orado);
     await api.biblia.guardar(marcarCasilla(datos, hoy, id, !ahora));
     alBiblia();
     const caja = contenedor.querySelector('#hoy-biblia');

@@ -13,6 +13,7 @@ import { crearHoy } from './hoy.js';
 import { crearBuscador } from './buscador.js';
 import { crearAgenda, crearRecordatorios, crearMemoria, crearHistorial } from './vistas.js';
 import { icono } from './iconos.js';
+import { normalizarBiblia, asegurarJovenes } from '../compartido/biblia.js';
 import { trozosDeVoz, limpiarParaVoz } from '../compartido/voz.js';
 import { prepararMovil } from './movil.js';
 import { prepararOndas, prepararIndicador, entrarVista, saltar, prepararEnvio } from './animaciones.js';
@@ -199,8 +200,10 @@ function mostrarVista(nombre, seccionAjustes = null) {
   moverIndicador?.();
   if (anterior !== nombre) entrarVista(vistas[nombre], Math.sign(ORDEN_VISTAS.indexOf(nombre) - ORDEN_VISTAS.indexOf(anterior)));
   if (nombre === 'ajustes') panelAjustes.abrir(seccionAjustes);
-  if (nombre === 'chat') enfocarChat();
-  else chat?.retirarConversacion();
+  if (nombre === 'chat') {
+    enfocarChat();
+    if (anterior !== 'chat') chat?.refrescar();
+  } else chat?.retirarConversacion();
   apartados[nombre]?.mostrar();
 }
 
@@ -760,6 +763,15 @@ async function iniciar() {
     alEmpleo: ponerInsigniaEmpleo,
     alBiblia: () => apartados.biblia?.recargar(),
   });
+  // El plan Lectura Jóvenes (3 capítulos al día con el grupo) se pone solo una vez, empezando hoy.
+  if (api.biblia) {
+    try {
+      const nuevos = asegurarJovenes(normalizarBiblia((await api.biblia.leer()) ?? {}));
+      if (nuevos) await api.biblia.guardar(nuevos);
+    } catch {
+      // Sin poder leer la lectura bíblica ahora: se intentará la próxima vez.
+    }
+  }
   apartados.hoy.mostrar();
   // La cabecera de Hoy (la fecha) también al abrir, no solo al volver a Hoy.
   if (vistaActual === 'hoy') mostrarVista('hoy');

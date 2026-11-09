@@ -293,12 +293,13 @@ const HERRAMIENTAS_BIBLIA = [
     description:
       'Marca en su lectura bíblica lo que ha hecho un día: "ya he leído" → que=["leido"] (también marca la lectura de ' +
       'su plan de ese día), "he orado" → que=["orado"], o una de sus casillas propias por su nombre (como "Ayuno"). ' +
+      'La lectura del grupo de jóvenes va aparte: "he leído lo de jóvenes" → que=["jovenes"] (no es lo mismo que "leido"). ' +
       'Con si=false se desmarca. Puede llevar el tiempo: "he orado 15 minutos" → minutos_oracion=15.',
     eager_input_streaming: true,
     input_schema: {
       type: 'object',
       properties: {
-        que: { type: 'array', items: { type: 'string' }, description: '"leido", "orado" o el nombre de una casilla suya.' },
+        que: { type: 'array', items: { type: 'string' }, description: '"leido", "orado", "jovenes" (la lectura del grupo) o el nombre de una casilla suya.' },
         fecha: { type: 'string', description: 'AAAA-MM-DD. Si no lo dice, hoy; "ayer", calcúlalo con la fecha local de su mensaje.' },
         si: { type: 'boolean', description: 'false para desmarcar. Por defecto, true.' },
         minutos_lectura: { type: 'integer', description: 'Minutos que ha leído (se suman a los de ese día).' },
@@ -1273,7 +1274,7 @@ export class ConversacionClaude {
           detalle: `${nombreCuenta(e.de)} → ${nombreCuenta(e.de === 'banco' ? 'efectivo' : 'banco')}${e.fecha ? `, el ${e.fecha}` : ', hoy'}. No es gasto ni ingreso.`, boton: 'Apuntar', hecho: 'Apuntado',
         };
       case 'marcar_biblia': {
-        const nombres = e.que.map((q) => (q === 'leido' ? 'He leído' : q === 'orado' ? 'He orado' : q));
+        const nombres = e.que.map((q) => (q === 'leido' ? 'He leído' : q === 'orado' ? 'He orado' : q === 'jovenes' ? 'Lectura Jóvenes' : q));
         const tiempo = [e.minutos_lectura ? `${e.minutos_lectura} min de lectura` : '', e.minutos_oracion ? `${e.minutos_oracion} min de oración` : ''].filter(Boolean).join(' · ');
         return {
           tipo: 'biblia', icono: 'libro', pregunta: e.si === false ? '¿Lo desmarco?' : '¿Lo marco?', titulo: nombres.join(' · ') || tiempo,

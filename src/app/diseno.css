@@ -1359,3 +1359,74 @@ button.bloque--heroe:hover {
 .hoja-mas {
   z-index: 50;
 }
+
+/* ---------- Lectura Jóvenes (plan de grupo, aparte de tu lectura) ---------- */
+
+.bento > div {
+  gap: 10px;
+}
+
+.bloque__insignia,
+.biblia__insignia {
+  display: inline-block;
+  margin-right: 7px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(201, 163, 94, 0.16);
+  color: var(--oro-k);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  vertical-align: 1px;
+}
+
+.bloque__progreso,
+:root:not(.x) .biblia__barra {
+  display: block;
+  width: 100%;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--b3);
+  overflow: hidden;
+}
+
+.bloque__progreso span,
+:root:not(.x) .biblia__barra span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--oro-k);
+}
+
+.bloque--grupo .bloque__marca[aria-pressed='true'] {
+  background: var(--oro-k);
+  color: var(--fondo);
+}
+
+:root:not(.x) .biblia__grupo {
+  background: linear-gradient(160deg, rgba(201, 163, 94, 0.1), transparent 55%), var(--b1);
+}
+
+.biblia__grupo-pie {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--t2);
+}
+
+.biblia__grupo-botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.biblia__recolocar {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.biblia__recolocar-campos {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px;
+  gap: 8px;
+}

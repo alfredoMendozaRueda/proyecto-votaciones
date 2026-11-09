@@ -312,3 +312,57 @@ test('biblia: quien empieza hoy no va «0 de 4»: cuenta desde que empezaste, y 
   assert.equal(resumenMes(atras, '2026-11', hoy).diasHastaHoy, 3);
   assert.equal(resumenMes(normalizarBiblia({}), '2026-11', hoy).inicio, null);
 });
+
+test('Lectura Jóvenes: 3 capítulos justos al día, aparte de la lectura personal', async () => {
+  const m = await import('../src/compartido/biblia.js');
+  const hoy = '2026-11-09';
+  let d = m.crearPlanDePlantilla(m.normalizarBiblia({}), { plantilla: 'nt-90', inicio: hoy }).datos;
+  // Se pone sola una vez, con id fijo, empezando hoy.
+  d = m.asegurarJovenes(d, hoy);
+  const j = d.planes.find((p) => p.plantilla === 'jovenes');
+  assert.equal(j.id, m.ID_PLAN_JOVENES);
+  assert.equal(j.grupo, true);
+  assert.equal(j.porDia, 3);
+  assert.deepEqual(j.lecturas[0], { fecha: hoy, caps: ['GEN.1', 'GEN.2', 'GEN.3'] });
+  assert.ok(j.lecturas.slice(0, -1).every((l) => l.caps.length === 3));
+  assert.equal(j.lecturas.flatMap((l) => l.caps).length, m.TOTAL_CAPITULOS);
+  assert.equal(m.asegurarJovenes(d, hoy), null);
+  // Si la borras, no vuelve.
+  assert.equal(m.asegurarJovenes(m.borrarPlan(d, j.id), hoy), null);
+
+  // Aparte: no sale entre tus lecturas, ni «He leído» la marca, ni ella marca «He leído».
+  assert.deepEqual(m.lecturasDelDia(d, hoy).map((x) => x.plan.plantilla), ['nt-90']);
+  assert.deepEqual(m.lecturasDeGrupo(d, hoy).map((x) => x.plan.id), [j.id]);
+  const leido = m.marcarLeido(d, hoy);
+  assert.equal(m.lecturasDeGrupo(leido, hoy)[0].hecha, false);
+  const conGrupo = m.marcarGrupo(d, hoy, true, hoy);
+  assert.equal(m.lecturasDeGrupo(conGrupo, hoy)[0].hecha, true);
+  assert.equal(conGrupo.dias[hoy]?.leido ?? false, false);
+  assert.equal(m.lecturasDelDia(conGrupo, hoy)[0].hecha, false);
+  // Pero leer con el grupo cuenta para la racha.
+  assert.equal(m.racha(conGrupo, hoy), 1);
+  assert.equal(m.lecturasDeGrupo(m.marcarGrupo(conGrupo, hoy, false, hoy), hoy)[0].hecha, false);
+
+  // «El grupo va por Mateo 5»: desde hoy se sigue desde ahí; lo anterior no se toca.
+  const manana = m.sumarDias(hoy, 1);
+  const movido = m.recolocarPlan(conGrupo, j.id, 'MAT.5', manana);
+  const pj = movido.planes.find((p) => p.id === j.id);
+  assert.deepEqual(pj.lecturas[0], { fecha: hoy, caps: ['GEN.1', 'GEN.2', 'GEN.3'] });
+  assert.deepEqual(pj.lecturas[1], { fecha: manana, caps: ['MAT.5', 'MAT.6', 'MAT.7'] });
+  assert.equal(pj.hechas[hoy], hoy);
+  assert.throws(() => m.recolocarPlan(d, d.planes[0].id, 'MAT.5', hoy), /ritmo fijo/);
+
+  // Lo atrasado, de una vez; y el aviso de la mañana nombra lo del grupo.
+  const tarde = m.marcarAtrasadas(d, j.id, m.sumarDias(hoy, 3));
+  assert.equal(Object.keys(tarde.planes.find((p) => p.id === j.id).hechas).length, 3);
+  const avisos = m.avisosBiblia(d, new Date(2026, 10, 9, 6).getTime(), 1);
+  assert.match(avisos[0].texto, /Lectura Jóvenes: Génesis 1–3/);
+
+  // Desde el chat: que=["jovenes"].
+  let guardado = d;
+  const almacen = m.crearAlmacenBiblia({ leer: async () => guardado, guardar: async (x) => (guardado = x) });
+  const r = await almacen.marcar({ que: ['jovenes'] }, hoy);
+  assert.deepEqual(r.ids, ['jovenes']);
+  assert.equal(m.lecturasDeGrupo(guardado, hoy)[0].hecha, true);
+  assert.equal(m.lecturasDeGrupo(m.marcarCasilla(guardado, hoy, 'jovenes', false), hoy)[0].hecha, false);
+});

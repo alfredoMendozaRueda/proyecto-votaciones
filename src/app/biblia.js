@@ -26,6 +26,10 @@ import {
   ponerAjustes,
   ponerAgenda,
   lecturasDelDia,
+  lecturasDeGrupo,
+  recolocarPlan,
+  marcarAtrasadas,
+  leerCapitulo,
   estadoPlan,
   ponerseAlDia,
   racha,
@@ -92,6 +96,7 @@ export function crearBiblia({ contenedor, api, alCambiar = () => {} }) {
   let tic = null;
   let preguntando = false;
   let deshacer = null;
+  let recolocando = null; // plan de grupo cuyo «va por otro sitio» está abierto
   let temporizadorAviso = null;
 
   async function cargar() {
@@ -158,7 +163,47 @@ export function crearBiblia({ contenedor, api, alCambiar = () => {} }) {
     const v = versiculoDelDia(dia);
     const r = racha(datos, hoy);
     const m = resumenMes(datos, hoy.slice(0, 7), hoy);
-    const atrasos = activos.map((p) => ({ plan: p, e: estadoPlan(p, hoy) })).filter((x) => x.e.atrasadas.length && dia === hoy);
+    const atrasos = activos.filter((p) => !p.grupo).map((p) => ({ plan: p, e: estadoPlan(p, hoy) })).filter((x) => x.e.atrasadas.length && dia === hoy);
+    const propios = activos.filter((p) => !p.grupo);
+
+    // Lo del grupo (Lectura Jóvenes): aparte de tu lectura, con su propio botón.
+    const grupo = lecturasDeGrupo(datos, dia)
+      .map(({ plan, lectura: l, hecha }) => {
+        const ts = tramos(l.caps);
+        const e = estadoPlan(plan, hoy);
+        const n = plan.lecturas.findIndex((x) => x.fecha === l.fecha) + 1;
+        const primero = leerCapitulo(l.caps[0]);
+        const formulario =
+          recolocando === plan.id
+            ? `<form class="biblia__recolocar" data-form-recolocar="${plan.id}">
+                <p class="ajuste__ayuda">¿Por dónde va el grupo ${dia === hoy ? 'hoy' : 'ese día'}? Desde ahí se sigue a ${plan.porDia} capítulos al día; lo anterior no se toca.</p>
+                <div class="biblia__recolocar-campos">
+                  <select class="campo" name="libro" aria-label="Libro">${LIBROS.map((x) => `<option value="${x.id}" ${x.id === primero.libro ? 'selected' : ''}>${escapar(x.nombre)}</option>`).join('')}</select>
+                  <input class="campo" name="capitulo" type="number" inputmode="numeric" min="1" max="150" value="${primero.capitulo}" aria-label="Capítulo" data-foco="recolocar">
+                </div>
+                <p class="apartado__mensaje" role="alert" hidden></p>
+                <div class="formulario__botones"><button type="submit" class="boton boton--primario">Seguir desde ahí</button><button type="button" class="boton" data-recolocar="${plan.id}">Cancelar</button></div>
+              </form>`
+            : '';
+        return `
+          <div class="biblia__lectura biblia__grupo${hecha ? ' biblia__lectura--hecha' : ''}">
+            <p class="biblia__plan-etiqueta"><span class="biblia__insignia">Grupo</span>${escapar(plan.nombre)} · ${l.caps.length} ${l.caps.length === 1 ? 'capítulo' : 'capítulos'} · unos ${minutosDe(l.caps)} min</p>
+            <p class="biblia__pasaje">${escapar(textoLectura(l.caps))}</p>
+            <div class="biblia__abrir">
+              ${ts.map((t) => enlace(enlaceTramo(t), `${icono('libro', 14)} ${escapar(nombreTramo(t, { corto: ts.length > 2 }))} ${icono('enlace', 12)}`, 'chip biblia__enlace')).join('')}
+            </div>
+            <span class="biblia__barra" aria-hidden="true"><span style="width:${Math.max(1, Math.round(e.parte * 100))}%"></span></span>
+            <p class="biblia__grupo-pie">Día ${n} de ${plan.lecturas.length} · ${e.leidos} de ${e.total} capítulos${
+              e.atrasadas.length && dia === hoy ? ` · <button type="button" class="gastos__enlace" data-atrasadas-hechas="${plan.id}">${e.atrasadas.length === 1 ? 'Ayer también lo leí' : `Marcar ${e.atrasadas.length} días atrasados`}</button>` : ''
+            }</p>
+            <div class="biblia__grupo-botones">
+              <button type="button" class="boton ${hecha ? '' : 'boton--primario'} biblia__leida" data-lectura="${plan.id}" data-fecha="${l.fecha}" aria-pressed="${hecha}">${icono('hecho', 15)} ${hecha ? 'Leída con el grupo' : 'Marcar como leída'}</button>
+              ${recolocando === plan.id ? '' : `<button type="button" class="boton" data-recolocar="${plan.id}">Va por otro sitio</button>`}
+            </div>
+            ${formulario}
+          </div>`;
+      })
+      .join('');
 
     const cabecera = `
       <header class="gastos__mes biblia__dia">
@@ -185,7 +230,7 @@ export function crearBiblia({ contenedor, api, alCambiar = () => {} }) {
               </div>`;
           })
           .join('')
-      : activos.length
+      : propios.length
       ? `<div class="biblia__lectura biblia__lectura--libre"><p class="biblia__pasaje">${dia === hoy ? 'Hoy no toca lectura' : 'Ese día no toca lectura'}</p><p class="ajuste__ayuda">Descansa o lee por tu cuenta: puedes marcar igualmente «He leído».</p></div>`
       : `<div class="biblia__lectura biblia__lectura--libre">
            <p class="biblia__pasaje">Empieza un plan de lectura</p>
@@ -242,6 +287,7 @@ export function crearBiblia({ contenedor, api, alCambiar = () => {} }) {
         )
         .join('')}
       ${lectura}
+      ${grupo}
       <div class="biblia__casillas" role="group" aria-label="Lo de hoy">
         ${casillas
           .map((c) => `<button type="button" class="biblia__casilla" data-casilla="${c.id}" aria-pressed="${c.si}"><span class="biblia__check">${icono(c.si ? 'hecho' : c.ico, 16)}</span>${escapar(c.nombre)}</button>`)
@@ -377,7 +423,7 @@ export function crearBiblia({ contenedor, api, alCambiar = () => {} }) {
     return `
       <li class="biblia__plan${abiertoAqui ? ' biblia__plan--abierto' : ''}">
         <button type="button" class="biblia__plan-fila" data-abrir-plan="${p.id}" aria-expanded="${abiertoAqui}">
-          <span class="biblia__plan-nombre">${escapar(p.nombre)}${e.atrasadas.length ? ` <span class="biblia__marca">${e.atrasadas.length} atrasadas</span>` : ''}</span>
+          <span class="biblia__plan-nombre">${p.grupo ? '<span class="biblia__insignia">Grupo</span>' : ''}${escapar(p.nombre)}${e.atrasadas.length ? ` <span class="biblia__marca">${e.atrasadas.length} atrasadas</span>` : ''}</span>
           <span class="biblia__plan-detalle">${escapar(detalle)}</span>
           <span class="biblia__barra" aria-hidden="true"><span style="width:${pct}%"></span></span>
         </button>
@@ -620,6 +666,11 @@ export function crearBiblia({ contenedor, api, alCambiar = () => {} }) {
       const cuando = b.closest('.biblia__lectura') && dia < hoy ? dia : hoy;
       return guardar(marcarLectura(datos, d.lectura, d.fecha, !hecha, cuando), hecha ? {} : { aviso: 'Lectura hecha', alDeshacer: true });
     }
+    if (d.recolocar) {
+      recolocando = recolocando === d.recolocar ? null : d.recolocar;
+      return pintar();
+    }
+    if (d.atrasadasHechas) return guardar(marcarAtrasadas(datos, d.atrasadasHechas, hoy), { aviso: 'Marcado lo atrasado del grupo', alDeshacer: true });
     if (d.crono) return alternarCrono(d.crono);
     if (d.sumar) return guardar(sumarMinutos(datos, dia, d.sumar, Number(d.min)));
     if ('preguntas' in d) return pedirPreguntas();
@@ -734,6 +785,14 @@ export function crearBiblia({ contenedor, api, alCambiar = () => {} }) {
         pestana = r.plan.lecturas[0].fecha <= hoy ? 'hoy' : 'planes';
         dia = hoy;
         await guardar(r.datos, { aviso: `Plan en marcha: ${r.plan.nombre}`, alDeshacer: true });
+        return;
+      }
+      if (form.dataset.formRecolocar) {
+        const capitulo = `${form.libro.value}.${Number(form.capitulo.value) || 1}`;
+        if (!leerCapitulo(capitulo)) throw new Error('Ese libro no tiene ese capítulo.');
+        const nuevos = recolocarPlan(datos, form.dataset.formRecolocar, capitulo, dia < hoy ? hoy : dia);
+        recolocando = null;
+        await guardar(nuevos, { aviso: 'El grupo sigue desde ahí', alDeshacer: true });
         return;
       }
       if ('formAgenda' in form.dataset) return anadirAAgenda(form);

@@ -178,7 +178,10 @@ export const PLANTILLAS = [
   { id: 'nt-90', nombre: 'El Nuevo Testamento en 90 días', detalle: 'Unos 3 capítulos al día.', dias: 90, pistas: () => [capitulosDe(...todos((l) => !l.at))] },
   { id: 'evangelios-40', nombre: 'Los cuatro Evangelios en 40 días', detalle: 'Mateo, Marcos, Lucas y Juan.', dias: 40, pistas: () => [capitulosDe('MAT', 'MRK', 'LUK', 'JHN')] },
   { id: 'salmos-proverbios', nombre: 'Salmos y Proverbios en un mes', detalle: 'Un capítulo de Proverbios y unos 5 Salmos al día.', dias: 31, pistas: () => [capitulosDe('PRO'), capitulosDe('PSA')] },
+  // De grupo: ritmo fijo (3 capítulos justos al día) y aparte de tu lectura personal.
+  { id: 'jovenes', nombre: 'Lectura Jóvenes', detalle: 'Con el grupo: 3 capítulos al día, de Génesis a Apocalipsis. Va aparte de tu lectura.', dias: Math.ceil(TOTAL_CAPITULOS / 3), porDia: 3, grupo: true, pistas: () => [capitulosDe(...todos())] },
 ];
+export const ID_PLAN_JOVENES = 'pjovenes';
 export const plantilla = (id) => PLANTILLAS.find((p) => p.id === id) ?? null;
 
 // ---------- Datos ----------
@@ -220,6 +223,9 @@ function normalizarPlan(p) {
     saltadas: [...new Set((Array.isArray(p.saltadas) ? p.saltadas : []).filter((f) => fechas.has(f) && !hechas[f]))],
     archivado: p.archivado === true,
     creado: Number.isFinite(p.creado) ? p.creado : 0,
+    // De grupo (Lectura Jóvenes): va aparte de tu lectura; porDia = capítulos fijos al día.
+    grupo: p.grupo === true || p.plantilla === 'jovenes',
+    porDia: entero(p.porDia, 1, 20) ?? (p.plantilla === 'jovenes' ? 3 : 0),
   };
 }
 
@@ -267,6 +273,8 @@ export function normalizarBiblia(d = {}) {
       avisos: a.avisos !== false,
       avisoManana: HORA.test(a.avisoManana) ? a.avisoManana : a.avisoManana === '' ? '' : AJUSTES_BIBLIA.avisoManana,
       avisoNoche: HORA.test(a.avisoNoche) ? a.avisoNoche : a.avisoNoche === '' ? '' : AJUSTES_BIBLIA.avisoNoche,
+      // Ya se te puso (una vez) el plan Lectura Jóvenes: si lo borras, no vuelve.
+      ...(a.jovenes === true ? { jovenes: true } : {}),
     },
     agenda,
   };
@@ -293,14 +301,57 @@ function lecturasDe(pistas, fechas) {
 
 // Un plan listo: { plantilla, inicio, dias?, fin? }. Sin «fin», dura lo de la plantilla
 // en días de lectura (con lunes a viernes, un año de lecturas tarda más).
-export function crearPlanDePlantilla(datos, { plantilla: id, inicio, dias, fin = null, nombre = '' }, ahora = Date.now()) {
-  const p = plantilla(id);
+export function crearPlanDePlantilla(datos, { plantilla: idPlantilla, inicio, dias, fin = null, nombre = '', desde = '', id = undefined }, ahora = Date.now()) {
+  const p = plantilla(idPlantilla);
   if (!p) throw new Error('Ese plan no existe.');
   if (!fechaValida(inicio)) throw new Error('Pon una fecha de inicio válida.');
   if (fin && (!fechaValida(fin) || fin < inicio)) throw new Error('La fecha final tiene que ser después del inicio.');
+  if (p.porDia) {
+    // Ritmo fijo: tantos capítulos justos cada día de lectura, hasta acabar (sin fecha final).
+    const lecturas = lecturasFijas(desdeCapitulo(p.pistas()[0], desde), inicio, listaDias(dias), p.porDia);
+    return guardarPlan(datos, { id, nombre: nombre || p.nombre, plantilla: p.id, dias: listaDias(dias), lecturas, creado: ahora, grupo: p.grupo === true, porDia: p.porDia });
+  }
   const fechas = fechasDelPlan({ inicio, fin, dias: listaDias(dias), n: p.dias });
   if (!fechas.length) throw new Error('Entre esas fechas no hay ningún día de lectura.');
   return guardarPlan(datos, { nombre: nombre || p.nombre, plantilla: p.id, dias: listaDias(dias), lecturas: lecturasDe(p.pistas(), fechas), creado: ahora });
+}
+
+// Capítulos justos por día (el último día, los que queden).
+function lecturasFijas(caps, inicio, dias, porDia) {
+  const fechas = diasDeLectura(inicio, { n: Math.ceil(caps.length / porDia), dias });
+  return fechas.map((fecha, i) => ({ fecha, caps: caps.slice(i * porDia, (i + 1) * porDia) })).filter((l) => l.caps.length);
+}
+function desdeCapitulo(caps, desde) {
+  if (!desde) return caps;
+  const i = caps.indexOf(desde);
+  if (i < 0) throw new Error('Ese capítulo no está en el plan.');
+  return caps.slice(i);
+}
+
+// «El grupo va hoy por tal capítulo»: lo de antes de hoy se queda como está y desde
+// hoy se sigue desde ese capítulo, al mismo ritmo (por si el grupo va por otro sitio).
+export function recolocarPlan(datos, planId, capitulo, hoy = fechaISO()) {
+  return cambiarPlan(datos, planId, (p) => {
+    if (!p.porDia) throw new Error('Ese plan no va a ritmo fijo.');
+    const orden = plantilla(p.plantilla)?.pistas()[0] ?? p.lecturas.flatMap((l) => l.caps);
+    const antes = p.lecturas.filter((l) => l.fecha < hoy);
+    const fechasAntes = new Set(antes.map((l) => l.fecha));
+    return {
+      ...p,
+      lecturas: [...antes, ...lecturasFijas(desdeCapitulo(orden, capitulo), hoy, p.dias, p.porDia)],
+      hechas: Object.fromEntries(Object.entries(p.hechas).filter(([f]) => fechasAntes.has(f))),
+      saltadas: p.saltadas.filter((f) => fechasAntes.has(f)),
+    };
+  });
+}
+
+// El plan Lectura Jóvenes se pone solo una vez (empezando hoy). Devuelve los datos
+// nuevos, o null si no hay nada que hacer. Si lo borras, no vuelve.
+export function asegurarJovenes(datos, hoy = fechaISO(), ahora = Date.now()) {
+  if (datos.ajustes.jovenes) return null;
+  const conMarca = (d) => normalizarBiblia({ ...d, ajustes: { ...d.ajustes, jovenes: true } });
+  if (datos.planes.some((p) => p.plantilla === 'jovenes')) return conMarca(datos);
+  return conMarca(crearPlanDePlantilla(datos, { plantilla: 'jovenes', inicio: hoy, id: ID_PLAN_JOVENES }, ahora).datos);
 }
 
 // Tu plan: unos libros (en el orden de la Biblia, o el que digas) desde «inicio» hasta «fin».
@@ -333,7 +384,8 @@ export function nombreDeLibros(ids) {
 }
 function guardarPlan(datos, p) {
   if (datos.planes.filter((x) => !x.archivado).length >= MAX_PLANES) throw new Error(`Puedes tener hasta ${MAX_PLANES} planes.`);
-  const plan = normalizarPlan({ ...p, id: undefined });
+  // Sin id propio salvo el del plan de grupo, que es fijo (así dos dispositivos no lo duplican).
+  const plan = normalizarPlan({ ...p, id: p.id === ID_PLAN_JOVENES && !datos.planes.some((x) => x.id === p.id) ? p.id : undefined });
   if (!plan) throw new Error('El plan ha quedado vacío.');
   return { datos: normalizarBiblia({ ...datos, planes: [...datos.planes, plan] }), plan };
 }
@@ -349,6 +401,7 @@ export function vistaPrevia(lecturas) {
 export function previaPlantilla({ plantilla: id, inicio, dias, fin = null }) {
   const p = plantilla(id);
   if (!p || !fechaValida(inicio)) return null;
+  if (p.porDia) return vistaPrevia(lecturasFijas(p.pistas()[0], inicio, listaDias(dias), p.porDia));
   return vistaPrevia(lecturasDe(p.pistas(), fechasDelPlan({ inicio, fin, dias: listaDias(dias), n: p.dias })));
 }
 export function previaPropia({ libros: ids, inicio, fin, dias }) {
@@ -382,15 +435,32 @@ export function marcarLectura(datos, planId, fecha, si = true, hoy = fechaISO())
     else delete hechas[fecha];
     return { ...p, hechas, saltadas: p.saltadas.filter((f) => f !== fecha) };
   });
-  if (si) nuevos = cambiarDia(nuevos, hoy, (d) => ({ ...d, leido: true }));
+  // La lectura del grupo va aparte: no marca tu «He leído».
+  if (si && !datos.planes.find((p) => p.id === planId)?.grupo) nuevos = cambiarDia(nuevos, hoy, (d) => ({ ...d, leido: true }));
   return nuevos;
 }
 
-// Las lecturas del plan para un día (las que tocan ese día).
-export const lecturasDelDia = (datos, fecha) =>
+const lecturasDe1Dia = (datos, fecha, grupo) =>
   datos.planes
-    .filter((p) => !p.archivado)
+    .filter((p) => !p.archivado && p.grupo === grupo)
     .flatMap((p) => p.lecturas.filter((l) => l.fecha === fecha).map((l) => ({ plan: p, lectura: l, hecha: Boolean(p.hechas[l.fecha]) })));
+// Las lecturas de tus planes para un día (las que tocan ese día); las del grupo, aparte.
+export const lecturasDelDia = (datos, fecha) => lecturasDe1Dia(datos, fecha, false);
+export const lecturasDeGrupo = (datos, fecha) => lecturasDe1Dia(datos, fecha, true);
+// Marca (o desmarca) lo que toca ese día con el grupo.
+export function marcarGrupo(datos, fecha, si = true, hoy = fechaISO()) {
+  let nuevos = datos;
+  for (const { plan, lectura } of lecturasDeGrupo(datos, fecha)) nuevos = marcarLectura(nuevos, plan.id, lectura.fecha, si, hoy);
+  return nuevos;
+}
+// Lo atrasado de un plan, dado por leído de una vez.
+export function marcarAtrasadas(datos, planId, hoy = fechaISO()) {
+  const plan = datos.planes.find((p) => p.id === planId);
+  if (!plan) throw new Error('Ese plan ya no existe.');
+  let nuevos = datos;
+  for (const l of estadoPlan(plan, hoy).atrasadas) nuevos = marcarLectura(nuevos, planId, l.fecha, true, hoy);
+  return nuevos;
+}
 
 // «He leído»: también marca las lecturas de ese día en tus planes (y las desmarca).
 export function marcarLeido(datos, fecha, si = true) {
@@ -405,6 +475,7 @@ export const marcarOrado = (datos, fecha, si = true) => cambiarDia(datos, fecha,
 export function marcarCasilla(datos, fecha, id, si = true) {
   if (id === 'leido') return marcarLeido(datos, fecha, si);
   if (id === 'orado') return marcarOrado(datos, fecha, si);
+  if (id === 'jovenes') return marcarGrupo(datos, fecha, si);
   if (!datos.casillas.some((c) => c.id === id)) throw new Error('Esa casilla ya no existe.');
   return cambiarDia(datos, fecha, (d) => {
     const extra = { ...d.extra };
@@ -492,7 +563,9 @@ export function ponerseAlDia(datos, planId, forma, hoy = fechaISO()) {
 // Un día «cuenta» si hiciste algo: leer, orar o alguna de tus casillas.
 export function diaHecho(datos, fecha) {
   const d = datos.dias[fecha];
-  return Boolean(d && (d.leido || d.orado || Object.keys(d.extra).length));
+  if (d && (d.leido || d.orado || Object.keys(d.extra).length)) return true;
+  // Leer con el grupo también cuenta para la racha.
+  return datos.planes.some((p) => p.grupo && Object.values(p.hechas).includes(fecha));
 }
 // Días seguidos hasta hoy (si hoy aún no, se cuenta hasta ayer: el día no ha acabado).
 export function racha(datos, hoy = fechaISO()) {
@@ -607,9 +680,10 @@ export function avisosBiblia(datos, ahora = Date.now(), dias = 14) {
   const compacta = (f) => f.replaceAll('-', '');
   for (let i = 0; i < dias; i++) {
     const fecha = sumarDias(hoy, i);
-    const tocan = lecturasDelDia(datos, fecha);
-    const pendientes = tocan.filter((x) => !x.hecha);
-    const lectura = textoLectura(pendientes.flatMap((x) => x.lectura.caps));
+    const pendientes = lecturasDelDia(datos, fecha).filter((x) => !x.hecha);
+    const delGrupo = lecturasDeGrupo(datos, fecha).filter((x) => !x.hecha);
+    const lectura = [textoLectura(pendientes.flatMap((x) => x.lectura.caps)), ...delGrupo.map((x) => `${x.plan.nombre}: ${textoLectura(x.lectura.caps)}`)].filter(Boolean).join(' · ');
+    pendientes.push(...delGrupo);
     const d = datos.dias[fecha];
     if (avisoManana && pendientes.length) {
       const cuando = momento(fecha, avisoManana);
@@ -635,6 +709,7 @@ export function resumenParaIA(datos, hoy = fechaISO()) {
   return {
     hoy,
     lectura_de_hoy: deHoy.length ? deHoy.map((x) => `${x.plan.nombre}: ${textoLectura(x.lectura.caps)}${x.hecha ? ' (hecha)' : ''}`) : 'hoy no toca nada en sus planes',
+    lectura_del_grupo_hoy: lecturasDeGrupo(datos, hoy).map((x) => `${x.plan.nombre}: ${textoLectura(x.lectura.caps)}${x.hecha ? ' (hecha)' : ''}`),
     hecho_hoy: { leido: Boolean(d?.leido), orado: Boolean(d?.orado), ...Object.fromEntries(datos.casillas.map((c) => [c.nombre, Boolean(d?.extra[c.id])])) },
     minutos_hoy: d ? { lectura: d.minLectura, oracion: d.minOracion } : undefined,
     racha: racha(datos, hoy) === 1 ? '1 día seguido' : `${racha(datos, hoy)} días seguidos`,
@@ -667,6 +742,14 @@ export function crearAlmacenBiblia({ leer, guardar, alCambiar = () => {} }) {
       const hecho = [];
       const ids = [];
       for (const q of que) {
+        // «jovenes»: la lectura del grupo de ese día (va aparte de «leido»).
+        if (q === 'jovenes') {
+          if (!lecturasDeGrupo(datos, dia).length) throw new Error('Ese día no toca lectura con el grupo.');
+          datos = marcarGrupo(datos, dia, si !== false, hoy);
+          ids.push('jovenes');
+          hecho.push(`Lectura Jóvenes (${textoLectura(lecturasDeGrupo(datos, dia).flatMap((x) => x.lectura.caps))})`);
+          continue;
+        }
         const id = q === 'leido' || q === 'orado' ? q : datos.casillas.find((c) => c.nombre.toLowerCase() === String(q).toLowerCase())?.id;
         if (!id) throw new Error(`No tienes una casilla «${q}».`);
         datos = marcarCasilla(datos, dia, id, si !== false);

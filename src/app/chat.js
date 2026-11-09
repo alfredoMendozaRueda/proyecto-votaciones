@@ -182,11 +182,9 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     const r = await Promise.resolve(obtenerResumen()).catch(() => null);
     if (!mensajes.contains(caja)) return;
     const cartas = r ? cartasDeHoy(r) : [];
-    if (!cartas.length) {
-      caja.remove();
-      mensajes.querySelector('.asistente__hola span')?.replaceChildren('¿En qué te ayudo?');
-      return;
-    }
+    caja.hidden = !cartas.length;
+    mensajes.querySelector('.asistente__hola span')?.replaceChildren(cartas.length ? 'Esto es lo que tienes hoy.' : '¿En qué te ayudo?');
+    if (!cartas.length) return;
     caja.innerHTML = cartas
       .map(
         (c, i) => `<div class="asistente__carta asistente__carta--${c.tono}">
@@ -238,6 +236,23 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
           await api.biblia.guardar(marcarCasilla(datos, hoy, 'leido', !datos.dias[hoy]?.leido));
           alMarcarBiblia();
           boton.textContent = datos.dias[hoy]?.leido ? 'He leído' : 'Leída ✓';
+        },
+      });
+    }
+    // Lo del grupo de jóvenes, aparte.
+    for (const g of biblia?.grupo ?? []) {
+      cartas.push({
+        tono: 'oro',
+        titulo: `${g.plan.nombre} · ${textoLectura(g.lectura.caps)}`,
+        detalle: `${g.lectura.caps.length} capítulos · día ${g.dia} de ${g.plan.lecturas.length}`,
+        accion: g.hecha ? 'Leída ✓' : 'Leída',
+        hacer: async (boton) => {
+          const datos = normalizarBiblia((await api.biblia.leer().catch(() => null)) ?? {});
+          const hoy = fechaISO();
+          const estaba = datos.planes.find((p) => p.id === g.plan.id)?.hechas[hoy];
+          await api.biblia.guardar(marcarCasilla(datos, hoy, 'jovenes', !estaba));
+          alMarcarBiblia();
+          boton.textContent = estaba ? 'Leída' : 'Leída ✓';
         },
       });
     }
@@ -1054,6 +1069,8 @@ export function crearChat({ contenedor, api, alEstado, abrirAjustes, obtenerAjus
     terminarConversacion,
     enConversacion: () => conversando,
     ofrecerConversacion,
+    // Al volver al Chat sin conversación: las tarjetas de hoy, al día.
+    refrescar: () => pintarCartas(),
     // Desde un toque (p. ej. «Hablar» en Hoy): empieza a escuchar sin más.
     empezarConversacion: () => {
       if (!botonConversar || entrada.disabled || conversando) return false;
