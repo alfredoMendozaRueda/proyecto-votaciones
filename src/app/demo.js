@@ -466,7 +466,7 @@ export function crearDemo() {
         const q = consulta.toLowerCase();
         const mensajes = correos
           .filter((c) => !c.archivado && !c.papelera)
-          .filter((c) => (filtro === 'no-leidos' ? c.noLeido : filtro === 'destacados' ? c.destacado : true))
+          .filter((c) => (filtro === 'no-leidos' || filtro === 'importantes' ? c.noLeido : filtro === 'destacados' ? c.destacado : true))
           .filter((c) => !q || `${c.de.nombre} ${c.asunto} ${c.extracto}`.toLowerCase().includes(q))
           .sort((a, b) => b.fecha - a.fecha)
           .map(({ html, texto, adjuntos, ...resumen }) => resumen);

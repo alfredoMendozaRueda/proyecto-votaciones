@@ -164,7 +164,7 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
   }
 
   // El formulario se abre con el día elegido en el calendario.
-  function abrirFormulario(formulario) {
+  function abrirFormulario(formulario, aLas = null) {
     formulario.reset();
     const base = new Date();
     base.setHours(base.getHours() + 1, 0, 0, 0);
@@ -173,6 +173,11 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
     formulario.fecha.value = fechaCampo(dia);
     formulario.inicio.value = horaCampo(dia);
     formulario.fin.value = `${dos(Math.min(dia.getHours() + 1, 23))}:00`;
+    // Desde la línea del día: a la hora que has tocado.
+    if (aLas !== null) {
+      formulario.inicio.value = `${dos(aLas)}:00`;
+      formulario.fin.value = `${dos(Math.min(aLas + 1, 23))}:${aLas === 23 ? '59' : '00'}`;
+    }
     formulario.querySelector('[data-horas]').hidden = false;
     mensajeError(formulario, '');
     formulario.hidden = false;
@@ -451,6 +456,15 @@ export function crearAgenda({ contenedor, api, abrirAjustes, preguntar, alCrear 
           .join('')}
         ${esHoy && horaDe(ahora) >= desde && horaDe(ahora) <= hasta ? `<div class="linea__ahora" style="top:${y(horaDe(ahora))}px"><em>${horaCorta(ahora)}</em></div>` : ''}
       </div>`;
+    // Tocar una hora libre: cita nueva a esa hora.
+    const linea = caja.querySelector('.linea');
+    linea.addEventListener('click', (ev) => {
+      if (ev.target.closest('.linea__evento, .linea__aviso') || contenedor.querySelector('#agenda-nuevo').hidden) return;
+      const hora = Math.max(0, Math.min(23, desde + Math.floor((ev.clientY - linea.getBoundingClientRect().top) / ALTO)));
+      const formulario = contenedor.querySelector('#agenda-formulario');
+      abrirFormulario(formulario, hora);
+      formulario.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
     // Borrar una cita: el mismo botón de siempre, dentro de su bloque.
     for (const div of caja.querySelectorAll('.linea__evento')) {
       const e = citas.find((x) => String(x.id) === div.dataset.id);

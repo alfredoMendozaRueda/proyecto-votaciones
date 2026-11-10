@@ -1430,3 +1430,526 @@ button.bloque--heroe:hover {
   grid-template-columns: minmax(0, 1fr) 96px;
   gap: 8px;
 }
+
+/* ==========================================================================
+   Pulido (nov. 2026): profundidad, movimiento y listas agrupadas.
+   ========================================================================== */
+
+:root {
+  --luz: inset 0 1px 0 rgba(255, 244, 236, 0.045);
+  --muelle: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* ---------- Fondo con profundidad: un resplandor bermellón muy tenue arriba ---------- */
+
+:root:not(.x) .dialogo {
+  background:
+    radial-gradient(120% 34% at 50% -6%, rgba(217, 58, 43, 0.13), transparent 70%),
+    radial-gradient(90% 30% at 100% 104%, rgba(201, 163, 94, 0.05), transparent 70%),
+    var(--fondo);
+}
+
+/* Los bloques: relleno con un filo de luz arriba, como laca. */
+:root:not(.x) :is(.bloque:not(.bloque--heroe), .asistente__carta, .grupo, .tarjeta-aviso, .gastos__cifra, .biblia__lectura, .biblia__plan, .biblia__versiculo, .empleo-portada, .empleo-perfil, .oferta, .calendario, .ajustes-temas, .hoja-mas__item) {
+  background-image: linear-gradient(180deg, rgba(255, 244, 236, 0.022), transparent 42%);
+  box-shadow: var(--luz);
+}
+
+/* ---------- Barra: una píldora que se desliza hasta el apartado activo ---------- */
+
+:root:not(.x) .apartados {
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), var(--luz);
+}
+
+:root:not(.x) .apartados button {
+  z-index: 1;
+  transition: color 0.25s ease, transform 0.15s var(--muelle);
+}
+
+:root:not(.x) .apartados button:active {
+  background: transparent;
+  transform: scale(0.94);
+}
+
+:root:not(.x) .apartados__indicador {
+  display: block;
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: auto;
+  width: var(--w, 0) !important;
+  height: 52px !important;
+  border-radius: 26px;
+  background: rgba(242, 232, 224, 0.09);
+  box-shadow: var(--luz);
+  transform: translateX(var(--x, 0)) !important;
+  pointer-events: none;
+}
+
+:root:not(.x) .apartados__indicador.lista {
+  transition: transform 0.42s var(--muelle), width 0.42s var(--muelle), opacity 0.2s ease;
+}
+
+/* El botón de voz respira. */
+.boton-voz::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--rojo-2);
+  opacity: 0;
+  animation: voz-respira 3.2s ease-out infinite;
+  pointer-events: none;
+}
+
+.boton-voz {
+  background: radial-gradient(circle at 34% 28%, #f0553f, var(--rojo) 58%, #b62c20);
+}
+
+@keyframes voz-respira {
+  0% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.38);
+  }
+}
+
+/* ---------- Entradas: los bloques suben uno tras otro ---------- */
+
+@keyframes sube {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+}
+
+.bento > div,
+.asistente > *,
+.hoja-mas__item {
+  animation: sube 0.5s var(--muelle) both;
+}
+
+.bento > div:nth-child(2),
+.asistente > *:nth-child(2),
+.hoja-mas__item:nth-child(2) { animation-delay: 0.04s; }
+.bento > div:nth-child(3),
+.asistente > *:nth-child(3),
+.hoja-mas__item:nth-child(3) { animation-delay: 0.08s; }
+.bento > div:nth-child(4),
+.asistente > *:nth-child(4),
+.hoja-mas__item:nth-child(4) { animation-delay: 0.12s; }
+.bento > div:nth-child(5),
+.hoja-mas__item:nth-child(5) { animation-delay: 0.16s; }
+.bento > div:nth-child(6),
+.hoja-mas__item:nth-child(6) { animation-delay: 0.2s; }
+.bento > div:nth-child(n + 7),
+.hoja-mas__item:nth-child(n + 7) { animation-delay: 0.24s; }
+
+.asistente__carta {
+  animation: sube 0.45s var(--muelle) both;
+}
+
+.asistente__carta:nth-child(2) { animation-delay: 0.05s; }
+.asistente__carta:nth-child(3) { animation-delay: 0.1s; }
+.asistente__carta:nth-child(4) { animation-delay: 0.15s; }
+.asistente__carta:nth-child(n + 5) { animation-delay: 0.2s; }
+
+/* ---------- Héroe: bermellón con relieve y trama de cáñamo ---------- */
+
+.bloque--heroe {
+  background:
+    radial-gradient(130% 120% at 0% 0%, #f25a43 0%, transparent 55%),
+    linear-gradient(155deg, #df3f2e 0%, #c93022 60%, #a8261b 100%);
+  box-shadow: 0 18px 44px rgba(190, 44, 30, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+button.bloque--heroe:hover {
+  background:
+    radial-gradient(130% 120% at 0% 0%, #f66248 0%, transparent 55%),
+    linear-gradient(155deg, #e34432 0%, #cd3324 60%, #ac281c 100%);
+}
+
+.bloque--heroe::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--asanoha) 0 0 / 44px auto;
+  opacity: 0.16;
+  -webkit-mask-image: linear-gradient(115deg, transparent 35%, #000 100%);
+  mask-image: linear-gradient(115deg, transparent 35%, #000 100%);
+  pointer-events: none;
+}
+
+.bloque--heroe .bloque__etiqueta {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.16);
+  color: #fff;
+  font-weight: 550;
+}
+
+/* ---------- Chat: Kitsune sin papel; tú, en crema ---------- */
+
+:root:not(.x) .burbuja--kitsune {
+  max-width: 100%;
+  padding: 2px 4px 2px 2px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--crema);
+  font-size: 15.5px;
+  line-height: 1.55;
+}
+
+:root:not(.x).movil .burbuja--kitsune {
+  max-width: 100%;
+  color: var(--crema);
+}
+
+:root:not(.x) .burbuja--kitsune strong {
+  color: #fff;
+}
+
+:root:not(.x) .burbuja--kitsune :is(code, blockquote) {
+  border-color: rgba(242, 232, 224, 0.12);
+  background: var(--b2);
+  color: var(--crema);
+}
+
+:root:not(.x) .burbuja--kitsune a {
+  color: var(--rojo-2);
+}
+
+:root:not(.x) .burbuja--kitsune .burbuja__copiar {
+  border: 0;
+  background: var(--b2);
+  color: var(--t2);
+}
+
+:root:not(.x) .burbuja--usuario {
+  max-width: 82%;
+  padding: 11px 16px;
+  font-size: 15.5px;
+  box-shadow: none;
+}
+
+:root:not(.x) .asistente__sugerencias {
+  flex-direction: row;
+  border: 0;
+}
+
+:root:not(.x) .asistente__sugerencias button {
+  width: auto;
+  border-bottom: 1px solid rgba(242, 232, 224, 0.1);
+}
+
+:root:not(.x) .chat__vacio.asistente {
+  justify-content: stretch;
+  min-height: 0;
+  margin: 0;
+}
+
+/* ---------- Correo: avatares con tinte cálido y lista limpia ---------- */
+
+:root:not(.x) .avatar {
+  background: hsl(calc(6 + var(--tono, 0) * 0.13) 46% 22%);
+  color: hsl(calc(6 + var(--tono, 0) * 0.13) 82% 84%);
+  box-shadow: var(--luz);
+  font-family: var(--ui);
+  font-weight: 600;
+}
+
+:root:not(.x) .lista-correos__dia {
+  padding: 14px 18px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--t3);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+:root:not(.x) .filas .fila {
+  border-color: rgba(242, 232, 224, 0.06);
+}
+
+:root:not(.x) .fila.no-leida .fila__de,
+:root:not(.x) .fila.no-leida .fila__asunto {
+  color: #fff;
+}
+
+:root:not(.x) .fila:not(.no-leida) .fila__de,
+:root:not(.x) .fila:not(.no-leida) .fila__asunto {
+  color: var(--t2);
+  font-weight: 450;
+}
+
+/* ---------- Gastos: los movimientos de un día, en un solo bloque ---------- */
+
+:root:not(.x) .gastos__lista {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(255, 244, 236, 0.022), transparent 42%), var(--b1);
+  box-shadow: var(--luz);
+  overflow: hidden;
+}
+
+:root:not(.x) .gastos__lista .gasto {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root:not(.x) .gastos__lista .gasto + .gasto {
+  box-shadow: inset 0 1px 0 rgba(242, 232, 224, 0.06);
+}
+
+:root:not(.x) .gasto__fila {
+  min-height: 60px;
+  padding: 10px 16px;
+}
+
+:root:not(.x) .gasto__punto {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--c, var(--t3)) 20%, var(--b2));
+  box-shadow: none;
+  color: color-mix(in srgb, var(--c, var(--t3)) 80%, #fff);
+}
+
+:root:not(.x) .gasto__concepto {
+  font-size: 15px;
+  font-weight: 550;
+}
+
+:root:not(.x) .gasto__importe {
+  font-size: 15px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+:root:not(.x) .gastos__dia {
+  margin: 16px 6px 8px;
+  font-family: var(--ui);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--t3);
+}
+
+:root:not(.x) .gastos__total {
+  font-size: 46px;
+  font-weight: 300;
+  letter-spacing: -0.055em;
+}
+
+/* ---------- Biblia: casillas grandes y bloques con título discreto ---------- */
+
+:root:not(.x) .biblia__casilla {
+  min-height: 52px;
+  border-radius: 18px;
+  background: var(--b1);
+  box-shadow: var(--luz);
+  font-weight: 550;
+  transition: background-color 0.25s ease, color 0.25s ease, transform 0.15s var(--muelle);
+}
+
+:root:not(.x) .biblia__casilla:active {
+  transform: scale(0.97);
+}
+
+:root:not(.x) .biblia__casilla[aria-pressed='true'] {
+  background: var(--crema);
+  color: var(--fondo);
+}
+
+:root:not(.x) .biblia__casilla[aria-pressed='true'] .biblia__check {
+  background: var(--rojo);
+  color: #fff;
+}
+
+:root:not(.x) .biblia__pasaje {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+:root:not(.x) .biblia__enlace {
+  background: var(--b3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bento > div,
+  .asistente > *,
+  .asistente__carta,
+  .hoja-mas__item,
+  .boton-voz::before {
+    animation: none;
+  }
+}
+
+/* ---------- Hoy: accesos rápidos redondos y barritas de gasto ---------- */
+
+.accesos {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.acceso {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--t2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.acceso__icono {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(255, 244, 236, 0.03), transparent 50%), var(--b2);
+  box-shadow: var(--luz);
+  color: var(--crema);
+  transition: transform 0.18s var(--muelle), background-color 0.2s ease;
+}
+
+.acceso:active .acceso__icono {
+  transform: scale(0.92);
+  background-color: var(--b3);
+}
+
+.acceso:first-child .acceso__icono {
+  background: var(--crema);
+  color: var(--fondo);
+}
+
+.bloque__barras {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  width: 100%;
+  height: 34px;
+  margin: 10px 0 6px;
+}
+
+.bloque__barras i {
+  flex: 1;
+  min-height: 3px;
+  border-radius: 3px;
+  background: var(--b3);
+}
+
+.bloque__barras i.hoy {
+  background: var(--rojo-2);
+}
+
+.bloque--cifra .bloque__grande {
+  margin-top: 0;
+}
+
+.bloque__resto {
+  margin-top: 8px;
+  color: var(--t3);
+}
+
+/* Agenda: la línea del día invita a tocar una hora libre. */
+.linea {
+  cursor: pointer;
+}
+
+.hoja-mas__panel {
+  touch-action: none;
+}
+
+/* Gastos: ingresos, ahorro y fin de mes, en casillas. */
+.gastos__datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.gastos__dato {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  padding: 11px 12px;
+  border-radius: 16px;
+  background: var(--b2);
+}
+
+.gastos__dato span {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--t3);
+  white-space: nowrap;
+}
+
+.gastos__dato b {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.gastos__dato small {
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--t3);
+}
+
+:root:not(.x) .gastos__barra {
+  height: 8px;
+  margin-top: 12px;
+  border-radius: 4px;
+  background: var(--b3);
+}
+
+:root:not(.x) .gastos__detalle {
+  color: var(--t3);
+}
+
+/* ---------- Repaso: aire dentro de los bloques de Ajustes y filas de Gastos ---------- */
+
+:root:not(.x) .ajustes > section.grupo {
+  padding: 18px 16px;
+  margin-bottom: 12px;
+  border-bottom: 0;
+}
+
+:root:not(.x) .gastos__lista .gasto {
+  display: block;
+  padding: 0;
+  margin: 0;
+}
+
+:root:not(.x) .gastos__lista .gasto--abierto {
+  padding-bottom: 12px;
+  background: rgba(255, 244, 236, 0.03);
+}

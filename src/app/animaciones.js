@@ -62,6 +62,9 @@ export function prepararIndicador(barra) {
       raya.style.height = `${alto}px`;
       raya.style.transform = `translateY(${activo.offsetTop + (activo.offsetHeight - alto) / 2}px)`;
     } else {
+      // Para el diseño «Bloques»: la píldora ocupa el botón entero (ver diseno.css).
+      raya.style.setProperty('--x', `${activo.offsetLeft}px`);
+      raya.style.setProperty('--w', `${activo.offsetWidth}px`);
       const ancho = Math.max(18, activo.offsetWidth * 0.42);
       raya.style.height = '';
       raya.style.width = `${ancho}px`;

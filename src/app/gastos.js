@@ -255,19 +255,26 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     // Ingresos y ahorro: lo real en los meses pasados; lo previsto en este y los que vienen.
     const ingresos = futuro || mes === actual ? p.ingresos : r.ingresos;
     const ahorro = futuro || mes === actual ? p.ahorro : r.ingresos - r.previsto;
-    const balance = ingresos
-      ? `<p class="gastos__balance">Ingresos <strong class="gastos__mas">+${escapar(mes < actual ? euros(ingresos, { redondo: true }) : aprox(ingresos))}</strong> · ${
-          mes < actual ? (ahorro >= 0 ? 'ahorraste' : 'gastaste de más') : ahorro >= 0 ? 'ahorrarás ~' : 'gastarás de más ~'
-        }<strong class="${ahorro >= 0 ? 'gastos__mas' : 'gastos__menos'}">${escapar(mes < actual ? euros(Math.abs(ahorro), { redondo: true }) : aprox(Math.abs(ahorro)))}</strong></p>`
-      : '';
+    // Tres datos en casillas: ingresos, ahorro y lo que tendrás a fin de mes.
+    const dato = (nombre, valor, clase = '', nota = '') => `<div class="gastos__dato"><span>${escapar(nombre)}</span><b class="${clase}">${escapar(valor)}</b>${nota ? `<small>${escapar(nota)}</small>` : ''}</div>`;
+    const yaPaso = mes < actual;
     const s = saldosAlFinal(datos, mes, hoy);
     const ambos = s.banco !== null && s.efectivo !== null;
-    const lineaSaldo =
+    const datosMes = [
+      ingresos ? dato('Ingresos', `+${yaPaso ? euros(ingresos, { redondo: true }) : aprox(ingresos)}`, 'gastos__mas') : '',
+      ingresos
+        ? dato(
+            yaPaso ? (ahorro >= 0 ? 'Ahorraste' : 'De más') : ahorro >= 0 ? 'Ahorrarás' : 'De más',
+            `${yaPaso ? '' : '~'}${yaPaso ? euros(Math.abs(ahorro), { redondo: true }) : aprox(Math.abs(ahorro))}`,
+            ahorro >= 0 ? 'gastos__mas' : 'gastos__menos',
+          )
+        : '',
       s.total !== null && mes >= actual
-        ? `<p class="gastos__balance">${ambos ? 'Tendrás a fin de mes' : s.banco !== null ? 'En el banco a fin de mes' : 'En efectivo a fin de mes'} <strong>~${escapar(aprox(s.total))}</strong>${
-            ambos ? ` <span class="gastos__saldos">(${escapar(textoSaldos(s, (c) => `~${aprox(c)}`))})</span>` : ''
-          }</p>`
-        : '';
+        ? dato(ambos ? 'A fin de mes' : s.banco !== null ? 'Banco a fin de mes' : 'Efectivo a fin de mes', `~${aprox(s.total)}`, '', ambos ? textoSaldos(s, (c) => `~${aprox(c)}`) : '')
+        : '',
+    ].filter(Boolean);
+    const balance = datosMes.length ? `<div class="gastos__datos">${datosMes.join('')}</div>` : '';
+    const lineaSaldo = '';
     let presupuesto = '';
     if (r.presupuesto) {
       const pagado = Math.min(100, (r.gastado / r.presupuesto) * 100);
@@ -288,9 +295,9 @@ export function crearGastos({ contenedor, api, alCambiar = () => {} }) {
     contenedor.querySelector('#gastos-cifra').innerHTML = `
       <p class="gastos__etiqueta">${escapar(etiqueta)}</p>
       <p class="gastos__total">${futuro ? `~${escapar(aprox(cifra))}` : escapar(euros(cifra))}</p>
+      ${presupuesto}
       ${detalle.length ? `<p class="gastos__detalle">${escapar(detalle.join(' · '))}</p>` : ''}
-      ${balance}${lineaSaldo}
-      ${presupuesto}`;
+      ${balance}${lineaSaldo}`;
   }
 
   // ---------- La línea rápida ----------

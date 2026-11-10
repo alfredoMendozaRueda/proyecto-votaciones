@@ -160,7 +160,7 @@ const ORDEN_VISTAS = ['hoy', 'chat', 'historial', 'memoria', 'correo', 'agenda',
 let moverIndicador = null;
 
 // El título de la cabecera dice dónde estás.
-const TITULOS = { hoy: 'Hoy', chat: 'Chat', historial: 'Conversaciones', memoria: 'Lo que sé de ti', correo: 'Correo', agenda: 'Agenda', recordatorios: 'Avisos', empleo: 'Empleo', gastos: 'Gastos', biblia: 'Biblia', ajustes: 'Ajustes' };
+const TITULOS = { hoy: 'Hoy', chat: 'Chat', historial: 'Historial', memoria: 'Memoria', correo: 'Correo', agenda: 'Agenda', recordatorios: 'Avisos', empleo: 'Empleo', gastos: 'Gastos', biblia: 'Biblia', ajustes: 'Ajustes' };
 const tituloCabecera = document.querySelector('.marca__nombre');
 
 function mostrarVista(nombre, seccionAjustes = null) {
@@ -854,6 +854,27 @@ async function iniciar() {
     if (ir === 'buscar') document.getElementById('boton-buscar').click();
     else mostrarVista(ir);
   });
+  // La hoja se cierra arrastrándola hacia abajo.
+  const panelMas = hojaMas.querySelector('.hoja-mas__panel');
+  let arrastre = null;
+  panelMas.addEventListener('pointerdown', (e) => (arrastre = { y: e.clientY }));
+  panelMas.addEventListener('pointermove', (e) => {
+    if (!arrastre) return;
+    const dy = Math.max(0, e.clientY - arrastre.y);
+    arrastre.dy = dy;
+    if (dy > 6) panelMas.style.transform = `translateY(${dy}px)`;
+  });
+  const soltar = () => {
+    if (!arrastre) return;
+    const { dy = 0 } = arrastre;
+    arrastre = null;
+    panelMas.style.transform = '';
+    // Tras arrastrar, el toque no cuenta como pulsar lo que hubiera debajo.
+    if (dy > 10) panelMas.addEventListener('click', (ev) => ev.stopPropagation(), { capture: true, once: true });
+    if (dy > 70) cerrarMas();
+  };
+  panelMas.addEventListener('pointerup', soltar);
+  panelMas.addEventListener('pointercancel', soltar);
   // El botón de voz: con el mismo toque empieza a escucharte (el iPhone lo exige).
   document.getElementById('boton-voz').addEventListener('click', () => {
     vibrar(10);

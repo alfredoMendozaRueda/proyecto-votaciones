@@ -72,8 +72,10 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
   async function datosCorreo() {
     const estado = await seguro(api.correo?.estado());
     if (!estado?.conectado) return { conectado: false };
-    const r = await seguro(api.correo.listar({ filtro: 'no-leidos' }));
-    return { conectado: true, sinLeer: r?.mensajes ?? [] };
+    // Lo importante (pestaña Principal de Gmail) y, aparte, cuánto hay sin leer en total.
+    const [imp, todos] = await Promise.all([seguro(api.correo.listar({ filtro: 'importantes' })), seguro(api.correo.listar({ filtro: 'no-leidos' }))]);
+    const sinLeer = imp?.mensajes ?? todos?.mensajes ?? [];
+    return { conectado: true, sinLeer, otros: Math.max(0, (todos?.mensajes?.length ?? 0) - sinLeer.length), masOtros: Boolean(todos?.siguiente) };
   }
 
   async function datosGasto() {
@@ -131,7 +133,8 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
     const aviso = a.recordatorios[0];
     const kanji = '<span class="heroe__kanji" aria-hidden="true">狐</span>';
     if (cita) {
-      const lugar = [cita.lugar, a.proximos.length > 1 ? `y ${a.proximos.length - 1} más` : ''].filter(Boolean).join(' · ');
+      const otra = a.proximos[1];
+      const lugar = [cita.lugar, otra ? `Después: ${otra.todoElDia ? '' : `${hora(otra.inicio)} `}${otra.titulo || '(sin título)'}` : ''].filter(Boolean).join(' · ');
       return `<button type="button" class="bloque bloque--heroe" data-ir="agenda">
         <span class="bloque__etiqueta">Siguiente · ${escapar(cita.todoElDia ? cuando(cita.inicio, { todoElDia: true }) : faltan(cita.inicio))}</span>
         <span class="heroe__cuerpo">${cita.todoElDia ? '' : `<span class="heroe__hora">${hora(cita.inicio)}</span>`}${titulo(cita.titulo || '(sin título)')}${detalle(lugar)}</span>${kanji}</button>`;
@@ -166,6 +169,13 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
     return `<svg class="bloque__anillo" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15"/><circle cx="18" cy="18" r="15" class="lleno" stroke-dasharray="${(c * f).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 18 18)"/></svg>`;
   }
 
+  // Siete barritas: lo gastado cada día de la última semana (hoy, la última, en bermellón).
+  function barras(semana = []) {
+    const max = Math.max(...semana, 1);
+    if (!semana.some(Boolean)) return '';
+    return `<span class="bloque__barras" role="img" aria-label="Gasto de los últimos siete días">${semana.map((v, i) => `<i class="${i === 6 ? 'hoy' : ''}" style="height:${Math.max(8, Math.round((v / max) * 100))}%"></i>`).join('')}</span>`;
+  }
+
   function bloqueGastos(g) {
     if (!g) return '';
     if (g.vacio) return bloque({ accion: 'gasto', etiqueta: 'Gastos', contenido: titulo('Apunta tu primer gasto') + detalle('Escribe «12,50 súper»') });
@@ -175,7 +185,7 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
       ir: 'gastos',
       clase: 'bloque--cifra',
       etiqueta: `Gastado en ${nombreMes(r.mes, { corto: true })}`,
-      contenido: `${r.presupuesto ? anillo(r.gastado / r.presupuesto) : ''}${grande(cifra(euros(r.gastado)))}${detalle(pie)}`,
+      contenido: `${r.presupuesto ? anillo(r.gastado / r.presupuesto) : ''}${barras(g.semana)}${grande(cifra(euros(r.gastado)))}${detalle(pie)}`,
     });
   }
 
@@ -223,7 +233,8 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
   function bloqueCorreo(c) {
     if (!c) return '';
     if (!c.conectado) return bloque({ accion: 'conectar-google', clase: 'bloque--ancho', etiqueta: 'Correo', contenido: titulo('Conecta tu Gmail') + detalle('y te aviso de lo importante') });
-    if (!c.sinLeer.length) return bloque({ ir: 'correo', clase: 'bloque--ancho', etiqueta: 'Correo', contenido: titulo('Todo leído') });
+    const resto = c.otros ? `${c.masOtros ? 'más de ' : ''}${c.otros} de publicidad y avisos sin leer` : '';
+    if (!c.sinLeer.length) return bloque({ ir: 'correo', clase: 'bloque--ancho', etiqueta: 'Correo', contenido: titulo(c.otros ? 'Nada importante' : 'Todo leído') + detalle(resto) });
     const filas = c.sinLeer
       .slice(0, 2)
       .map((m) => {
@@ -231,7 +242,7 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
         return `<span class="bloque__correo"><span class="bloque__inicial" aria-hidden="true">${escapar(nombre.trim().charAt(0).toUpperCase() || '·')}</span><span><b>${escapar(nombre)}</b><span>${escapar(m.asunto || '(sin asunto)')}</span></span></span>`;
       })
       .join('');
-    return bloque({ ir: 'correo', clase: 'bloque--ancho', etiqueta: `Correo · ${c.sinLeer.length} sin leer`, contenido: filas });
+    return bloque({ ir: 'correo', clase: 'bloque--ancho', etiqueta: `Correo · ${c.sinLeer.length} ${c.sinLeer.length === 1 ? 'importante' : 'importantes'} sin leer`, contenido: filas + (resto ? `<span class="bloque__detalle bloque__resto">y ${escapar(resto)}</span>` : '') });
   }
 
   function bloqueEmpleo(e) {
@@ -275,7 +286,12 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
     const datos = normalizarGastos((await seguro(api.gastos.leer())) ?? {});
     const hoy = fechaISO();
     if (!datos.movimientos.length && !datos.fijos.length) return { vacio: true };
-    return { hoy, resumen: resumenMes(datos, mesDe(hoy), hoy), proximos: proximosFijos(datos, hoy, 3) };
+    // Lo gastado cada uno de los últimos siete días (para las barritas).
+    const semana = Array.from({ length: 7 }, (_, i) => {
+      const f = sumarDias(hoy, i - 6);
+      return datos.movimientos.filter((m) => !m.ingreso && m.fecha === f).reduce((t, m) => t + m.centimos, 0);
+    });
+    return { hoy, resumen: resumenMes(datos, mesDe(hoy), hoy), proximos: proximosFijos(datos, hoy, 3), semana };
   }
 
   const cargando = (clase = '') => `<div class="bloque bloque--cargando ${clase}" aria-hidden="true"></div>`;
@@ -288,6 +304,16 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
         <div class="apartado desplazable hoy">
           <div class="bento">
             <div id="hoy-heroe" class="bento__ancho">${cargando('bloque--heroe')}</div>
+            <div class="bento__ancho accesos" role="group" aria-label="Accesos rápidos">
+              ${[
+                ...(api.gastos ? [['gasto', 'cartera', 'Gasto']] : []),
+                ['recordatorio', 'campana', 'Aviso'],
+                ['pulso', 'sol', 'Pulso'],
+                ['preparar', 'maletin', 'Ofertas'],
+              ]
+                .map(([accion, ico, nombre]) => `<button type="button" class="acceso" data-accion="${accion}"><span class="acceso__icono">${icono(ico, 21)}</span><span class="acceso__nombre">${nombre}</span></button>`)
+                .join('')}
+            </div>
             <div id="hoy-gastos">${api.gastos ? cargando() : ''}</div>
             <div id="hoy-aviso">${cargando()}</div>
             <div id="hoy-biblia" class="bento__ancho"></div>
@@ -295,12 +321,6 @@ export function crearHoy({ contenedor, api, ir, preguntar, conversar = () => ir(
             <div id="hoy-empleo">${api.empleo ? cargando() : ''}</div>
             <div id="hoy-gasto"></div>
             <div id="hoy-instalar" class="bento__ancho"></div>
-          </div>
-          <div class="hoy__acciones" role="group" aria-label="Accesos rápidos">
-            <button type="button" class="chip" data-accion="recordatorio">${icono('nueva', 14)} Recordatorio</button>
-            ${api.gastos ? `<button type="button" class="chip" data-accion="gasto">${icono('cartera', 14)} Apuntar gasto</button>` : ''}
-            <button type="button" class="chip" data-accion="pulso">${icono('sol', 14)} Pulso del día</button>
-            <button type="button" class="chip" data-accion="preparar">${icono('chispa', 14)} Buscar ofertas</button>
           </div>
           <p class="hoy__ayuda" id="hoy-ayuda-iphone" hidden>En el iPhone: pulsa ${icono('compartir', 14)} <strong>Compartir</strong> en Safari y luego <strong>Añadir a pantalla de inicio</strong>.</p>
         </div>`;

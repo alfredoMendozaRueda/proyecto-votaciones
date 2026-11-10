@@ -61,7 +61,8 @@ export class ClienteGmail {
 
   async listar({ filtro = 'recibidos', consulta = '', pagina = null, maximo = 25 } = {}) {
     const q = [
-      { recibidos: 'in:inbox', 'no-leidos': 'in:inbox is:unread', destacados: 'is:starred', todos: '' }[filtro] ?? 'in:inbox',
+      // «importantes»: sin leer y de la pestaña Principal (fuera publicidad, redes y notificaciones).
+      { recibidos: 'in:inbox', 'no-leidos': 'in:inbox is:unread', importantes: 'in:inbox is:unread category:primary', destacados: 'is:starred', todos: '' }[filtro] ?? 'in:inbox',
       consulta,
     ]
       .filter(Boolean)
