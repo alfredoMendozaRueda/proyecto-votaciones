@@ -14,6 +14,7 @@ import { transcribirGroq } from '../../compartido/dictado.js';
 import { normalizarDatosEmpleo } from '../../compartido/empleo.js';
 import { crearAlmacenGastos, normalizarGastos } from '../../compartido/gastos.js';
 import { crearAlmacenBiblia, normalizarBiblia, avisosBiblia } from '../../compartido/biblia.js';
+import { normalizarForma } from '../../compartido/forma/datos.js';
 import {
   Sincronizador,
   coleccionLista,
@@ -22,6 +23,7 @@ import {
   coleccionGastos,
   coleccionCuentas,
   coleccionBiblia,
+  coleccionForma,
   coleccionAjustes,
   coleccionClaves,
   coleccionConsumo,
@@ -99,6 +101,15 @@ export function crearBackendWeb() {
     guardar: (datos) => guardarSecreto('gastos', JSON.stringify(datos)),
     alCambiar: () => tocado(),
   });
+  // Forma (dieta y gimnasio): datos de salud, cifrados como las claves y sincronizados.
+  const leerForma = async () => {
+    try {
+      return JSON.parse((await leerSecreto('forma')) ?? 'null');
+    } catch {
+      return null;
+    }
+  };
+  const guardarForma = (datos) => guardarSecreto('forma', JSON.stringify(datos));
   // Lo que se gasta en OpenAI desde este dispositivo (y lo que llega de los demás).
   const consumo = new Consumo({
     leer: async () => leerLocal(CLAVE_CONSUMO),
@@ -509,6 +520,7 @@ export function crearBackendWeb() {
       gastos: coleccionGastos({ leer: () => gastos.leer(), guardar: (d) => guardarSecreto('gastos', JSON.stringify(d)), normalizar: normalizarGastos }),
       cuentas: coleccionCuentas({ leer: () => gastos.leer(), guardar: (d) => guardarSecreto('gastos', JSON.stringify(d)), normalizar: normalizarGastos }),
       biblia: coleccionBiblia({ leer: leerBiblia, guardar: (d) => guardarSecreto('biblia', JSON.stringify(d)), normalizar: normalizarBiblia, despues: () => avisarBiblia() }),
+      forma: coleccionForma({ leer: leerForma, guardar: guardarForma, normalizar: normalizarForma }),
     },
     leerEstado: async () => leerLocal(CLAVE_SINCRO),
     guardarEstado: async (estado) => guardarLocal(CLAVE_SINCRO, estado),
@@ -655,6 +667,14 @@ export function crearBackendWeb() {
     biblia: {
       leer: () => biblia.leer(),
       guardar: (datos) => biblia.guardar(datos),
+    },
+    // Forma (dieta y gimnasio): perfil, comidas, pesos y entrenos. Cifrada y sincronizada.
+    forma: {
+      leer: async () => normalizarForma((await leerForma()) ?? {}),
+      guardar: async (datos) => {
+        await guardarForma(normalizarForma(datos));
+        tocado();
+      },
     },
     consumo: {
       async resumen() {

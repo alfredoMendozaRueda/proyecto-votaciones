@@ -562,8 +562,9 @@ export function crearDemo() {
         await new Promise((r) => setTimeout(r, 500));
         return audio?.byteLength ? 'Recuérdame mañana a las nueve llamar a Lucía' : '';
       },
-      async tarea({ sistema, usuario }) {
+      async tarea({ sistema, usuario, etiqueta }) {
         await new Promise((r) => setTimeout(r, 700));
+        if (String(etiqueta ?? '').startsWith('forma-')) return { texto: JSON.stringify((await import('./forma/demo-forma.js')).respuestaFormaDemo(etiqueta)), fuentes: [] };
         if (/lectura bíblica/.test(sistema)) {
           return {
             texto:
@@ -577,6 +578,16 @@ export function crearDemo() {
         return { texto: typeof r === 'string' ? r : JSON.stringify(r), fuentes: [] };
       },
     },
+    // Forma de ejemplo: tres semanas y media de comidas, pesos y entrenos.
+    forma: (() => {
+      let guardado = null;
+      return {
+        leer: async () => (guardado ? JSON.parse(guardado) : (await import('./forma/demo-forma.js')).formaDemo()),
+        guardar: async (datos) => {
+          guardado = JSON.stringify(datos);
+        },
+      };
+    })(),
     // Lectura bíblica de ejemplo: un plan de un año a mitad de camino (con dos días atrasados).
     biblia: (() => {
       let guardado = JSON.stringify(bibliaDemo());

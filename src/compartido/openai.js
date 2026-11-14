@@ -134,7 +134,7 @@ export async function textoOpenAI({ apiKey, modelo, sistema, usuario, fetch, alU
 
 // Una tarea fuera del chat (Empleo). Si pide JSON, OpenAI garantiza que la
 // respuesta sea JSON válido. Con web, busca en internet. Devuelve { texto, fuentes }.
-export async function tareaOpenAI({ apiKey, modelo, sistema, usuario, web = false, max = 8000, fetch, alUso }) {
+export async function tareaOpenAI({ apiKey, modelo, sistema, usuario, web = false, max = 8000, imagen = null, fetch, alUso }) {
   const json = !web && /\bJSON\b/.test(`${sistema}\n${usuario}`);
   // Con json_object, OpenAI exige la palabra «json» en la entrada (las
   // instrucciones no cuentan): si solo la dice el sistema, se recuerda al final.
@@ -144,7 +144,9 @@ export async function tareaOpenAI({ apiKey, modelo, sistema, usuario, web = fals
     {
       model: modelo,
       instructions: sistema,
-      input: entrada,
+      input: imagen
+        ? [{ role: 'user', content: [{ type: 'input_text', text: entrada }, { type: 'input_image', image_url: `data:${imagen.tipo};base64,${imagen.datos}` }] }]
+        : entrada,
       reasoning: { effort: web ? 'medium' : 'low' },
       // El razonamiento cuenta para el máximo: se deja margen.
       max_output_tokens: max + 6000,

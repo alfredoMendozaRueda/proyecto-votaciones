@@ -17,6 +17,7 @@ import { normalizarBiblia, asegurarJovenes } from '../compartido/biblia.js';
 import { trozosDeVoz, limpiarParaVoz } from '../compartido/voz.js';
 import { prepararMovil } from './movil.js';
 import { prepararOndas, prepararIndicador, entrarVista, saltar, prepararEnvio } from './animaciones.js';
+import { prepararForma } from './forma/entrada.js';
 
 // Electron trae window.asistente (preload). En el navegador se usa la versión
 // web real, salvo en el modo de ejemplo (?demo o la página de demostración).
@@ -73,6 +74,9 @@ const apartados = {};
 let vistaActual = 'hoy';
 // Adónde vuelve la flecha de Ajustes.
 let vistaAntesDeAjustes = 'hoy';
+// Forma (dieta y gimnasio): la otra cara de la app, detrás de un botón de «Más».
+let puertaForma = null;
+const enForma = () => document.documentElement.classList.contains('en-forma');
 let noLeidos = 0;
 let ultimaActividad = Date.now();
 let ratonDentro = false;
@@ -805,7 +809,7 @@ async function iniciar() {
   });
   document.getElementById('boton-buscar').addEventListener('click', () => buscador.abrir());
   document.addEventListener('keydown', (e) => {
-    if (dialogo.hidden) return;
+    if (dialogo.hidden || enForma()) return;
     const escribiendo = e.target.closest?.('input, textarea, select, [contenteditable="true"]');
     if (((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') || (e.key === '/' && !escribiendo)) {
       e.preventDefault();
@@ -1040,8 +1044,11 @@ async function iniciar() {
   }, 10_000);
 
   if (api.plataforma !== 'electron') vigilarTeclado();
+  puertaForma = prepararForma({ api, boton: document.getElementById('boton-forma'), contenedor: dialogo, antesDeAbrir: cerrarMas });
   if (api.demo) prepararDemo();
   if (api.plataforma === 'web') prepararWeb();
+  // En Windows (y en la demo) vuelve a Forma si la dejaste abierta, o la abre con ?forma.
+  else puertaForma.arrancar(new URLSearchParams(location.search).get('forma'));
 }
 
 // En pantallas anchas la "ventana" de 454×730 se reduce si no cabe; en móvil
@@ -1084,12 +1091,13 @@ function vigilarTeclado() {
 function prepararWeb() {
   ajustarEscala();
   manejarAlternar('mostrar');
-  if (!atenderParametros() && ajustes.abrirHablando) abrirParaHablar();
+  // Sin llegar con una acción de Kitsune: vuelve a Forma si la dejaste abierta.
+  if (!atenderParametros()) puertaForma.arrancar(null).then((dentro) => !dentro && ajustes.abrirHablando && abrirParaHablar());
   // «Abrir para hablar»: también al volver a la app tras un rato fuera.
   let fuera = null;
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') fuera = Date.now();
-    else if (fuera !== null && Date.now() - fuera >= 60_000 && ajustes.abrirHablando) abrirParaHablar();
+    else if (fuera !== null && Date.now() - fuera >= 60_000 && ajustes.abrirHablando && !enForma()) abrirParaHablar();
   });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
@@ -1116,9 +1124,16 @@ function abrirParaHablar() {
 // Llegadas desde fuera: el aviso de correo (?correo), los atajos del icono
 // (?pulso, ?voz) o "Compartir" desde otra app (?texto, ?enlace, ?titulo).
 // Devuelve si había alguna.
-const PARAMETROS = ['correo', 'agenda', 'recordatorios', 'ajustes', 'sincro', 'empleo', 'biblia', 'pulso', 'chat', 'voz', 'hablar', 'titulo', 'texto', 'enlace'];
+const PARAMETROS = ['correo', 'agenda', 'recordatorios', 'ajustes', 'sincro', 'empleo', 'biblia', 'pulso', 'chat', 'voz', 'hablar', 'titulo', 'texto', 'enlace', 'forma'];
 function atenderParametros() {
   const parametros = new URLSearchParams(location.search);
+  // ?forma (o ?forma=agua, escaner, anadir, peso, entreno): abre Forma directamente.
+  if (parametros.has('forma')) {
+    abrirDialogo();
+    puertaForma?.arrancar(parametros.get('forma') ?? '');
+    history.replaceState(null, '', location.pathname + (parametros.has('demo') ? '?demo' : ''));
+    return true;
+  }
   const compartido = ['titulo', 'texto', 'enlace'].map((c) => parametros.get(c)?.trim()).filter(Boolean);
   if (parametros.has('voz') || parametros.has('hablar')) abrirParaHablar();
   else if (parametros.has('chat')) mostrarVista('chat');
@@ -1151,7 +1166,7 @@ function prepararDemo() {
       api.simular.alternar(kitsune.visible ? 'ocultar' : 'mostrar');
     }
   });
-  window.kitsuneDemo = { api, kitsune, mostrarVista, abrirDialogo, cerrarDialogo, abrirParaHablar, correo, chat };
+  window.kitsuneDemo = { api, kitsune, mostrarVista, abrirDialogo, cerrarDialogo, abrirParaHablar, correo, chat, forma: () => puertaForma };
   api.simular.alternar('mostrar');
 }
 

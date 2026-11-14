@@ -99,6 +99,32 @@
           "type": "image/png"
         }
       ]
+    },
+    {
+      "name": "Forma: dieta y gimnasio",
+      "short_name": "Forma",
+      "description": "Abre Forma",
+      "url": "./?forma",
+      "icons": [
+        {
+          "src": "iconos/icono-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Escanear un alimento",
+      "short_name": "Escanear",
+      "description": "Abre el escáner de Forma",
+      "url": "./?forma=escaner",
+      "icons": [
+        {
+          "src": "iconos/icono-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ],
   "share_target": {

@@ -22,10 +22,11 @@ export const COLECCIONES_SINCRO = [
   ['consumo', 'Gasto de la IA'],
   ['gastos', 'Gastos'],
   ['biblia', 'Lectura bíblica'],
+  ['forma', 'Forma (dieta y gimnasio)'],
 ];
 // Colecciones que llegaron después: en los dispositivos que ya sincronizaban se
 // activan solas una vez (y se baja todo, por si otro dispositivo ya las subió).
-const COLECCIONES_NUEVAS = ['gastos', 'cuentas', 'biblia'];
+const COLECCIONES_NUEVAS = ['gastos', 'cuentas', 'biblia', 'forma'];
 // Colecciones que no se eligen aparte: van con otra (si se sincroniza Gastos, también
 // su efectivo y sus traspasos). Las versiones anteriores no las conocen y las dejan en paz.
 const ACOMPANANTES = { gastos: ['cuentas'] };
@@ -412,6 +413,63 @@ export function coleccionBiblia({ leer, guardar, normalizar = (d) => d, despues 
         else plan.hechas[fecha] = JSON.parse(valor);
       }
       await guardar(normalizar({ ...d, ...base, planes: [...planes.values()], dias }));
+      await despues?.();
+    },
+  };
+}
+
+// Forma (dieta y gimnasio): el perfil y los ajustes van juntos («base»); cada
+// comida, alimento, peso, medida, hito, rutina, entreno y día, por separado.
+// El entreno que tienes a medias se queda en este dispositivo.
+const LISTAS_FORMA = ['alimentos', 'registros', 'plantillas', 'pesos', 'medidas', 'hitos', 'rutinas', 'sesiones', 'ejercicios'];
+const BASE_FORMA = ['perfil', 'bloqueados', 'ajustes', 'momentos', 'suplementos', 'tiposMedida', 'descartadas', 'descargas', 'descargaDescartada', 'usosIA', 'resumenVisto', 'avisosVistos'];
+
+export function coleccionForma({ leer, guardar, normalizar = (d) => d, despues }) {
+  return {
+    async leer() {
+      const d = await leer();
+      const mapa = new Map();
+      if (!d || typeof d !== 'object' || !d.perfil) return mapa;
+      const poner = (id, v) => mapa.set(id, { firma: comoTexto(v), valor: comoTexto(v) });
+      poner('base', Object.fromEntries(BASE_FORMA.map((k) => [k, d[k] ?? null])));
+      for (const lista of LISTAS_FORMA) {
+        for (const x of d[lista] ?? []) {
+          // De la biblioteca de ejercicios solo viajan los tuyos y los que marcaste como principales.
+          if (lista === 'ejercicios' && !x.propio && !x.principal) continue;
+          if (x?.id) poner(`${lista}:${x.id}`, x);
+        }
+      }
+      for (const [fecha, dia] of Object.entries(d.dias ?? {})) poner(`dias:${fecha}`, dia);
+      return mapa;
+    },
+    firma: (v) => v,
+    async aplicar(cambios) {
+      const d = (await leer()) ?? {};
+      const base = Object.fromEntries(BASE_FORMA.map((k) => [k, d[k]]));
+      const listas = Object.fromEntries(LISTAS_FORMA.map((l) => [l, new Map((d[l] ?? []).filter((x) => x?.id).map((x) => [x.id, x]))]));
+      const dias = { ...(d.dias ?? {}) };
+      for (const { id, valor } of cambios) {
+        if (id === 'base') {
+          if (valor !== null) Object.assign(base, JSON.parse(valor));
+          continue;
+        }
+        const corte = id.indexOf(':');
+        const lista = id.slice(0, corte);
+        const clave = id.slice(corte + 1);
+        if (lista === 'dias') {
+          if (valor === null) delete dias[clave];
+          else dias[clave] = JSON.parse(valor);
+        } else if (listas[lista]) {
+          // Un ejercicio de la biblioteca que deja de ser principal se «borra» del lote: vuelve a ser normal.
+          if (valor === null && lista === 'ejercicios') {
+            const e = listas.ejercicios.get(clave);
+            if (e && !e.propio) listas.ejercicios.set(clave, { ...e, principal: false });
+            else listas.ejercicios.delete(clave);
+          } else if (valor === null) listas[lista].delete(clave);
+          else listas[lista].set(clave, JSON.parse(valor));
+        }
+      }
+      await guardar(normalizar({ ...d, ...base, ...Object.fromEntries(LISTAS_FORMA.map((l) => [l, [...listas[l].values()]])), dias, activa: d.activa ?? null }));
       await despues?.();
     },
   };

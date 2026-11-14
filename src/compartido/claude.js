@@ -1511,7 +1511,9 @@ export class ConversacionClaude {
   // Devuelve { texto, fuentes }.
   // nivel: 'final' para lo que sale con tu nombre (la revisión del CV, la entrevista).
   // etiqueta y sobre (ids de oferta…): para encontrarla luego en el registro de la IA.
-  async tarea({ sistema, usuario, web = false, max = 8000, nivel = 'fondo', etiqueta = 'tarea', sobre = '' }) {
+  // imagen: { tipo: 'image/jpeg', datos: base64 } para leer una foto (Forma: un plato o una etiqueta).
+  async tarea({ sistema, usuario, web = false, max = 8000, nivel = 'fondo', etiqueta = 'tarea', sobre = '', imagen = null }) {
+    if (imagen) return this.#tareaConImagen({ sistema, usuario, max, etiqueta, sobre, imagen });
     const ruta = await this.#ruta(web ? 'web' : nivel === 'final' ? 'final' : 'fondo');
     // Las búsquedas de fondo (investigar una empresa, buscar ofertas en la web) que tocan
     // a Groq no pasan a GPT-6 Luna si Groq falla: cada una costaría 0,01 $ sin pedirla tú.
@@ -1531,6 +1533,40 @@ export class ConversacionClaude {
       }
     };
     return ruta[0] !== 'claude' ? conRespaldo(ruta, hacer) : hacer('claude');
+  }
+
+  // Las fotos solo las leen GPT-6 Luna (OpenAI) y Claude: los modelos gratuitos de Groq no ven imágenes.
+  async #tareaConImagen({ sistema, usuario, max, etiqueta, sobre, imagen }) {
+    const elegido = this.#proveedor();
+    const openai = await Promise.resolve(this.obtenerClave('openai')).catch(() => null);
+    const proveedor = openai ? 'openai' : elegido === 'claude' ? 'claude' : null;
+    if (!proveedor) throw new Error('Para leer fotos hace falta tu clave de OpenAI (GPT-6 Luna) o la de Claude. Con Groq puedes describir la comida con palabras.');
+    const ajustes = this.obtenerAjustes();
+    const modelo = proveedor === 'openai' ? ajustes.modeloOpenAI : ajustes.modelo;
+    const inicio = Date.now();
+    const apuntar = (extra) => this.alRegistroIA({ etiqueta, sobre, proveedor, modelo, ms: Date.now() - inicio, sistema, usuario: `${usuario}\n[foto]`, ...extra });
+    try {
+      let r;
+      const cliente = await this.#cliente(proveedor);
+      if (proveedor === 'openai') {
+        r = await tareaOpenAI({ apiKey: cliente.apiKey, modelo, sistema, usuario, max, imagen, fetch: this.opcionesCliente.fetch, alUso: this.anotarUso });
+      } else {
+        const mensaje = await cliente.messages.create({
+          model: modelo,
+          max_tokens: Math.max(max, 4000),
+          system: sistema,
+          messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: imagen.tipo, data: imagen.datos } }, { type: 'text', text: usuario }] }],
+        });
+        const texto = mensaje.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+        if (!texto) throw new Error('Claude no ha devuelto nada. Vuelve a intentarlo.');
+        r = { texto, fuentes: [] };
+      }
+      apuntar({ ok: true, respuesta: r.texto });
+      return r;
+    } catch (error) {
+      apuntar({ ok: false, error: error.message });
+      throw error;
+    }
   }
 
   async #tarea(proveedor, { sistema, usuario, web, max }) {

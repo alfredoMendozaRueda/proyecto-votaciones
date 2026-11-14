@@ -68,6 +68,10 @@ contextBridge.exposeInMainWorld('asistente', {
     leer: () => invocar('biblia:leer'),
     guardar: (datos) => invocar('biblia:guardar', datos),
   },
+  forma: {
+    leer: () => invocar('forma:leer'),
+    guardar: (datos) => invocar('forma:guardar', datos),
+  },
   consumo: {
     resumen: () => invocar('consumo:resumen'),
     tieneClaveAdmin: () => invocar('consumo:tieneClaveAdmin'),

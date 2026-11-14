@@ -26,6 +26,7 @@ import { aviso } from '../src/compartido/notificaciones.js';
 import { normalizarDatosEmpleo } from '../src/compartido/empleo.js';
 import { crearAlmacenGastos, normalizarGastos } from '../src/compartido/gastos.js';
 import { crearAlmacenBiblia, normalizarBiblia, avisosBiblia } from '../src/compartido/biblia.js';
+import { normalizarForma } from '../src/compartido/forma/datos.js';
 import { hablarVoiceStudio, vocesVoiceStudio } from './voicestudio.js';
 import { transcribirGroq } from '../src/compartido/dictado.js';
 import {
@@ -36,6 +37,7 @@ import {
   coleccionGastos,
   coleccionCuentas,
   coleccionBiblia,
+  coleccionForma,
   coleccionAjustes,
   coleccionClaves,
   coleccionConsumo,
@@ -102,6 +104,15 @@ const biblia = crearAlmacenBiblia({
     avisarBiblia();
   },
 });
+// Forma (dieta y gimnasio): datos de salud, cifrados como las claves.
+const leerForma = async () => {
+  try {
+    return JSON.parse(leerSecreto('forma') ?? 'null');
+  } catch {
+    return null;
+  }
+};
+const guardarForma = async (datos) => guardarSecreto('forma', JSON.stringify(datos));
 // Lo que se gasta en OpenAI desde este ordenador (y lo que llega de los demás).
 const consumo = new Consumo({
   leer: () => leerObjeto('consumo'),
@@ -169,6 +180,7 @@ sincro = new Sincronizador({
     gastos: coleccionGastos({ leer: () => gastos.leer(), guardar: (d) => guardarSecreto('gastos', JSON.stringify(d)), normalizar: normalizarGastos }),
     cuentas: coleccionCuentas({ leer: () => gastos.leer(), guardar: (d) => guardarSecreto('gastos', JSON.stringify(d)), normalizar: normalizarGastos }),
     biblia: coleccionBiblia({ leer: leerBiblia, guardar: async (d) => guardarSecreto('biblia', JSON.stringify(d)), normalizar: normalizarBiblia, despues: () => avisarBiblia() }),
+    forma: coleccionForma({ leer: leerForma, guardar: guardarForma, normalizar: normalizarForma }),
     ajustes: coleccionAjustes({ leer: () => obtenerAjustes(), guardar: (cambios) => guardarAjustes(cambios) }),
     claves: coleccionClaves({ leer: leerSecreto, guardar: guardarSecreto, borrar: borrarSecreto }),
     consumo: coleccionConsumo({ leer: () => leerObjeto('consumo'), guardar: (d) => guardarDatos('consumo', d) }),
@@ -516,6 +528,11 @@ function registrarCanales() {
       nivel: p?.nivel === 'final' ? 'final' : 'fondo',
       etiqueta: String(p?.etiqueta ?? 'tarea').slice(0, 60),
       sobre: String(p?.sobre ?? '').slice(0, 500),
+      // Una foto (Forma): solo JPEG, PNG o WebP en base64 y de tamaño razonable.
+      imagen:
+        p?.imagen && /^image\/(jpeg|png|webp)$/.test(p.imagen.tipo) && typeof p.imagen.datos === 'string' && p.imagen.datos.length < 8_000_000 && /^[A-Za-z0-9+/=]+$/.test(p.imagen.datos)
+          ? { tipo: p.imagen.tipo, datos: p.imagen.datos }
+          : null,
     }),
   );
   manejar('ia:transcribir', async (audio, tipo) => {
@@ -538,6 +555,11 @@ function registrarCanales() {
   manejar('gastos:guardar', (datos) => gastos.guardar(datos));
   manejar('biblia:leer', () => biblia.leer());
   manejar('biblia:guardar', (datos) => biblia.guardar(datos));
+  manejar('forma:leer', async () => normalizarForma((await leerForma()) ?? {}));
+  manejar('forma:guardar', async (datos) => {
+    await guardarForma(normalizarForma(datos));
+    tocado();
+  });
   // Lo cobrado de verdad (Costs API de OpenAI) con la clave de administrador, solo en este equipo.
   manejar('consumo:tieneClaveAdmin', async () => Boolean(leerSecreto('claveOpenAIAdmin')));
   manejar('consumo:real', async () => {
