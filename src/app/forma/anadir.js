@@ -266,7 +266,7 @@ export function crearAnadir(ctx) {
       ${items
         .map(
           (x, i) => `<div class="f-columna" style="gap:6px;padding-top:8px;border-top:1px solid var(--f-linea)">
-          <div class="f-fila"><input class="f-entrada" style="min-height:38px;font-size:14px" value="${escapar(x.nombre)}" data-entrada="an-est" data-i="${i}" data-k="nombre"><span class="f-confianza">${Math.round(x.confianza * 100)} %</span>
+          <div class="f-fila"><input class="f-entrada" style="min-height:38px" value="${escapar(x.nombre)}" data-entrada="an-est" data-i="${i}" data-k="nombre"><span class="f-confianza">${Math.round(x.confianza * 100)} %</span>
           <button type="button" class="f-icono-boton" data-a="an-est-quitar" data-i="${i}" aria-label="Quitar">${ic('cerrar', 14)}</button></div>
           <div class="f-estimado__fila">${['gramos', 'kcal', 'proteina', 'hidratos', 'grasa']
             .map((k) => `<label>${{ gramos: 'g', kcal: 'kcal', proteina: 'P', hidratos: 'H', grasa: 'G' }[k]}<input class="f-entrada" type="text" inputmode="decimal" autocomplete="off" step="any" value="${x[k]}" data-entrada="an-est" data-i="${i}" data-k="${k}"></label>`)

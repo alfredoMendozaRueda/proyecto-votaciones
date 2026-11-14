@@ -97,7 +97,8 @@ export async function montarForma({ raiz, api, salir }) {
 
   function pintar() {
     const sinPerfil = !estado.datos.perfil;
-    raiz.classList.toggle('sin-barra', sinPerfil);
+    // En el alta y al editar el perfil, los botones del paso van abajo y la barra se esconde.
+    raiz.classList.toggle('sin-barra', sinPerfil || bienvenida.editando());
     for (const b of raiz.querySelectorAll('[data-ir]')) {
       if (b.dataset.ir === estado.vista) b.setAttribute('aria-current', 'page');
       else b.removeAttribute('aria-current');

@@ -62,7 +62,8 @@
   box-sizing: border-box;
 }
 
-.forma :is(button, input, select, textarea) {
+/* :where: sin especificidad, para que cada campo mantenga sus 16 px (con menos, el iPhone amplía la página al escribir). */
+.forma :where(button, input, select, textarea) {
   font: inherit;
   color: inherit;
   font-family: var(--f-letra);
@@ -172,6 +173,7 @@
 }
 
 .f-fecha__texto input {
+  font-size: 16px;
   position: absolute;
   inset: 0;
   opacity: 0;
@@ -1423,7 +1425,7 @@ select.f-entrada {
 .f-estimado__fila input {
   min-height: 38px;
   padding: 0 6px;
-  font-size: 14px;
+  font-size: 16px;
   text-align: center;
 }
 
@@ -1566,7 +1568,7 @@ select.f-entrada {
   min-height: 38px;
   padding: 0 4px;
   border-radius: 9px;
-  font-size: 15px;
+  font-size: 16px;
   text-align: center;
 }
 
@@ -2191,7 +2193,7 @@ select.f-entrada {
 
 .f-pie-fijo {
   position: sticky;
-  bottom: calc(-1 * (var(--f-barra) + var(--f-abajo) + 28px));
+  bottom: 0;
   display: flex;
   gap: 8px;
   padding: 12px 0 calc(16px + var(--f-abajo));
@@ -2204,6 +2206,17 @@ select.f-entrada {
 
 .forma.sin-barra .f-cuerpo {
   padding-bottom: 0;
+}
+
+/* Ningún campo de Forma por debajo de 16 px: en el iPhone, al tocarlo, la página se ampliaría. */
+.forma input,
+.forma select,
+.forma textarea {
+  font-size: max(16px, 1em);
+}
+
+.f-cuerpo {
+  overflow-x: hidden;
 }
 
 /* ---------- Aviso breve ---------- */
