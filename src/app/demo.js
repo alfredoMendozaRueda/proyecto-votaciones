@@ -586,6 +586,14 @@ export function crearDemo() {
         guardar: async (datos) => {
           guardado = JSON.stringify(datos);
         },
+        async importar(plan) {
+          const [{ aplicarImportacion }, { normalizarForma }, { fechaISO }] = await Promise.all([import('../compartido/forma/importar.js'), import('../compartido/forma/datos.js'), import('../compartido/forma/fechas.js')]);
+          const actual = normalizarForma(guardado ? JSON.parse(guardado) : (await import('./forma/demo-forma.js')).formaDemo());
+          const { datos, resumen } = aplicarImportacion(actual, plan, { hoy: fechaISO() });
+          const limpio = normalizarForma(datos);
+          guardado = JSON.stringify(limpio);
+          return { datos: limpio, resumen };
+        },
       };
     })(),
     // Lectura bíblica de ejemplo: un plan de un año a mitad de camino (con dos días atrasados).

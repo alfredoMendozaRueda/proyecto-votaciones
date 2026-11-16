@@ -8,7 +8,7 @@ import { nutrientesDe, momentoPorHora, totales, comidasHabituales } from '../../
 import { apuntar, contarUsoIA, borrarPlantilla } from '../../compartido/forma/acciones.js';
 import { peticionEstimar, leerEstimacion, macrosDeKcal, puedeUsarIA } from '../../compartido/forma/ia.js';
 import { minutosDe } from '../../compartido/forma/fechas.js';
-import { ic, escapar, num, fotoReducida, vibrar } from './ui.js';
+import { ic, escapar, num, fotoReducida, vibrar, unidadDe } from './ui.js';
 
 export function crearAnadir(ctx) {
   let s = null; // estado de la hoja abierta
@@ -39,6 +39,7 @@ export function crearAnadir(ctx) {
         <button type="button" class="f-acceso" data-a="an-manual">${ic('lapiz', 22)}Manual</button>
         <button type="button" class="f-acceso" data-a="an-libre">${ic('restaurante', 22)}Fuera</button>
         <button type="button" class="f-acceso" data-a="an-plantillas">${ic('plantilla', 22)}Plantillas</button>
+        <button type="button" class="f-acceso" data-a="an-importar">${ic('importar', 22)}Importar</button>
       </div>
       <div class="f-columna" data-an-lista>${lista()}</div>`;
   }
@@ -47,8 +48,8 @@ export function crearAnadir(ctx) {
     const r = nutrientesDe(a, a.racion);
     return `<div class="f-item" style="cursor:pointer" data-a="${off ? 'an-off' : 'an-elegir'}" data-id="${off ? i : a.id}">
       <span class="f-item__texto"><span class="f-item__nombre">${a.favorito ? `<span style="color:var(--f-azul-2)">★</span> ` : ''}${escapar(a.nombre)}</span>
-      <span class="f-item__detalle">${escapar(a.marca ? `${a.marca} · ` : '')}${num(a.racion)} g · ${num(r.kcal ?? 0)} kcal · ${num(r.proteina ?? 0)} g P${off && a.faltan?.length ? ' · faltan datos' : ''}</span></span>
-      ${off ? `<span class="f-item__kcal">${num(a.por100.kcal)}<small> /100 g</small></span>` : `<button type="button" class="f-item__mas" data-a="an-rapido" data-id="${a.id}" aria-label="Añadir ${escapar(a.nombre)} (${num(a.racion)} g)">${ic('mas', 16)}</button>`}
+      <span class="f-item__detalle">${escapar(a.marca ? `${a.marca} · ` : '')}${num(a.racion)} ${unidadDe(a)} · ${num(r.kcal ?? 0)} kcal · ${num(r.proteina ?? 0)} g P${off && a.faltan?.length ? ' · faltan datos' : ''}</span></span>
+      ${off ? `<span class="f-item__kcal">${num(a.por100.kcal)}<small> /100 g</small></span>` : `<button type="button" class="f-item__mas" data-a="an-rapido" data-id="${a.id}" aria-label="Añadir ${escapar(a.nombre)} (${num(a.racion)} ${unidadDe(a)})">${ic('mas', 16)}</button>`}
     </div>`;
   };
 
@@ -114,11 +115,11 @@ export function crearAnadir(ctx) {
     ];
     const hoja = ctx.hojas.abrir(
       `<div class="f-hoja__titulo"><h2>${escapar(alimento.nombre)}</h2>${!fuera ? `<button type="button" class="f-icono-boton" data-a="an-favorito" data-id="${alimento.id}" aria-pressed="${alimento.favorito}" aria-label="Favorito" style="${alimento.favorito ? 'color:var(--f-azul-2);border-color:var(--f-azul)' : ''}">${ic('estrella', 17)}</button>` : ''}</div>
-       <p class="f-tenue">${escapar(alimento.marca ? `${alimento.marca} · ` : '')}Por 100 g: ${num(alimento.por100.kcal ?? 0)} kcal · P ${num(alimento.por100.proteina ?? 0, 1)} · H ${num(alimento.por100.hidratos ?? 0, 1)} · G ${num(alimento.por100.grasa ?? 0, 1)}</p>
+       <p class="f-tenue">${escapar(alimento.marca ? `${alimento.marca} · ` : '')}Por 100 ${unidadDe(alimento)}: ${num(alimento.por100.kcal ?? 0)} kcal · P ${num(alimento.por100.proteina ?? 0, 1)} · H ${num(alimento.por100.hidratos ?? 0, 1)} · G ${num(alimento.por100.grasa ?? 0, 1)}</p>
        ${alimento.faltan?.length ? `<p class="f-tenue" style="color:var(--f-aviso)">A este producto le faltan datos (${alimento.faltan.join(', ')}). Cuentan como 0 hasta que los completes en Manual.</p>` : ''}
        <form class="f-columna" data-form="an-cantidad">
-         <label class="f-campo"><span>Cantidad${alimento.racionNombre ? ` · ración: ${escapar(alimento.racionNombre)}` : ''}</span><div class="f-con-unidad" data-unidad="g"><input class="f-entrada" name="gramos" type="text" inputmode="decimal" autocomplete="off" step="any" value="${alimento.racion}" data-entrada="an-gramos" required></div></label>
-         <div class="f-chips">${raciones.map(([f, t]) => `<button type="button" class="f-chip" data-a="an-racion" data-g="${Math.round(alimento.racion * f)}">${t} · ${num(Math.round(alimento.racion * f))} g</button>`).join('')}</div>
+         <label class="f-campo"><span>Cantidad${alimento.racionNombre ? ` · ración: ${escapar(alimento.racionNombre)}` : ''}</span><div class="f-con-unidad" data-unidad="${unidadDe(alimento)}"><input class="f-entrada" name="gramos" type="text" inputmode="decimal" autocomplete="off" step="any" value="${alimento.racion}" data-entrada="an-gramos" required></div></label>
+         <div class="f-chips">${raciones.map(([f, t]) => `<button type="button" class="f-chip" data-a="an-racion" data-g="${Math.round(alimento.racion * f)}">${t} · ${num(Math.round(alimento.racion * f))} ${unidadDe(alimento)}</button>`).join('')}</div>
          <div class="f-previa" data-an-previa>${previa(alimento, alimento.racion)}</div>
          <button type="submit" class="f-boton f-boton--azul f-boton--ancho">${ic('mas', 16)}Añadir a ${escapar(nombreMomento(s.momento).toLowerCase())}</button>
        </form>`,
@@ -198,13 +199,14 @@ export function crearAnadir(ctx) {
          <label class="f-campo"><span>Nombre</span><input class="f-entrada" name="nombre" required value="${escapar(base.nombre ?? '')}" placeholder="Tortilla de patatas"></label>
          <div class="f-rejilla-2">
            <label class="f-campo"><span>Marca (opc.)</span><input class="f-entrada" name="marca" value="${escapar(base.marca ?? '')}"></label>
-           <label class="f-campo"><span>Ración habitual</span><div class="f-con-unidad" data-unidad="g"><input class="f-entrada" name="racion" type="text" inputmode="decimal" autocomplete="off" step="any" value="${base.racion ?? 100}" required></div></label>
+           <label class="f-campo"><span>Unidad</span><select class="f-entrada" name="unidad" data-cambio="an-unidad"><option value="g" ${unidadDe(base) === 'g' ? 'selected' : ''}>Gramos (g)</option><option value="ml" ${unidadDe(base) === 'ml' ? 'selected' : ''}>Mililitros (ml)</option></select></label>
          </div>
-         <span class="f-etiqueta">Por cada 100 g</span>
+         <label class="f-campo"><span>Ración habitual</span><div class="f-con-unidad" data-unidad="${unidadDe(base)}" data-an-u><input class="f-entrada" name="racion" type="text" inputmode="decimal" autocomplete="off" step="any" value="${base.racion ?? 100}" required></div></label>
+         <span class="f-etiqueta" data-an-por>Por cada 100 ${unidadDe(base)}</span>
          <div class="f-rejilla-2">${campo('kcal', 'Kcal', true)}${campo('proteina', 'Proteína (g)', true)}${campo('hidratos', 'Hidratos (g)', true)}${campo('azucares', 'Azúcares (g)')}${campo('grasa', 'Grasa (g)', true)}${campo('saturadas', 'Saturadas (g)')}${campo('fibra', 'Fibra (g)')}${campo('sal', 'Sal (g)')}</div>
          <input type="hidden" name="codigo" value="${escapar(base.codigo ?? '')}">
          <input type="hidden" name="origen" value="${escapar(base.origen ?? 'manual')}">
-         <label class="f-campo"><span>Lo que comes ahora</span><div class="f-con-unidad" data-unidad="g"><input class="f-entrada" name="gramos" type="text" inputmode="decimal" autocomplete="off" step="any" value="${base.racion ?? 100}"></div></label>
+         <label class="f-campo"><span>Lo que comes ahora</span><div class="f-con-unidad" data-unidad="${unidadDe(base)}" data-an-u><input class="f-entrada" name="gramos" type="text" inputmode="decimal" autocomplete="off" step="any" value="${base.racion ?? 100}"></div></label>
          <div class="f-fila">
            <button type="submit" class="f-boton" name="solo" value="1">Solo guardar</button>
            <button type="submit" class="f-boton f-boton--azul" style="flex:1">Guardar y añadir</button>
@@ -332,7 +334,7 @@ export function crearAnadir(ctx) {
     },
     'an-rapido': (el) => {
       const a = ctx.datos.alimentos.find((x) => x.id === el.dataset.id);
-      if (a) apuntarYSeguir([{ ...nutrientesDe(a, a.racion), nombre: a.nombre, alimentoId: a.id, gramos: a.racion }], `${a.nombre} · ${num(a.racion)} g`);
+      if (a) apuntarYSeguir([{ ...nutrientesDe(a, a.racion), nombre: a.nombre, alimentoId: a.id, gramos: a.racion, unidad: unidadDe(a) }], `${a.nombre} · ${num(a.racion)} ${unidadDe(a)}`);
     },
     'an-habitual': (el) => {
       const h = comidasHabituales(ctx.datos, s.fecha, ahoraMin()).find((x) => x.firma === el.dataset.firma);
@@ -436,6 +438,10 @@ export function crearAnadir(ctx) {
   };
 
   const cambios = {
+    'an-unidad': (el) => {
+      for (const c of el.form.querySelectorAll('[data-an-u]')) c.dataset.unidad = el.value;
+      el.form.querySelector('[data-an-por]').textContent = `Por cada 100 ${el.value}`;
+    },
     'an-foto': async (el) => {
       const archivo = el.files?.[0];
       el.value = '';
@@ -461,7 +467,7 @@ export function crearAnadir(ctx) {
         a = r.alimento;
       }
       ctx.hojas.cerrar(s.cantidad);
-      apuntarYSeguir([{ ...nutrientesDe(a, g), nombre: a.nombre, alimentoId: a.id, gramos: g }], `${a.nombre} · ${num(g)} g`);
+      apuntarYSeguir([{ ...nutrientesDe(a, g), nombre: a.nombre, alimentoId: a.id, gramos: g, unidad: unidadDe(a) }], `${a.nombre} · ${num(g)} ${unidadDe(a)}`);
     },
     'an-codigo': (form) => {
       const codigo = form.elements.codigo.value;
@@ -478,7 +484,7 @@ export function crearAnadir(ctx) {
       if (!nombre || v('kcal') === undefined) return;
       const por100 = {};
       for (const k of ['kcal', 'proteina', 'hidratos', 'azucares', 'grasa', 'saturadas', 'fibra', 'sal']) if (v(k) !== undefined) por100[k] = v(k);
-      const { datos, alimento } = guardarAlimento(ctx.datos, { nombre, marca: form.elements.marca.value.trim(), racion: v('racion') || 100, por100, codigo: form.elements.codigo.value, origen: form.elements.origen.value || 'manual' });
+      const { datos, alimento } = guardarAlimento(ctx.datos, { nombre, marca: form.elements.marca.value.trim(), unidad: form.elements.unidad.value === 'ml' ? 'ml' : 'g', racion: v('racion') || 100, por100, codigo: form.elements.codigo.value, origen: form.elements.origen.value || 'manual' });
       ctx.guardar(datos, { pintar: false });
       ctx.hojas.cerrar();
       const solo = e.submitter?.name === 'solo';
@@ -487,7 +493,7 @@ export function crearAnadir(ctx) {
         return ctx.tostada(`«${nombre}» guardado en tus alimentos`);
       }
       const g = v('gramos') || alimento.racion;
-      apuntarYSeguir([{ ...nutrientesDe(alimento, g), nombre: alimento.nombre, alimentoId: alimento.id, gramos: g }], `${alimento.nombre} · ${num(g)} g`);
+      apuntarYSeguir([{ ...nutrientesDe(alimento, g), nombre: alimento.nombre, alimentoId: alimento.id, gramos: g, unidad: unidadDe(alimento) }], `${alimento.nombre} · ${num(g)} ${unidadDe(alimento)}`);
     },
     'an-ia': (form) => {
       const texto = form.elements.texto.value.trim();

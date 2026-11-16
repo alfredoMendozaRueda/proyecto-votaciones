@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('asistente', {
   forma: {
     leer: () => invocar('forma:leer'),
     guardar: (datos) => invocar('forma:guardar', datos),
+    importar: (plan) => invocar('forma:importar', plan),
   },
   consumo: {
     resumen: () => invocar('consumo:resumen'),

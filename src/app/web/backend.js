@@ -15,6 +15,8 @@ import { normalizarDatosEmpleo } from '../../compartido/empleo.js';
 import { crearAlmacenGastos, normalizarGastos } from '../../compartido/gastos.js';
 import { crearAlmacenBiblia, normalizarBiblia, avisosBiblia } from '../../compartido/biblia.js';
 import { normalizarForma } from '../../compartido/forma/datos.js';
+import { aplicarImportacion } from '../../compartido/forma/importar.js';
+import { fechaISO as fechaHoy } from '../../compartido/forma/fechas.js';
 import {
   Sincronizador,
   coleccionLista,
@@ -674,6 +676,15 @@ export function crearBackendWeb() {
       guardar: async (datos) => {
         await guardarForma(normalizarForma(datos));
         tocado();
+      },
+      // Importar desde JSON: se revalida con lo guardado y se escribe de una vez.
+      importar: async (plan) => {
+        const actual = normalizarForma((await leerForma()) ?? {});
+        const { datos, resumen } = aplicarImportacion(actual, plan, { hoy: fechaHoy() });
+        const limpio = normalizarForma(datos);
+        await guardarForma(limpio);
+        tocado();
+        return { datos: limpio, resumen };
       },
     },
     consumo: {

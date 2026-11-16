@@ -5,7 +5,12 @@ const dos = (n) => String(n).padStart(2, '0');
 
 export const fechaISO = (d = new Date()) => `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
 
-export const esFecha = (f) => typeof f === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(f) && !Number.isNaN(aDia(f).getTime());
+// Una fecha real AAAA-MM-DD (el 30 de febrero no vale aunque Date lo pase a marzo).
+export function esFecha(f) {
+  if (typeof f !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(f)) return false;
+  const d = aDia(f);
+  return !Number.isNaN(d.getTime()) && d.getDate() === Number(f.slice(8, 10)) && d.getMonth() + 1 === Number(f.slice(5, 7));
+}
 
 // Mediodía: así un cambio de hora nunca mueve la fecha.
 export const aDia = (f) => new Date(`${f}T12:00:00`);

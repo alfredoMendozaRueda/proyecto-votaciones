@@ -79,6 +79,8 @@ const texto = (v, max = 200) => (typeof v === 'string' ? v.trim().slice(0, max) 
 const lista = (v) => (Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') : []);
 const conId = (x, prefijo) => (typeof x.id === 'string' && x.id ? x.id : id(prefijo));
 
+export const ORIGENES = ['manual', 'off', 'ia', 'importado'];
+
 export const NUTRIENTES = ['kcal', 'proteina', 'hidratos', 'azucares', 'grasa', 'saturadas', 'fibra', 'sal'];
 
 export function normalizarNutrientes(n = {}) {
@@ -128,11 +130,13 @@ function normalizarAlimento(a) {
     id: conId(a, 'a'),
     nombre,
     marca: texto(a.marca, 80),
+    // Los valores van siempre por 100 g o por 100 ml (bebidas), según la unidad.
+    unidad: a.unidad === 'ml' ? 'ml' : 'g',
     racion: num(a.racion, 0.1, 5000) ?? 100,
     racionNombre: texto(a.racionNombre, 40),
     por100: normalizarNutrientes(a.por100),
     codigo: texto(a.codigo, 32),
-    origen: ['manual', 'off', 'ia'].includes(a.origen) ? a.origen : 'manual',
+    origen: ORIGENES.includes(a.origen) ? a.origen : 'manual',
     favorito: a.favorito === true,
     usado: num(a.usado, 0) ?? 0,
     veces: num(a.veces, 0) ?? 0,
@@ -152,10 +156,13 @@ function normalizarRegistro(r) {
     minuto: num(r.minuto, 0, 1439) ?? 720,
     nombre,
     alimentoId: texto(r.alimentoId, 60) || undefined,
+    // Cantidad en la unidad del alimento (g o ml).
     gramos: num(r.gramos, 0, 10000),
+    ...(r.unidad === 'ml' ? { unidad: 'ml' } : {}),
     ...normalizarNutrientes(r),
     estimado: r.estimado === true,
     libre: r.libre === true,
+    ...(r.origen === 'importado' ? { origen: 'importado' } : {}),
     creado: num(r.creado, 0) ?? Date.now(),
   };
 }

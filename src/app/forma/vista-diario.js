@@ -5,7 +5,7 @@ import { resumenDia, comidasHabituales, avisosDelDia, quePuedoComer, nutrientesD
 import { apuntar, editarRegistro, borrarRegistros, sumarAgua, alternarSuplemento, marcarEntreno, descartarSugerencia, verAviso, copiarDia, guardarPlantilla, contarUsoIA } from '../../compartido/forma/acciones.js';
 import { peticionIdeas, leerIdeas, puedeUsarIA } from '../../compartido/forma/ia.js';
 import { minutosDe, sumarDias, nombreDia } from '../../compartido/forma/fechas.js';
-import { ic, escapar, num, medidor, vibrar } from './ui.js';
+import { ic, escapar, num, medidor, vibrar, unidadDe } from './ui.js';
 
 const MACROS = [
   ['proteina', 'Proteína', 'var(--f-prot)'],
@@ -73,7 +73,7 @@ export function vistaDiario(ctx) {
                   .map(
                     (x) => `<button type="button" class="f-item" data-a="editar-registro" data-id="${x.id}">
                 <span class="f-item__texto"><span class="f-item__nombre">${escapar(x.nombre)}${x.estimado ? '<span class="f-marca-estimado">estimado</span>' : ''}</span>
-                <span class="f-item__detalle">${x.gramos ? `${num(x.gramos)} g · ` : ''}P ${num(x.proteina ?? 0)} · H ${num(x.hidratos ?? 0)} · G ${num(x.grasa ?? 0)}</span></span>
+                <span class="f-item__detalle">${x.gramos ? `${num(x.gramos, 1)} ${unidadDe(x)} · ` : ''}P ${num(x.proteina ?? 0)} · H ${num(x.hidratos ?? 0)} · G ${num(x.grasa ?? 0)}</span></span>
                 <span class="f-item__kcal">${num(x.kcal)} <small>kcal</small></span></button>`,
                   )
                   .join('')
@@ -164,7 +164,7 @@ export function vistaDiario(ctx) {
        ${reg.estimado ? '<p class="f-tenue">Valores estimados: corrígelos si sabes los reales.</p>' : ''}
        <form class="f-columna" data-form="editar-registro">
          <div class="f-rejilla-2">
-           <label class="f-campo"><span>Cantidad</span><div class="f-con-unidad" data-unidad="g"><input class="f-entrada" name="gramos" type="text" inputmode="decimal" autocomplete="off" step="any" value="${reg.gramos ?? ''}" data-entrada="editar-g"></div></label>
+           <label class="f-campo"><span>Cantidad</span><div class="f-con-unidad" data-unidad="${unidadDe(reg)}"><input class="f-entrada" name="gramos" type="text" inputmode="decimal" autocomplete="off" step="any" value="${reg.gramos ?? ''}" data-entrada="editar-g"></div></label>
            <label class="f-campo"><span>Momento</span><select class="f-entrada" name="momento">${d.momentos.map((m) => `<option value="${m.id}" ${m.id === reg.momento ? 'selected' : ''}>${escapar(m.nombre)}</option>`).join('')}</select></label>
          </div>
          <div class="f-rejilla-2">
@@ -200,7 +200,7 @@ export function vistaDiario(ctx) {
                .map(
                  (o, i) => `<div class="f-panel f-columna">
              <div class="f-fila f-entre"><strong>${escapar(o.items.map((x) => x.nombre).join(' + '))}</strong></div>
-             <p class="f-tenue">${o.items.map((x) => `${num(x.gramos)} g de ${escapar(x.nombre.toLowerCase())}`).join(' · ')}</p>
+             <p class="f-tenue">${o.items.map((x) => `${num(x.gramos)} ${unidadDe(x.alimento)} de ${escapar(x.nombre.toLowerCase())}`).join(' · ')}</p>
              <div class="f-fila f-entre"><span class="f-suave" style="font-size:13px">${num(o.total.kcal)} kcal · ${num(o.total.proteina)} g P · ${num(o.total.grasa)} g G</span>
              <button type="button" class="f-boton f-boton--chico f-boton--azul" data-a="apuntar-opcion" data-i="${i}">Apuntar</button></div>
            </div>`,
@@ -308,7 +308,7 @@ export function vistaDiario(ctx) {
       const o = hoja?.opciones?.[Number(el.dataset.i)];
       if (!o) return;
       apuntarItems(
-        o.items.map((x) => ({ ...nutrientesDe(x.alimento, x.gramos), nombre: x.alimento.nombre, alimentoId: x.alimento.id, gramos: x.gramos })),
+        o.items.map((x) => ({ ...nutrientesDe(x.alimento, x.gramos), nombre: x.alimento.nombre, alimentoId: x.alimento.id, gramos: x.gramos, unidad: unidadDe(x.alimento) })),
         'Apuntado',
       );
     },

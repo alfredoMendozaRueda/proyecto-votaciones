@@ -27,6 +27,8 @@ import { normalizarDatosEmpleo } from '../src/compartido/empleo.js';
 import { crearAlmacenGastos, normalizarGastos } from '../src/compartido/gastos.js';
 import { crearAlmacenBiblia, normalizarBiblia, avisosBiblia } from '../src/compartido/biblia.js';
 import { normalizarForma } from '../src/compartido/forma/datos.js';
+import { aplicarImportacion } from '../src/compartido/forma/importar.js';
+import { fechaISO as fechaHoy } from '../src/compartido/forma/fechas.js';
 import { hablarVoiceStudio, vocesVoiceStudio } from './voicestudio.js';
 import { transcribirGroq } from '../src/compartido/dictado.js';
 import {
@@ -559,6 +561,16 @@ function registrarCanales() {
   manejar('forma:guardar', async (datos) => {
     await guardarForma(normalizarForma(datos));
     tocado();
+  });
+  // Importar desde JSON: se vuelve a validar aquí, con los datos guardados, y se
+  // escribe de una vez (si algo no vale, no se guarda nada).
+  manejar('forma:importar', async (plan) => {
+    const actual = normalizarForma((await leerForma()) ?? {});
+    const { datos, resumen } = aplicarImportacion(actual, plan, { hoy: fechaHoy() });
+    const limpio = normalizarForma(datos);
+    await guardarForma(limpio);
+    tocado();
+    return { datos: limpio, resumen };
   });
   // Lo cobrado de verdad (Costs API de OpenAI) con la clave de administrador, solo en este equipo.
   manejar('consumo:tieneClaveAdmin', async () => Boolean(leerSecreto('claveOpenAIAdmin')));

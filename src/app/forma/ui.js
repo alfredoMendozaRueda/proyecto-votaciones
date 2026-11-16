@@ -2,6 +2,9 @@
 // lenguaje que el de Kitsune), formato de números, hojas que suben desde
 // abajo, avisos con «Deshacer» y gráficas en SVG.
 
+// La unidad de un alimento o de lo apuntado: gramos salvo las bebidas (ml).
+export const unidadDe = (x) => (x?.unidad === 'ml' ? 'ml' : 'g');
+
 export const escapar = (t) =>
   String(t ?? '')
     .replace(/&/g, '&amp;')
@@ -41,6 +44,7 @@ const P = {
   basura: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   reloj: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/>',
   camara: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  importar: '<path d="M9 4h6v3H9z"/><path d="M15 5h3v15H6V5h3"/><path d="M12 10v6M9 13.5l3 3 3-3"/>',
   copiar: '<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V4H4v12h4"/>',
   diana: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".6"/>',
   trofeo: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8"/>',

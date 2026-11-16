@@ -101,6 +101,15 @@ export function vistaPerfil(ctx) {
       </section>
 
       <section class="f-panel f-columna">
+        <div class="f-etiqueta"><span>Mis alimentos</span><b>${d.alimentos.length}</b></div>
+        <p class="f-explica">Todos los que has buscado, escaneado, creado o importado. Corrígelos, márcalos como favoritos o trae muchos de golpe desde el JSON que te prepare una IA.</p>
+        <div class="f-rejilla-2">
+          <button type="button" class="f-boton" data-a="mis-alimentos">${ic('plato', 16)}Ver y editar</button>
+          <button type="button" class="f-boton" data-a="importar">${ic('importar', 16)}Importar JSON</button>
+        </div>
+      </section>
+
+      <section class="f-panel f-columna">
         <div class="f-etiqueta"><span>Atajos en el iPhone</span></div>
         <p class="f-explica">En la app <b style="color:var(--f-texto)">Atajos</b> → Nuevo atajo → «Abrir URL» con una de estas direcciones, y añádelo a la pantalla de inicio. En Android, mantén pulsado el icono de Kitsune.</p>
         ${[
@@ -152,7 +161,7 @@ export function vistaPerfil(ctx) {
       'pesos.csv': strToU8(csv([['fecha', 'kg'], ...d.pesos.map((p) => [p.fecha, p.kg])])),
       'medidas.csv': strToU8(csv([['fecha', 'medida', 'cm'], ...d.medidas.map((m) => [m.fecha, m.tipo, m.cm])])),
       'entrenos.csv': strToU8(csv([['fecha', 'sesion', 'ejercicio', 'kg', 'reps', 'rir', 'calentamiento'], ...d.sesiones.flatMap((s) => s.series.map((x) => [s.fecha, s.nombre, nombreEj(x.ejercicioId), x.kg, x.reps, x.rir, x.calentamiento ? 'sí' : '']))])),
-      'alimentos.csv': strToU8(csv([['nombre', 'marca', 'racion_g', 'kcal_100g', 'proteina_100g', 'hidratos_100g', 'grasa_100g', 'fibra_100g', 'codigo'], ...d.alimentos.map((a) => [a.nombre, a.marca, a.racion, a.por100.kcal, a.por100.proteina, a.por100.hidratos, a.por100.grasa, a.por100.fibra, a.codigo])])),
+      'alimentos.csv': strToU8(csv([['nombre', 'marca', 'unidad', 'racion', 'kcal_100', 'proteina_100', 'hidratos_100', 'grasa_100', 'fibra_100', 'codigo', 'origen'], ...d.alimentos.map((a) => [a.nombre, a.marca, a.unidad, a.racion, a.por100.kcal, a.por100.proteina, a.por100.hidratos, a.por100.grasa, a.por100.fibra, a.codigo, a.origen])])),
     };
     const zip = zipSync(archivos, { level: 6 });
     const nombre = `forma-${ctx.hoy()}.zip`;

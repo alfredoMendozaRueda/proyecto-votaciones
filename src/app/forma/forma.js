@@ -12,6 +12,9 @@ import { vistaProgreso } from './vista-progreso.js';
 import { vistaPerfil } from './vista-perfil.js';
 import { vistaBienvenida } from './vista-bienvenida.js';
 import { crearAnadir } from './anadir.js';
+import { crearImportador } from './importador.js';
+import { crearMisAlimentos } from './mis-alimentos.js';
+import { aplicarImportacion } from '../../compartido/forma/importar.js';
 
 const VISTAS = [
   { id: 'diario', nombre: 'Diario', icono: 'diario' },
@@ -73,8 +76,23 @@ export async function montarForma({ raiz, api, salir }) {
     pintar: () => pintar(),
     irA: (vista) => irA(vista),
     abrirAnadir: (opciones) => anadir.abrir(opciones),
+    // Importar desde JSON: lo revalida y guarda el «servidor» de cada plataforma
+    // (en Windows, el proceso principal) de una vez; si algo falla, no cambia nada.
+    async importar(plan) {
+      await guardando;
+      let r;
+      if (api.forma.importar) r = await api.forma.importar(plan);
+      else {
+        r = aplicarImportacion(estado.datos, plan, { hoy: fechaISO() });
+        await api.forma.guardar(normalizarForma(r.datos));
+      }
+      estado.datos = normalizarForma(r.datos);
+      return r.resumen;
+    },
   };
   const anadir = crearAnadir(ctx);
+  const importador = crearImportador(ctx);
+  const misAlimentos = crearMisAlimentos(ctx);
 
   const vistas = { diario: vistaDiario(ctx), entreno: vistaEntreno(ctx), progreso: vistaProgreso(ctx), perfil: vistaPerfil(ctx) };
   const bienvenida = vistaBienvenida(ctx);
@@ -142,10 +160,11 @@ export async function montarForma({ raiz, api, salir }) {
     },
   };
 
+  const modulos = () => [...Object.values(vistas), bienvenida, anadir, importador, misAlimentos];
   const buscarAccion = (el) => {
     const a = el.dataset.a;
     if (acciones[a]) return acciones[a];
-    for (const v of [...Object.values(vistas), bienvenida, anadir]) if (v.acciones?.[a]) return v.acciones[a];
+    for (const v of modulos()) if (v.acciones?.[a]) return v.acciones[a];
     return null;
   };
 
@@ -167,7 +186,7 @@ export async function montarForma({ raiz, api, salir }) {
     }
     const el = e.target.closest('[data-cambio]');
     if (!el) return;
-    for (const v of [...Object.values(vistas), bienvenida, anadir]) v.cambios?.[el.dataset.cambio]?.(el, e);
+    for (const v of modulos()) v.cambios?.[el.dataset.cambio]?.(el, e);
   });
   raiz.addEventListener('input', (e) => {
     // Decimales con coma (82,4) como se escriben en España: se guardan con punto.
@@ -183,13 +202,13 @@ export async function montarForma({ raiz, api, salir }) {
     }
     const el = e.target.closest('[data-entrada]');
     if (!el) return;
-    for (const v of [...Object.values(vistas), bienvenida, anadir]) v.entradas?.[el.dataset.entrada]?.(el, e);
+    for (const v of modulos()) v.entradas?.[el.dataset.entrada]?.(el, e);
   });
   raiz.addEventListener('submit', (e) => {
     const el = e.target.closest('form[data-form]');
     if (!el) return;
     e.preventDefault();
-    for (const v of [...Object.values(vistas), bienvenida, anadir]) v.formularios?.[el.dataset.form]?.(el, e);
+    for (const v of modulos()) v.formularios?.[el.dataset.form]?.(el, e);
   });
   raiz.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && hojas.abierta()) {
@@ -244,6 +263,7 @@ export async function montarForma({ raiz, api, salir }) {
         irA('progreso');
         vistas.progreso.acciones['nuevo-peso']?.();
       } else if (nombre === 'entreno') irA('entreno');
+      else if (nombre === 'importar') importador.abrir();
     },
   };
 }

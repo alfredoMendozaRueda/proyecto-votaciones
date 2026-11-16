@@ -27,6 +27,7 @@ export function apuntar(datos, { fecha, momento, minuto, items }) {
     nombre: x.nombre,
     alimentoId: x.alimentoId,
     gramos: x.gramos,
+    ...(x.unidad === 'ml' ? { unidad: 'ml' } : {}),
     kcal: x.kcal ?? 0,
     proteina: x.proteina ?? 0,
     hidratos: x.hidratos ?? 0,
