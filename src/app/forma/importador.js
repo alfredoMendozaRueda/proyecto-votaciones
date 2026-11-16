@@ -7,6 +7,7 @@ import { minutosDe, nombreDia, fechaCorta } from '../../compartido/forma/fechas.
 import { buscarLocal } from '../../compartido/forma/alimentos.js';
 import { normalizarNombre } from '../../compartido/forma/emparejar.js';
 import { ic, escapar, num } from './ui.js';
+import { crearVistaEntreno } from './importador-entreno.js';
 
 const NIVEL = { id: 'por su id', ean: 'por el código de barras', nombre: 'por el nombre', alias: 'por un alias', manual: 'lo has elegido tú' };
 const conMarca = (a) => `${a.nombre}${a.marca ? ` (${a.marca})` : ''}`;
@@ -17,6 +18,7 @@ const listaErrores = (errores, max = 12) =>
 
 export function crearImportador(ctx) {
   let im = null; // { hoja, texto, plan }
+  const entreno = crearVistaEntreno(ctx, { plan: () => im.plan, repintar: () => repintarRevision(), actualizar: () => actualizar() });
 
   const opciones = () => ({ hoy: ctx.hoy(), ahoraMin: minutosDe(new Date()) });
 
@@ -187,7 +189,16 @@ export function crearImportador(ctx) {
     const dias = [...new Set(p.registros.map((r) => r.fecha))].sort();
     const generales = (p.avisos ?? []).filter((v) => !v.clave);
     im.hoja.cuerpo.innerHTML = `<div class="f-hoja__titulo"><h2>Revisar</h2><button type="button" class="f-boton f-boton--chico" data-a="im-volver">${ic('atras', 14)}Cambiar texto</button></div>
-      <p class="f-tenue">${[p.alimentos.length ? `${p.alimentos.length} ${p.alimentos.length === 1 ? 'alimento' : 'alimentos'}` : '', p.registros.length ? `${p.registros.length} ${p.registros.length === 1 ? 'comida' : 'comidas'}` : ''].filter(Boolean).join(' y ')}. Desmarca lo que no quieras y ajusta cantidades o comidas: los valores se recalculan al momento.</p>
+      <p class="f-tenue">${[
+        p.alimentos.length ? `${p.alimentos.length} ${p.alimentos.length === 1 ? 'alimento' : 'alimentos'}` : '',
+        p.registros.length ? `${p.registros.length} ${p.registros.length === 1 ? 'comida' : 'comidas'}` : '',
+        p.ejercicios?.length ? `${p.ejercicios.length} ${p.ejercicios.length === 1 ? 'ejercicio' : 'ejercicios'}` : '',
+        p.rutinas?.length ? `${p.rutinas.length} ${p.rutinas.length === 1 ? 'rutina' : 'rutinas'}` : '',
+        p.sesiones?.length ? `${p.sesiones.length} ${p.sesiones.length === 1 ? 'sesión' : 'sesiones'}` : '',
+      ]
+        .filter(Boolean)
+        .join(', ')
+        .replace(/, ([^,]*)$/, ' y $1')}. Desmarca lo que no quieras y corrige lo que haga falta: los valores se recalculan al momento.</p>
       ${generales.length ? `<ul class="f-im-avisos">${generales.map((v) => `<li>${escapar(textoError(v))}</li>`).join('')}</ul>` : ''}
       <div data-im-errores></div>
       ${
@@ -207,6 +218,7 @@ export function crearImportador(ctx) {
           </section>`,
         )
         .join('')}
+      ${entreno.html(im.resuelto)}
       <div class="f-pie-fijo f-im-pie">
         <span class="f-im-total" data-im-total></span>
         <button type="button" class="f-boton f-boton--azul" data-a="im-importar" data-im-boton>${ic('check', 16)}Importar</button>
@@ -234,7 +246,8 @@ export function crearImportador(ctx) {
     for (const fila of c.querySelectorAll('[data-im-err]')) {
       const propios = r.errores.filter((e) => e.clave === fila.dataset.imErr);
       fila.hidden = !propios.length;
-      fila.textContent = propios.map((e) => `${e.campo ? `${e.campo}: ` : ''}${e.mensaje}`).join(' · ');
+      // En entrenos, el error dice también el ejercicio y la serie.
+      fila.textContent = propios.map((e) => (/^[eqs]\d/.test(e.clave) ? textoError(e) : `${e.campo ? `${e.campo}: ` : ''}${e.mensaje}`)).join(' · ');
       // Un registro que no encuentra su alimento: «¿Es…?» con los tuyos más parecidos.
       const caja = c.querySelector(`[data-im-asociar="${fila.dataset.imErr}"]`);
       if (caja) {
@@ -272,16 +285,24 @@ export function crearImportador(ctx) {
     const nA = r.alimentos.filter((a) => a.decision !== 'usar').length;
     const nR = r.registros.length;
     const kcal = r.registros.reduce((s, x) => s + (x.nutrientes.kcal ?? 0), 0);
+    const ent = entreno.resumen(r);
     const total = c.querySelector('[data-im-total]');
-    if (total) total.innerHTML = r.errores.length ? `<span class="f-error">${r.errores.length === 1 ? 'Hay 1 error' : `Hay ${r.errores.length} errores`}: corrígelo o desmárcalo</span>` : nR ? `<b>+${num(kcal)} kcal</b> en ${Object.keys(porDia).length === 1 ? '1 día' : `${Object.keys(porDia).length} días`}` : `${nA} ${nA === 1 ? 'alimento' : 'alimentos'} a Mis alimentos`;
+    const textoEntreno = ent?.sesiones ? `<b>${ent.sesiones} ${ent.sesiones === 1 ? 'sesión' : 'sesiones'}</b> · ${ent.series} series` : ent?.elementos ? `${ent.elementos} de entreno` : '';
+    const textoComida = nR ? `<b>+${num(kcal)} kcal</b> en ${Object.keys(porDia).length === 1 ? '1 día' : `${Object.keys(porDia).length} días`}` : nA ? `${nA} ${nA === 1 ? 'alimento' : 'alimentos'} a Mis alimentos` : '';
+    if (total)
+      total.innerHTML = r.errores.length
+        ? `<span class="f-error">${r.errores.length === 1 ? 'Hay 1 error' : `Hay ${r.errores.length} errores`}: corrígelo o desmárcalo</span>`
+        : ent?.faltan
+          ? `<span class="f-error">Faltan ${ent.faltan} por resolver</span>`
+          : [textoComida, textoEntreno].filter(Boolean).join(' · ') || 'Nada marcado';
     const boton = c.querySelector('[data-im-boton]');
-    const n = nR + r.alimentos.length;
+    const n = nR + r.alimentos.length + (ent?.elementos ?? 0);
     if (boton) {
-      boton.disabled = Boolean(r.errores.length) || !n;
+      boton.disabled = Boolean(r.errores.length) || Boolean(ent?.faltan) || !n;
       boton.innerHTML = `${ic('check', 16)}Importar${n ? ` ${n}` : ''}`;
     }
     for (const fila of c.querySelectorAll('[data-im-fila]')) {
-      const x = [...im.plan.alimentos, ...im.plan.registros].find((y) => y.clave === fila.dataset.imFila);
+      const x = todos().find((y) => y.clave === fila.dataset.imFila);
       fila.toggleAttribute('data-fuera', !x?.incluir);
     }
   }
@@ -308,8 +329,12 @@ export function crearImportador(ctx) {
     if (resumen.actualizados) partes.push(`${resumen.actualizados} ${resumen.actualizados === 1 ? 'actualizado' : 'actualizados'}`);
     if (resumen.alias) partes.push(`${resumen.alias} ${resumen.alias === 1 ? 'alias nuevo' : 'alias nuevos'}`);
     if (resumen.registros) partes.push(`${resumen.registros} ${resumen.registros === 1 ? 'comida' : 'comidas'} en el diario`);
+    if (resumen.ejerciciosCreados) partes.push(`${resumen.ejerciciosCreados} ${resumen.ejerciciosCreados === 1 ? 'ejercicio nuevo' : 'ejercicios nuevos'}`);
+    if (resumen.rutinasCreadas || resumen.rutinasActualizadas) partes.push(`${(resumen.rutinasCreadas ?? 0) + (resumen.rutinasActualizadas ?? 0)} ${(resumen.rutinasCreadas ?? 0) + (resumen.rutinasActualizadas ?? 0) === 1 ? 'rutina' : 'rutinas'}`);
+    if (resumen.sesiones || resumen.sesionesFusionadas) partes.push(`${(resumen.sesiones ?? 0) + (resumen.sesionesFusionadas ?? 0)} ${(resumen.sesiones ?? 0) + (resumen.sesionesFusionadas ?? 0) === 1 ? 'sesión' : 'sesiones'} (${resumen.series} series)`);
     ctx.hojas.cerrarTodas();
-    if (resumen.fechas.length) {
+    if (resumen.fechasEntreno?.length && !resumen.registros) ctx.irA('entreno');
+    else if (resumen.fechas.length) {
       const hoy = ctx.hoy();
       ctx.estado.fecha = resumen.fechas.filter((f) => f <= hoy).at(-1) ?? hoy;
       ctx.irA('diario');
@@ -317,7 +342,8 @@ export function crearImportador(ctx) {
     ctx.tostada(`Importado: ${partes.join(', ') || 'nada nuevo'}`, { accion: () => ctx.guardar(antes), ms: 7000 });
   }
 
-  const buscar = (clave) => [...(im?.plan?.alimentos ?? []), ...(im?.plan?.registros ?? [])].find((x) => x.clave === clave);
+  const todos = () => ['alimentos', 'registros', 'ejercicios', 'rutinas', 'sesiones'].flatMap((k) => im?.plan?.[k] ?? []);
+  const buscar = (clave) => todos().find((x) => x.clave === clave);
 
   const acciones = {
     importar: () => abrir(),
@@ -351,6 +377,7 @@ export function crearImportador(ctx) {
       repintarRevision();
     },
     'im-importar': (el) => importar(el),
+    ...entreno.acciones,
     'im-elegir': (el) => hojaElegir(el.dataset.clave),
     // Elegido en «¿Cuál es?»: un alimento importado pasa a usar el tuyo; un registro se asocia.
     'im-mio': (el) => {
@@ -387,6 +414,7 @@ export function crearImportador(ctx) {
   }
 
   const entradas = {
+    ...entreno.entradas,
     'im-buscar-mio': (el) => {
       if (!im?.eligiendo) return;
       im.eligiendo.texto = el.value;
@@ -429,8 +457,11 @@ export function crearImportador(ctx) {
       const x = buscar(el.dataset.clave);
       if (!x) return;
       x.incluir = el.checked;
-      actualizar();
+      // En entrenos cambian las referencias, los duplicados y lo que falta por resolver.
+      if (/^[eqs]\d/.test(x.clave)) repintarRevision();
+      else actualizar();
     },
+    ...entreno.cambios,
     'im-momento': (el) => {
       const x = buscar(el.dataset.clave);
       if (!x) return;

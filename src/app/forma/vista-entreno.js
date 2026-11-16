@@ -2,10 +2,13 @@
 // o efectivas), ver lo que hiciste la última vez, cuándo subir peso, el
 // descanso entre series, la calculadora de discos, el historial, la gráfica de
 // cada ejercicio y el asesor de descarga.
-import { ultimaVez, textoSeries, sugerenciaSubida, asesorDescarga, avisoFuerzaEnDeficit, historialEjercicio, ejerciciosDeSesion, duracionSesion, kcalCardio, volumenSemanal } from '../../compartido/forma/entreno.js';
+import { ultimaVez, textoSeries, sugerenciaSubida, asesorDescarga, avisoFuerzaEnDeficit, historialEjercicio, ejerciciosDeSesion, duracionSesion, kcalDeCardio, volumenSemanal, volumenSesion, carga, tipoSerie } from '../../compartido/forma/entreno.js';
 import { empezarSesion, actualizarActiva, terminarSesion, descartarActiva, borrarSesion, guardarRutina, borrarRutina, crearEjercicio, alternarPrincipal, aceptarDescarga, descartarDescarga, verAviso } from '../../compartido/forma/acciones.js';
 import { discosPorLado, epley } from '../../compartido/forma/calculos.js';
-import { ejercicio, GRUPOS, id as nuevoId } from '../../compartido/forma/datos.js';
+import { ejercicio, GRUPOS, TIPOS_CARDIO, id as nuevoId } from '../../compartido/forma/datos.js';
+
+const NOMBRE_CARDIO = Object.fromEntries(TIPOS_CARDIO);
+const INTENSIDAD = { baja: 'baja', media: 'media', alta: 'alta' };
 import { mejorMarca, pesoDeReferencia } from '../../compartido/forma/progreso.js';
 import { lunesDe, nombreDia, fechaCorta } from '../../compartido/forma/fechas.js';
 import { ic, escapar, num, grafica, vibrar } from './ui.js';
@@ -73,7 +76,7 @@ export function vistaEntreno(ctx) {
   function htmlSesion(s) {
     const ejercicios = ejerciciosDeSesion(s);
     const hechas = s.series.filter((x) => x.hecha && !x.calentamiento);
-    const volumen = hechas.reduce((t, x) => t + x.kg * x.reps, 0);
+    const volumen = volumenSesion(ctx.datos, { series: s.series.filter((x) => x.hecha) });
     return `<div class="f-vista">
       <section class="f-panel f-panel--azul f-visor">
         <div class="f-sesion-cab">
@@ -90,7 +93,7 @@ export function vistaEntreno(ctx) {
       ${
         s.cardio.length
           ? `<section class="f-panel f-columna"><span class="f-etiqueta">Cardio</span>${s.cardio
-              .map((c) => `<div class="f-fila f-entre"><span>${escapar(c.tipo)} · ${c.minutos} min · ${escapar(c.intensidad)}</span><span class="f-suave">${num(c.kcal)} kcal <button type="button" class="f-enlace" data-a="cardio-quitar" data-id="${c.id}">Quitar</button></span></div>`)
+              .map((c) => `<div class="f-fila f-entre"><span>${escapar(NOMBRE_CARDIO[c.tipo] ?? c.tipo)} · ${c.minutos} min${c.velocidad ? ` · ${num(c.velocidad, 1)} km/h` : ''}${c.inclinacion ? ` · ${num(c.inclinacion, 1)} %` : ''} · ${escapar(INTENSIDAD[c.intensidad] ?? c.intensidad)}</span><span class="f-suave">${num(c.kcal)} kcal <button type="button" class="f-enlace" data-a="cardio-quitar" data-id="${c.id}">Quitar</button></span></div>`)
               .join('')}</section>`
           : ''
       }
@@ -156,6 +159,7 @@ export function vistaEntreno(ctx) {
       <span class="f-etiqueta">Herramientas</span>
       <div class="f-rejilla-2">
         <button type="button" class="f-boton" data-a="biblioteca">${ic('estrella', 16)}Ejercicios</button>
+        <button type="button" class="f-boton" data-a="importar">${ic('importar', 16)}Importar</button>
         <button type="button" class="f-boton" data-a="discos">${ic('discos', 16)}Discos</button>
       </div>
       <span class="f-etiqueta">Historial</span>
@@ -166,7 +170,7 @@ export function vistaEntreno(ctx) {
               .map((s) => {
                 const ef = s.series.filter((x) => !x.calentamiento);
                 const dur = duracionSesion(s);
-                return `<button type="button" class="f-item" data-a="sesion-ver" data-id="${s.id}"><span class="f-item__texto"><span class="f-item__nombre">${escapar(s.nombre || 'Entreno')}</span><span class="f-item__detalle">${escapar(nombreDia(s.fecha, hoy))} · ${ef.length} series${dur ? ` · ${dur} min` : ''}${s.cardio.length ? ' · cardio' : ''}</span></span><span class="f-item__kcal">${num(ef.reduce((t, x) => t + x.kg * x.reps, 0))} <small>kg</small></span></button>`;
+                return `<button type="button" class="f-item" data-a="sesion-ver" data-id="${s.id}"><span class="f-item__texto"><span class="f-item__nombre">${escapar(s.nombre || 'Entreno')}</span><span class="f-item__detalle">${escapar(nombreDia(s.fecha, hoy))} · ${ef.length} series${dur ? ` · ${dur} min` : ''}${s.cardio.length ? ' · cardio' : ''}${s.origen === 'importado' ? ' · importado' : ''}</span></span><span class="f-item__kcal">${num(volumenSesion(ctx.datos, s))} <small>kg</small></span></button>`;
               })
               .join('')}</div>`
           : '<p class="f-tenue">Cuando termines tu primer entreno aparecerá aquí, con lo que hiciste en cada ejercicio.</p>'
@@ -342,11 +346,16 @@ export function vistaEntreno(ctx) {
        ${porEj
          .map((eid) => {
            const ss = s.series.filter((x) => x.ejercicioId === eid);
-           return `<div class="f-panel" style="padding:12px"><strong style="font-size:14px">${escapar(ejercicio(ctx.datos, eid).nombre)}</strong>
-           <p class="f-tenue">${ss.map((x) => `${x.calentamiento ? '(C) ' : ''}${num(x.kg, 2)}×${x.reps}${x.rir !== undefined ? ` @${x.rir}` : ''}`).join(' · ')}</p></div>`;
+           const meta = (s.ejercicios ?? []).find((e) => e.ejercicioId === eid);
+           const marca = (x) => ({ calentamiento: '(C) ', dropset: '(D) ' })[tipoSerie(x)] ?? '';
+           const cifra = (x) => (x.segundos && !x.reps ? `${x.segundos} s` : `${num(x.kg, 2)}${x.lastre ? `+${num(x.lastre, 2)}` : ''}×${x.reps}`);
+           return `<div class="f-panel" style="padding:12px"><strong style="font-size:14px">${meta?.superserie ? `${meta.superserie} · ` : ''}${escapar(ejercicio(ctx.datos, eid).nombre)}</strong>
+           <p class="f-tenue">${ss.map((x) => `${marca(x)}${cifra(x)}${x.fallo ? ' al fallo' : x.rir !== undefined ? ` @${x.rir}` : ''}`).join(' · ')}</p>
+           ${meta?.notas ? `<p class="f-tenue" style="font-style:italic">${escapar(meta.notas)}</p>` : ''}</div>`;
          })
          .join('')}
-       ${s.cardio.map((c) => `<p class="f-tenue">${escapar(c.tipo)} · ${c.minutos} min · ${num(c.kcal)} kcal</p>`).join('')}
+       <p class="f-tenue">Volumen: ${num(volumenSesion(ctx.datos, s))} kg${s.origen === 'importado' ? ' · importado' : ''}</p>
+       ${s.cardio.map((c) => `<p class="f-tenue">${escapar(NOMBRE_CARDIO[c.tipo] ?? c.tipo)} · ${c.minutos} min${c.velocidad ? ` · ${num(c.velocidad, 1)} km/h` : ''}${c.inclinacion ? ` · ${num(c.inclinacion, 1)} % de inclinación` : ''} · ${num(c.kcal)} kcal</p>`).join('')}
        ${s.notas ? `<p class="f-explica">${escapar(s.notas)}</p>` : ''}
        <button type="button" class="f-boton f-boton--peligro" data-a="sesion-borrar" data-id="${s.id}">${ic('basura', 15)}Borrar este entreno</button>`,
       { titulo: 'Entreno' },
@@ -399,10 +408,12 @@ export function vistaEntreno(ctx) {
       guardarActiva((a) => ({ series: a.series.map((y) => (y.id === x.id ? { ...y, kg, reps, hecha: marcar } : y)) }));
       ctx.repintar();
       vibrar(marcar ? 22 : 8);
-      if (marcar && !x.calentamiento) empezarDescanso();
+      // Descanso: el de la serie, el del ejercicio en la rutina o el general.
+      const enRutina = ctx.datos.rutinas.find((r) => r.id === s.rutinaId)?.ejercicios.find((e) => e.ejercicioId === x.ejercicioId);
+      if (marcar && !x.calentamiento) empezarDescanso(x.descanso ?? enRutina?.descanso ?? ctx.datos.ajustes.descanso);
     },
     'serie-tipo': (el) => {
-      guardarActiva((a) => ({ series: a.series.map((y) => (y.id === el.dataset.id ? { ...y, calentamiento: !y.calentamiento } : y)) }));
+      guardarActiva((a) => ({ series: a.series.map((y) => (y.id === el.dataset.id ? { ...y, calentamiento: !y.calentamiento, tipo: y.calentamiento ? 'efectiva' : 'calentamiento' } : y)) }));
       ctx.repintar();
     },
     'serie-mas': (el) => {
@@ -411,7 +422,7 @@ export function vistaEntreno(ctx) {
       guardarActiva((a) => {
         const del = a.series.filter((y) => y.ejercicioId === eid);
         const ultima = del.at(-1);
-        const nueva = { id: nuevoId('k'), ejercicioId: eid, kg: cal ? 0 : (ultima?.kg ?? 0), reps: cal ? 0 : (ultima?.reps ?? 0), calentamiento: cal, hecha: false };
+        const nueva = { id: nuevoId('k'), ejercicioId: eid, kg: cal ? 0 : (ultima?.kg ?? 0), reps: cal ? 0 : (ultima?.reps ?? 0), calentamiento: cal, tipo: cal ? 'calentamiento' : 'efectiva', hecha: false };
         // El calentamiento va delante de las efectivas.
         const series = [...a.series];
         const pos = cal ? series.findIndex((y) => y.ejercicioId === eid) : series.map((y) => y.ejercicioId).lastIndexOf(eid) + 1;
@@ -472,11 +483,14 @@ export function vistaEntreno(ctx) {
       ctx.hojas.abrir(
         `<div class="f-hoja__titulo"><h2>Cardio</h2></div>
          <form class="f-columna" data-form="cardio">
-           <label class="f-campo"><span>Qué</span><input class="f-entrada" name="tipo" value="Cinta" list="f-cardios"><datalist id="f-cardios"><option>Cinta</option><option>Cinta inclinada</option><option>Bici</option><option>Elíptica</option><option>Remo</option><option>Correr</option><option>Escaleras</option></datalist></label>
            <div class="f-rejilla-2">
+             <label class="f-campo"><span>Qué</span><select class="f-entrada" name="tipo">${TIPOS_CARDIO.map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select></label>
              <label class="f-campo"><span>Minutos</span><input class="f-entrada" name="minutos" type="number" inputmode="numeric" value="20" required></label>
-             <label class="f-campo"><span>Intensidad</span><select class="f-entrada" name="intensidad"><option value="suave">Suave</option><option value="media" selected>Media</option><option value="intensa">Intensa</option></select></label>
+             <label class="f-campo"><span>Intensidad</span><select class="f-entrada" name="intensidad"><option value="baja">Baja</option><option value="media" selected>Media</option><option value="alta">Alta</option></select></label>
+             <label class="f-campo"><span>Velocidad (opc.)</span><div class="f-con-unidad" data-unidad="km/h"><input class="f-entrada" name="velocidad" type="text" inputmode="decimal" autocomplete="off"></div></label>
+             <label class="f-campo"><span>Inclinación (opc.)</span><div class="f-con-unidad" data-unidad="%"><input class="f-entrada" name="inclinacion" type="text" inputmode="decimal" autocomplete="off"></div></label>
            </div>
+           <p class="f-tenue">Con velocidad (e inclinación) en cinta, andar o correr, las kcal se calculan con las fórmulas del ACSM; si no, por tipo e intensidad.</p>
            <button type="submit" class="f-boton f-boton--azul">Añadir cardio</button>
          </form>`,
         { titulo: 'Cardio' },
@@ -500,11 +514,11 @@ export function vistaEntreno(ctx) {
       const ef = hechas.filter((x) => !x.calentamiento);
       const records = ef.filter((x) => {
         const previa = mejorMarca(ctx.datos, x.ejercicioId);
-        return !previa || epley(x.kg, x.reps) > previa.e1rm + 0.01;
+        return tipoSerie(x) === 'efectiva' && (!previa || epley(carga(x), x.reps) > previa.e1rm + 0.01);
       });
       ctx.guardar(datos);
       vibrar([30, 60, 30]);
-      ctx.tostada(nuevos.length ? `¡Hito cumplido! ${nuevos[0].recompensa || ''}`.trim() : `Entreno guardado: ${ef.length} series, ${num(ef.reduce((t, x) => t + x.kg * x.reps, 0))} kg${records.length ? ` · ${new Set(records.map((x) => x.ejercicioId)).size} récord${records.length > 1 ? 's' : ''}` : ''}`, { ms: 6000 });
+      ctx.tostada(nuevos.length ? `¡Hito cumplido! ${nuevos[0].recompensa || ''}`.trim() : `Entreno guardado: ${ef.length} series, ${num(volumenSesion(ctx.datos, { series: ef }))} kg${records.length ? ` · ${new Set(records.map((x) => x.ejercicioId)).size} récord${records.length > 1 ? 's' : ''}` : ''}`, { ms: 6000 });
     },
     'descartar-sesion': () => {
       ctx.hojas.abrir(
@@ -603,8 +617,12 @@ export function vistaEntreno(ctx) {
       const minutos = Number(form.elements.minutos.value);
       if (!(minutos > 0)) return;
       const peso = pesoDeReferencia(ctx.datos, ctx.hoy()) ?? ctx.datos.perfil?.peso ?? 75;
-      const intensidad = form.elements.intensidad.value;
-      const c = { id: nuevoId('c'), tipo: form.elements.tipo.value.trim() || 'Cardio', minutos, intensidad, kcal: kcalCardio(minutos, intensidad, peso) };
+      const n = (k) => {
+        const v = Number(String(form.elements[k].value).replace(',', '.'));
+        return form.elements[k].value !== '' && Number.isFinite(v) && v >= 0 ? v : undefined;
+      };
+      const base = { tipo: form.elements.tipo.value, minutos, intensidad: form.elements.intensidad.value, velocidad: n('velocidad'), inclinacion: n('inclinacion') };
+      const c = { id: nuevoId('c'), ...base, kcal: kcalDeCardio(base, peso) };
       ctx.hojas.cerrar();
       guardarActiva((a) => ({ cardio: [...a.cardio, c] }));
       ctx.repintar();

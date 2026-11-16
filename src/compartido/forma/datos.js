@@ -265,9 +265,66 @@ function normalizarRegistro(r) {
   };
 }
 
+// Tipos de serie: el calentamiento no cuenta para nada; el dropset cuenta para
+// el volumen pero no para récords ni 1RM.
+export const TIPOS_SERIE = ['calentamiento', 'efectiva', 'dropset'];
+
+export const TIPOS_CARDIO = [
+  ['cinta', 'Cinta'],
+  ['andar', 'Andar'],
+  ['correr', 'Correr'],
+  ['bici', 'Bici'],
+  ['eliptica', 'Elíptica'],
+  ['remo', 'Remo'],
+  ['escaladora', 'Escaladora'],
+  ['otro', 'Otro'],
+];
+const ID_CARDIO = TIPOS_CARDIO.map(([k]) => k);
+// El cardio que ya tenías apuntado con texto libre («Cinta inclinada», «Escaleras»…).
+export function tipoCardioDesdeTexto(t) {
+  const k = sinTildesE(t).trim();
+  if (ID_CARDIO.includes(k)) return k;
+  if (/cinta/.test(k)) return 'cinta';
+  if (/andar|caminar|paseo/.test(k)) return 'andar';
+  if (/correr|carrera|running/.test(k)) return 'correr';
+  if (/bici|spinning|ciclo/.test(k)) return 'bici';
+  if (/eliptic/.test(k)) return 'eliptica';
+  if (/remo/.test(k)) return 'remo';
+  if (/escal/.test(k)) return 'escaladora';
+  return 'otro';
+}
+const INTENSIDADES = { baja: 'baja', suave: 'baja', media: 'media', alta: 'alta', intensa: 'alta' };
+const letra = (v) => (typeof v === 'string' && /^[A-Za-z]$/.test(v.trim()) ? v.trim().toUpperCase() : undefined);
+const sinVacios = (o) => {
+  for (const k of Object.keys(o)) if (o[k] === undefined || o[k] === '') delete o[k];
+  return o;
+};
+
+function normalizarSerie(x) {
+  const tipo = TIPOS_SERIE.includes(x.tipo) ? x.tipo : x.calentamiento === true ? 'calentamiento' : 'efectiva';
+  const fallo = x.fallo === true;
+  return sinVacios({
+    id: conId(x, 'k'),
+    ejercicioId: texto(x.ejercicioId, 80),
+    tipo,
+    calentamiento: tipo === 'calentamiento',
+    kg: num(x.kg, 0, 1000) ?? 0,
+    // Peso añadido con peso corporal (dominadas, fondos): la carga es kg + lastre.
+    lastre: num(x.lastre, 0, 200) || undefined,
+    reps: num(x.reps, 0, 500) ?? 0,
+    // Isométricos (plancha): segundos en vez de repeticiones.
+    segundos: num(x.segundos, 1, 600),
+    rir: fallo ? 0 : num(x.rir, 0, 10),
+    fallo,
+    descanso: num(x.descanso, 0, 900),
+    notas: texto(x.notas, 300),
+    hecha: x.hecha !== false,
+  });
+}
+
 function normalizarSesion(s) {
   if (!esFecha(s.fecha)) return null;
-  return {
+  return sinVacios({
     id: conId(s, 's'),
     fecha: s.fecha,
     rutinaId: texto(s.rutinaId, 60) || undefined,
@@ -275,26 +332,28 @@ function normalizarSesion(s) {
     inicio: num(s.inicio, 0),
     fin: num(s.fin, 0),
     notas: texto(s.notas, 2000),
+    // Orden y notas de cada ejercicio (las series van aparte, en orden).
+    ejercicios: lista(s.ejercicios)
+      .map((e) => sinVacios({ ejercicioId: texto(e.ejercicioId, 80), notas: texto(e.notas, 500), superserie: letra(e.superserie) }))
+      .filter((e) => e.ejercicioId),
     series: lista(s.series)
-      .map((x) => ({
-        id: conId(x, 'k'),
-        ejercicioId: texto(x.ejercicioId, 80),
-        kg: num(x.kg, 0, 1000) ?? 0,
-        reps: num(x.reps, 0, 500) ?? 0,
-        rir: num(x.rir, 0, 10),
-        fallo: x.fallo === true,
-        calentamiento: x.calentamiento === true,
-        hecha: x.hecha !== false,
-      }))
+      .map(normalizarSerie)
       .filter((x) => x.ejercicioId),
-    cardio: lista(s.cardio).map((c) => ({
-      id: conId(c, 'c'),
-      tipo: texto(c.tipo, 40) || 'Cardio',
-      minutos: num(c.minutos, 0, 600) ?? 0,
-      intensidad: ['suave', 'media', 'intensa'].includes(c.intensidad) ? c.intensidad : 'media',
-      kcal: num(c.kcal, 0, 5000) ?? 0,
-    })),
-  };
+    cardio: lista(s.cardio).map((c) =>
+      sinVacios({
+        id: conId(c, 'c'),
+        tipo: tipoCardioDesdeTexto(c.tipo),
+        minutos: num(c.minutos, 0, 600) ?? 0,
+        intensidad: INTENSIDADES[c.intensidad] ?? 'media',
+        velocidad: num(c.velocidad, 0.5, 30),
+        inclinacion: num(c.inclinacion, 0, 30),
+        distancia: num(c.distancia, 0, 100),
+        fc: num(c.fc, 40, 220),
+        kcal: num(c.kcal, 0, 5000) ?? 0,
+      }),
+    ),
+    origen: s.origen === 'importado' ? 'importado' : undefined,
+  });
 }
 
 export function normalizarForma(d = {}) {
@@ -312,7 +371,7 @@ export function normalizarForma(d = {}) {
     ...EJERCICIOS_POR_DEFECTO.map((e) => (guardados.has(e.id) ? { ...e, ...camposEjercicio(guardados.get(e.id), e, e.nombre) } : { ...e, secundarios: [...e.secundarios], alias: [] })),
     ...propios.map((e) => {
       const nombre = texto(e.nombre, 80);
-      return { id: conId(e, 'x'), nombre, ...camposEjercicio(e, BASE_PROPIO, nombre), propio: true };
+      return { id: conId(e, 'x'), nombre, ...camposEjercicio(e, BASE_PROPIO, nombre), propio: true, ...(e.origen === 'importado' ? { origen: 'importado' } : {}) };
     }),
   ];
   const bloqueados = {};
@@ -366,8 +425,20 @@ export function normalizarForma(d = {}) {
         id: conId(r, 'q'),
         nombre: texto(r.nombre, 60) || 'Rutina',
         ejercicios: lista(r.ejercicios)
-          .map((e) => ({ ejercicioId: texto(e.ejercicioId, 80), series: num(e.series, 1, 20) ?? 3, repMin: num(e.repMin, 1, 100) ?? 8, repMax: num(e.repMax, 1, 100) ?? 12 }))
+          .map((e) =>
+            sinVacios({
+              ejercicioId: texto(e.ejercicioId, 80),
+              series: num(e.series, 1, 20) ?? 3,
+              repMin: num(e.repMin, 1, 100) ?? 8,
+              repMax: num(e.repMax, 1, 100) ?? 12,
+              // Descanso propio (si no, el general de Ajustes), superserie y notas.
+              descanso: num(e.descanso, 0, 900),
+              superserie: letra(e.superserie),
+              notas: texto(e.notas, 300),
+            }),
+          )
           .filter((e) => e.ejercicioId),
+        ...(r.origen === 'importado' ? { origen: 'importado' } : {}),
       }))
       .filter((r) => r.ejercicios.length),
     sesiones: lista(d.sesiones).map(normalizarSesion).filter(Boolean),

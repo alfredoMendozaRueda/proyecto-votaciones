@@ -4,19 +4,72 @@ import { epley } from './calculos.js';
 import { lunesDe, sumarDias, fechaISO } from './fechas.js';
 
 const r = (n, d = 1) => Math.round(n * 10 ** d) / 10 ** d;
-const efectivas = (s, eid) => s.series.filter((x) => x.ejercicioId === eid && !x.calentamiento && x.reps > 0);
 
+// ---------- Series ----------
+// Tipo de una serie (las antiguas solo tenían «calentamiento»).
+export const tipoSerie = (x) => x.tipo ?? (x.calentamiento ? 'calentamiento' : 'efectiva');
+// La carga real: el peso más el lastre (dominadas o fondos con peso añadido).
+export const carga = (x) => (x.kg ?? 0) + (x.lastre ?? 0);
+// Cuentan para récords, 1RM, «sube peso» y el asesor de descarga: solo las efectivas con repeticiones.
+export const esEfectiva = (x) => tipoSerie(x) === 'efectiva' && x.reps > 0;
+// Cuentan para el volumen: efectivas y dropsets (no el calentamiento ni los isométricos).
+export const cuentaVolumen = (x) => tipoSerie(x) !== 'calentamiento' && x.reps > 0;
+const efectivas = (s, eid) => s.series.filter((x) => x.ejercicioId === eid && esEfectiva(x));
+
+// Volumen de una serie: reps × carga, por dos si el ejercicio es unilateral (el peso es por lado).
+export function volumenSerie(x, ejercicio) {
+  if (!cuentaVolumen(x)) return 0;
+  return x.reps * carga(x) * (ejercicio?.unilateral ? 2 : 1);
+}
+export function volumenSesion(datos, sesion) {
+  const porId = new Map(datos.ejercicios.map((e) => [e.id, e]));
+  return Math.round(sesion.series.reduce((t, x) => t + volumenSerie(x, porId.get(x.ejercicioId)), 0));
+}
+
+// ---------- Cardio ----------
+// Antes: MET según la intensidad (lo usa el formulario rápido de cardio).
 export const MET_CARDIO = { suave: 4, media: 7, intensa: 10 };
 export const kcalCardio = (minutos, intensidad, peso) => Math.round((MET_CARDIO[intensidad] ?? 7) * peso * (minutos / 60));
+
+// METs por tipo e intensidad (Compendium of Physical Activities, aproximados).
+const MET_TIPO = {
+  cinta: { baja: 3.5, media: 5, alta: 7 },
+  andar: { baja: 2.8, media: 3.5, alta: 4.5 },
+  correr: { baja: 7, media: 9.8, alta: 11.5 },
+  bici: { baja: 4, media: 6.8, alta: 9 },
+  eliptica: { baja: 4.6, media: 5.5, alta: 7 },
+  remo: { baja: 4.8, media: 7, alta: 8.5 },
+  escaladora: { baja: 5, media: 8.8, alta: 10 },
+  otro: { baja: 4, media: 6, alta: 8 },
+};
+
+// METs de un cardio. En cinta, andar o correr con velocidad: ecuaciones del ACSM
+// (andar: VO2 = 0,1·v + 1,8·v·pendiente + 3,5; correr: 0,2·v + 0,9·v·pendiente + 3,5,
+// con v en m/min); a partir de 8 km/h se cuenta como correr.
+export function metCardio({ tipo = 'otro', intensidad = 'media', velocidad, inclinacion = 0 }) {
+  if (velocidad > 0 && ['cinta', 'andar', 'correr'].includes(tipo)) {
+    const v = (velocidad * 1000) / 60;
+    const g = (inclinacion ?? 0) / 100;
+    const corre = tipo === 'correr' || velocidad >= 8;
+    const vo2 = corre ? 0.2 * v + 0.9 * v * g + 3.5 : 0.1 * v + 1.8 * v * g + 3.5;
+    return r(vo2 / 3.5, 2);
+  }
+  return MET_TIPO[tipo]?.[intensidad] ?? MET_TIPO.otro.media;
+}
+
+// Kcal totales de un cardio (lo que marca la máquina, con el gasto en reposo).
+export const kcalDeCardio = (c, peso) => Math.round(metCardio(c) * peso * ((c.minutos ?? 0) / 60));
+// Lo que suma al gasto del día: sin la parte que gastarías igualmente en reposo (1 MET).
+export const kcalNetasCardio = (c, peso) => Math.max(0, Math.round((c.kcal ?? 0) - peso * ((c.minutos ?? 0) / 60)));
 
 // La última sesión anterior con ese ejercicio: sus series efectivas.
 export function ultimaVez(datos, ejercicioId, antesDe = '9999-12-31', excluir = null) {
   const sesiones = datos.sesiones.filter((s) => s.id !== excluir && s.fecha <= antesDe && efectivas(s, ejercicioId).length).sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : (b.inicio ?? 0) - (a.inicio ?? 0)));
   const s = sesiones[0];
-  return s ? { fecha: s.fecha, series: efectivas(s, ejercicioId).map((x) => ({ kg: x.kg, reps: x.reps, rir: x.rir, fallo: x.fallo })) } : null;
+  return s ? { fecha: s.fecha, series: efectivas(s, ejercicioId).map((x) => ({ kg: x.kg, lastre: x.lastre, reps: x.reps, rir: x.rir, fallo: x.fallo })) } : null;
 }
 
-export const textoSeries = (series) => series.map((x) => `${r(x.kg, 2)}×${x.reps}`).join(' · ');
+export const textoSeries = (series) => series.map((x) => (x.segundos && !x.reps ? `${x.segundos} s` : `${r(x.kg, 2)}${x.lastre ? `+${r(x.lastre, 2)}` : ''}×${x.reps}`)).join(' · ');
 
 // Sube peso si en la última sesión hiciste el máximo del rango en todas las series efectivas.
 export function sugerenciaSubida(datos, ejercicioId, repMax, { antesDe, excluir, paso } = {}) {
@@ -24,6 +77,7 @@ export function sugerenciaSubida(datos, ejercicioId, repMax, { antesDe, excluir,
   if (!u || !u.series.length || !repMax) return null;
   if (!u.series.every((x) => x.reps >= repMax)) return null;
   const peso = Math.max(...u.series.map((x) => x.kg));
+  // Con lastre, lo que sube es el lastre; aquí se sugiere sobre el peso que apuntas.
   const subida = paso ?? (peso >= 40 ? 2.5 : 1);
   return { desde: peso, a: r(peso + subida, 2), texto: `La última vez hiciste ${repMax} o más en todas las series. Prueba con ${r(peso + subida, 2)} kg.` };
 }
@@ -34,11 +88,11 @@ export function semanasEjercicio(datos, ejercicioId) {
   for (const s of datos.sesiones) {
     for (const x of efectivas(s, ejercicioId)) {
       const sem = lunesDe(s.fecha);
-      const e = epley(x.kg, x.reps);
+      const e = epley(carga(x), x.reps);
       const v = mapa.get(sem) ?? { semana: sem, e1rm: 0, kg: 0, volumen: 0 };
       v.e1rm = Math.max(v.e1rm, e);
-      v.kg = Math.max(v.kg, x.kg);
-      v.volumen += x.kg * x.reps;
+      v.kg = Math.max(v.kg, carga(x));
+      v.volumen += carga(x) * x.reps;
       mapa.set(sem, v);
     }
   }
@@ -52,15 +106,15 @@ export function historialEjercicio(datos, ejercicioId) {
     .sort((a, b) => (a.fecha < b.fecha ? -1 : 1))
     .map((s) => {
       const series = efectivas(s, ejercicioId);
-      return { fecha: s.fecha, kg: Math.max(...series.map((x) => x.kg)), e1rm: r(Math.max(...series.map((x) => epley(x.kg, x.reps))), 1), series: series.length };
+      return { fecha: s.fecha, kg: Math.max(...series.map(carga)), e1rm: r(Math.max(...series.map((x) => epley(carga(x), x.reps))), 1), series: series.length };
     });
 }
 
-// Volumen total (kg × reps de series efectivas) por semana.
+// Volumen total (reps × carga de series efectivas y dropsets) por semana.
 export function volumenSemanal(datos) {
   const mapa = new Map();
   for (const s of datos.sesiones) {
-    const v = s.series.filter((x) => !x.calentamiento).reduce((t, x) => t + x.kg * x.reps, 0);
+    const v = volumenSesion(datos, s);
     if (!v) continue;
     const sem = lunesDe(s.fecha);
     mapa.set(sem, (mapa.get(sem) ?? 0) + v);
@@ -129,9 +183,9 @@ export function avisoFuerzaEnDeficit(datos, hoy = fechaISO()) {
   return { id: `fuerza-${semanaHoy}`, texto: `Tu fuerza baja dos semanas seguidas en ${bajan.join(' y ')} mientras estás en déficit. Revisa la proteína y el descanso, o suaviza el déficit.` };
 }
 
-// Ejercicios de la sesión, en orden de aparición.
+// Ejercicios de la sesión, en orden (el guardado y, si falta alguno, el de las series).
 export function ejerciciosDeSesion(sesion) {
-  const vistos = [];
+  const vistos = (sesion.ejercicios ?? []).map((e) => e.ejercicioId);
   for (const x of sesion.series) if (!vistos.includes(x.ejercicioId)) vistos.push(x.ejercicioId);
   return vistos;
 }

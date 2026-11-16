@@ -1,6 +1,7 @@
 // Peso, medidas, progreso, hitos, resumen semanal y TDEE adaptativo.
 import { sumarDias, diasEntre, lunesDe, fechaISO } from './fechas.js';
 import { KCAL_POR_KG_GRASA, epley } from './calculos.js';
+import { esEfectiva, carga } from './entreno.js';
 
 const r = (n, d = 1) => Math.round(n * 10 ** d) / 10 ** d;
 
@@ -83,16 +84,16 @@ export function mejorMarca(datos, ejercicioId, hasta = '9999-12-31', desde = '00
   for (const s of datos.sesiones) {
     if (s.fecha > hasta || s.fecha < desde) continue;
     for (const x of s.series) {
-      if (x.ejercicioId !== ejercicioId || x.calentamiento || !x.reps) continue;
-      const e = epley(x.kg, x.reps);
-      if (!mejor || e > mejor.e1rm) mejor = { e1rm: e, kg: x.kg, reps: x.reps, fecha: s.fecha };
+      if (x.ejercicioId !== ejercicioId || !esEfectiva(x)) continue;
+      const e = epley(carga(x), x.reps);
+      if (!mejor || e > mejor.e1rm) mejor = { e1rm: e, kg: carga(x), reps: x.reps, fecha: s.fecha };
     }
   }
   return mejor;
 }
 
-export const mejorPeso = (datos, ejercicioId) =>
-  Math.max(0, ...datos.sesiones.flatMap((s) => s.series.filter((x) => x.ejercicioId === ejercicioId && !x.calentamiento && x.reps > 0).map((x) => x.kg)));
+export const mejorPeso = (datos, ejercicioId, hasta = '9999-12-31') =>
+  Math.max(0, ...datos.sesiones.filter((s) => s.fecha <= hasta).flatMap((s) => s.series.filter((x) => x.ejercicioId === ejercicioId && esEfectiva(x)).map(carga)));
 
 // ---------- Hitos ----------
 export function estadoHito(datos, hito, hoy = fechaISO()) {

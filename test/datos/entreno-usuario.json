@@ -1,0 +1,56 @@
+{
+  "forma_import": 1,
+  "ejercicios": [
+    {"nombre": "Press inclinado en máquina", "grupo": "pecho", "grupos_secundarios": ["hombro", "triceps"], "equipo": "maquina", "principal": true},
+    {"nombre": "Pec fly en máquina", "grupo": "pecho", "equipo": "maquina", "alias": ["Pec deck", "Contractora"]},
+    {"nombre": "Elevaciones laterales en polea", "grupo": "hombro", "equipo": "polea", "unilateral": true},
+    {"nombre": "Press militar en máquina", "grupo": "hombro", "grupos_secundarios": ["triceps"], "equipo": "maquina", "principal": true},
+    {"nombre": "Extensión de tríceps en polea alta", "grupo": "triceps", "equipo": "polea"},
+    {"nombre": "Extensión de tríceps tras nuca en polea", "grupo": "triceps", "equipo": "polea", "alias": ["Tríceps trasnuca"]}
+  ],
+  "sesiones": [
+    {
+      "fecha": "2026-11-16",
+      "hora_inicio": "20:05",
+      "duracion_min": 95,
+      "notas": "Pecho, hombro y tríceps. Molestia lumbar en el press militar.",
+      "ejercicios": [
+        {"ejercicio": "Press inclinado en máquina", "series": [
+          {"tipo": "calentamiento", "peso_kg": 5, "reps": 12},
+          {"tipo": "calentamiento", "peso_kg": 15, "reps": 10},
+          {"tipo": "efectiva", "peso_kg": 17.5, "reps": 11},
+          {"tipo": "efectiva", "peso_kg": 20, "reps": 9},
+          {"tipo": "efectiva", "peso_kg": 20, "reps": 8, "fallo": true},
+          {"tipo": "efectiva", "peso_kg": 17.5, "reps": 11}
+        ]},
+        {"ejercicio": "Pec fly en máquina", "series": [
+          {"tipo": "calentamiento", "peso_kg": 30, "reps": 10},
+          {"tipo": "efectiva", "peso_kg": 40, "reps": 7, "fallo": true},
+          {"tipo": "efectiva", "peso_kg": 35, "reps": 7},
+          {"tipo": "efectiva", "peso_kg": 30, "reps": 11}
+        ]},
+        {"ejercicio": "Elevaciones laterales en polea", "notas": "Cable por detrás del cuerpo. Última serie: derecha 8, izquierda 7.", "series": [
+          {"tipo": "efectiva", "peso_kg": 10, "reps": 8},
+          {"tipo": "efectiva", "peso_kg": 10, "reps": 7},
+          {"tipo": "efectiva", "peso_kg": 10, "reps": 7}
+        ]},
+        {"ejercicio": "Press militar en máquina", "notas": "Peso por lado. Segunda serie cortada por molestia lumbar.", "series": [
+          {"tipo": "efectiva", "peso_kg": 15, "reps": 10},
+          {"tipo": "efectiva", "peso_kg": 17.5, "reps": 5}
+        ]},
+        {"ejercicio": "Extensión de tríceps en polea alta", "series": [
+          {"tipo": "efectiva", "peso_kg": 30, "reps": 11},
+          {"tipo": "efectiva", "peso_kg": 30, "reps": 10}
+        ]},
+        {"ejercicio": "Extensión de tríceps tras nuca en polea", "series": [
+          {"tipo": "efectiva", "peso_kg": 30, "reps": 5},
+          {"tipo": "dropset", "peso_kg": 25, "reps": 4},
+          {"tipo": "efectiva", "peso_kg": 25, "reps": 10}
+        ]}
+      ],
+      "cardio": [
+        {"tipo": "cinta", "duracion_min": 15, "velocidad_kmh": 3.5, "inclinacion_pct": 10, "intensidad": "media"}
+      ]
+    }
+  ]
+}

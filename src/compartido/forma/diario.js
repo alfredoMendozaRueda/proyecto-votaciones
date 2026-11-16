@@ -5,6 +5,7 @@ import { calcularPlan } from './calculos.js';
 import { sumarDias, diasEntre, minutosDe, fechaISO } from './fechas.js';
 import { NUTRIENTES } from './datos.js';
 import { pesoDeReferencia } from './progreso.js';
+import { kcalNetasCardio } from './entreno.js';
 
 const MACROS = ['kcal', 'proteina', 'hidratos', 'grasa', 'fibra'];
 const redondea = (n, d = 1) => Math.round(n * 10 ** d) / 10 ** d;
@@ -45,10 +46,26 @@ export function planActual(datos, hoy = fechaISO()) {
   return perfil ? calcularPlan(perfil, { bloqueados: datos.bloqueados, hoy }) : null;
 }
 
+// Lo que el cardio apuntado ese día suma al gasto: sus kcal netas menos la media
+// diaria que tu plan ya incluye por el «cardio a la semana» del perfil (para no
+// contarlo dos veces).
+export function cardioExtraDelDia(datos, fecha) {
+  const cardio = datos.sesiones.filter((s) => s.fecha === fecha).flatMap((s) => s.cardio ?? []);
+  if (!cardio.length || !datos.perfil) return 0;
+  const peso = pesoDeReferencia(datos, fecha) ?? datos.perfil.peso ?? 75;
+  const netas = cardio.reduce((t, c) => t + kcalNetasCardio(c, peso), 0);
+  const incluido = 6 * peso * ((datos.perfil.cardioSemana ?? 0) / 7 / 60);
+  return Math.max(0, Math.round(netas - incluido));
+}
+
 export function objetivoDelDia(datos, fecha, plan = planActual(datos, fecha)) {
   if (!plan) return null;
   const entreno = esDiaEntreno(datos, fecha);
-  return { ...(entreno ? plan.entreno : plan.descanso), entreno };
+  const base = entreno ? plan.entreno : plan.descanso;
+  const cardioExtra = cardioExtraDelDia(datos, fecha);
+  // Las kcal de más van a hidratos (el combustible del cardio).
+  if (cardioExtra) return { ...base, kcal: base.kcal + cardioExtra, hidratos: Math.round((base.hidratos ?? 0) + cardioExtra / 4), entreno, cardioExtra };
+  return { ...base, entreno, cardioExtra: 0 };
 }
 
 export function resumenDia(datos, fecha) {

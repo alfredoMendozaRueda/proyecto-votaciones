@@ -312,7 +312,7 @@ test('importar: el plan solo con alimentos se guarda en Mis alimentos sin regist
 test('importar: el formato para la IA lleva tus comidas y es un JSON de ejemplo válido', () => {
   const texto = formatoParaIA(vacios().momentos);
   assert.match(texto, /desayuno, almuerzo, comida, merienda, cena/);
-  assert.ok(texto.length < 1600);
+  assert.ok(texto.length < 3200);
   const o = extraerObjeto(texto.replace('AAAA-MM-DD', HOY));
   assert.deepEqual(validarImportacion(o, OPC).errores, []);
 });

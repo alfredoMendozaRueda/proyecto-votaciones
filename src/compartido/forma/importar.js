@@ -14,6 +14,7 @@ import { id, NUTRIENTES } from './datos.js';
 import { nutrientesDe, momentoPorHora, totales } from './diario.js';
 import { esFecha, diasEntre, minutosDe } from './fechas.js';
 import { emparejarAlimento, normalizarNombre, limpiarAlias, conAlias } from './emparejar.js';
+import { prepararEntreno, resolverEntreno, aplicarEntreno, LIMITES_ENTRENO } from './importar-entreno.js';
 
 export const VERSION_IMPORTACION = 1;
 export const LIMITES = { texto: 200_000, alimentos: 300, registros: 500, diasAtras: 366, diasAdelante: 1 };
@@ -222,14 +223,19 @@ export function validarImportacion(obj, { hoy }) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return { alimentos: [], registros: [], errores: [{ mensaje: 'El JSON tiene que ser un objeto { … }' }], avisos };
   if (obj.forma_import === undefined) avisos.push({ campo: 'forma_import', mensaje: 'no viene; lo leo como la versión 1' });
   else if (Number(obj.forma_import) !== VERSION_IMPORTACION) errores.push({ campo: 'forma_import', mensaje: `la versión ${cadena(obj.forma_import)} no es compatible (esta app lee la ${VERSION_IMPORTACION})` });
-  for (const k of ['alimentos', 'registros']) if (obj[k] !== undefined && !Array.isArray(obj[k])) errores.push({ campo: k, mensaje: 'tiene que ser una lista [ … ]' });
+  for (const k of ['alimentos', 'registros', 'ejercicios', 'rutinas', 'sesiones']) if (obj[k] !== undefined && !Array.isArray(obj[k])) errores.push({ campo: k, mensaje: 'tiene que ser una lista [ … ]' });
   const listaA = Array.isArray(obj.alimentos) ? obj.alimentos : [];
   const listaR = Array.isArray(obj.registros) ? obj.registros : [];
-  if (!listaA.length && !listaR.length && !errores.length) errores.push({ mensaje: 'No hay nada que importar: hace falta «alimentos», «registros» o los dos.' });
+  // Entrenos: aquí solo la forma; cada elemento se valida en la vista previa (y se corrige allí).
+  const entreno = Object.fromEntries(['ejercicios', 'rutinas', 'sesiones'].map((k) => [k, Array.isArray(obj[k]) ? obj[k] : []]));
+  for (const [k, lista] of Object.entries(entreno)) if (lista.length > LIMITES_ENTRENO[k]) errores.push({ campo: k, mensaje: `son ${lista.length}; como mucho ${LIMITES_ENTRENO[k]} de una vez` });
+  const hayEntreno = Object.values(entreno).some((l) => l.length);
+  if (!listaA.length && !listaR.length && !hayEntreno && !errores.length) errores.push({ mensaje: 'No hay nada que importar: hace falta «alimentos», «registros», «ejercicios», «rutinas» o «sesiones».' });
   if (listaA.length > LIMITES.alimentos) errores.push({ campo: 'alimentos', mensaje: `son ${listaA.length}; como mucho ${LIMITES.alimentos} de una vez` });
   if (listaR.length > LIMITES.registros) errores.push({ campo: 'registros', mensaje: `son ${listaR.length}; como mucho ${LIMITES.registros} de una vez` });
   if (errores.length) return { alimentos: [], registros: [], errores, avisos };
   const alimentos = [];
+  const fuenteEntreno = hayEntreno ? entreno : null;
   const vistos = new Map();
   listaA.forEach((a, i) => {
     const v = validarAlimento(a, i);
@@ -249,7 +255,7 @@ export function validarImportacion(obj, { hoy }) {
     avisos.push(...v.avisos.map((e) => ({ ...e, clave: `r${i}` })));
     if (v.valor) registros.push({ ...v.valor, indice: i });
   });
-  return { alimentos, registros, errores, avisos };
+  return { alimentos, registros, errores, avisos, entreno: fuenteEntreno };
 }
 
 // ---------- Duplicados, momentos y referencias ----------
@@ -293,7 +299,7 @@ export function prepararImportacion(datos, validado, { hoy, ahoraMin } = {}) {
     const m = resolverMomento(datos.momentos, r.momento, { hora: r.hora, fecha: r.fecha, hoy, ahoraMin });
     return { clave: `r${r.indice}`, indice: r.indice, incluir: true, alimento: r.alimento, marca: r.marca, ...(r.alimentoId ? { alimentoId: r.alimentoId } : {}), cantidad: r.cantidad, fecha: r.fecha, momento: m.id, hora: r.hora, avisoMomento: m.aviso };
   });
-  return { version: VERSION_IMPORTACION, alimentos, registros, avisos: validado.avisos };
+  return { version: VERSION_IMPORTACION, alimentos, registros, avisos: validado.avisos, ...(validado.entreno ? prepararEntreno(datos, validado.entreno, { hoy }) : {}) };
 }
 
 // Desde el texto pegado hasta el plan (o los errores).
@@ -363,7 +369,10 @@ export function resolverPlan(datos, plan, { hoy }) {
     const base = ref.entrada ? (ref.entrada.decision === 'usar' ? ref.entrada.existente : ref.entrada.valor) : ref.alimento;
     registros.push({ ...v.valor, nombreImportado: v.valor.alimento, indice: i, clave: `r${i}`, momento: x.momento, asociado: x.asociado === true, aviso: ref.aviso ?? null, entrada: ref.entrada ?? null, alimento: ref.alimento ?? null, nutrientes: nutrientesDe(base, v.valor.cantidad), unidad: base.unidad ?? 'g', nombre: base.nombre });
   }
-  return { alimentos, registros, errores };
+  // Entrenos (ejercicios, rutinas y sesiones), si los hay.
+  const entreno = plan.ejercicios || plan.rutinas || plan.sesiones ? resolverEntreno(datos, plan, { hoy }) : null;
+  if (entreno) errores.push(...entreno.errores);
+  return { alimentos, registros, errores, entreno };
 }
 
 // El alimento de un registro: por id (del JSON o tuyo), luego por nombre y
@@ -416,7 +425,17 @@ export function totalesPorDia(resuelto) {
 export function aplicarImportacion(datos, plan, { hoy, ahora = Date.now() } = {}) {
   const resuelto = resolverPlan(datos, plan, { hoy });
   if (resuelto.errores.length) throw new ErrorImportacion(resuelto.errores);
-  if (!resuelto.alimentos.length && !resuelto.registros.length) throw new ErrorImportacion([{ mensaje: 'No has marcado nada para importar.' }]);
+  const e = resuelto.entreno;
+  if (e) {
+    // Nunca se crea un ejercicio en silencio: todo tiene que estar resuelto.
+    const faltan = [
+      ...e.pendientes.map((r) => ({ clave: `ref:${r.clave}`, donde: `«${r.ref.nombre || r.ref.id}»`, mensaje: 'elige a qué ejercicio tuyo corresponde o créalo nuevo' })),
+      ...e.rutinasPendientes.map((s) => ({ clave: s.clave, donde: `Rutina «${s.rutina.nombre}»`, mensaje: 'no existe: elige crearla con los ejercicios de la sesión o importar la sesión sin rutina' })),
+    ];
+    if (faltan.length) throw new ErrorImportacion(faltan);
+  }
+  const hayEntreno = e && (e.defs.length || e.rutinas.length || e.sesiones.some((s) => s.incluir));
+  if (!resuelto.alimentos.length && !resuelto.registros.length && !hayEntreno) throw new ErrorImportacion([{ mensaje: 'No has marcado nada para importar.' }]);
   let lista = [...datos.alimentos];
   const resumen = { creados: 0, actualizados: 0, usados: 0, alias: 0, registros: 0 };
   for (const e of resuelto.alimentos) {
@@ -483,7 +502,10 @@ export function aplicarImportacion(datos, plan, { hoy, ahora = Date.now() } = {}
   for (const r of nuevos) usos.set(r.alimentoId, (usos.get(r.alimentoId) ?? 0) + 1);
   lista = lista.map((a) => (usos.has(a.id) ? { ...a, usado: ahora, veces: (a.veces ?? 0) + usos.get(a.id) } : a));
   const fechas = [...new Set(nuevos.map((r) => r.fecha))].sort();
-  return { datos: { ...datos, alimentos: lista, registros: [...datos.registros, ...nuevos] }, resumen: { ...resumen, fechas } };
+  const conComida = { ...datos, alimentos: lista, registros: [...datos.registros, ...nuevos] };
+  if (!hayEntreno) return { datos: conComida, resumen: { ...resumen, fechas } };
+  const r = aplicarEntreno(conComida, e, { ahora });
+  return { datos: r.datos, resumen: { ...resumen, fechas, ...r.resumen } };
 }
 
 // ---------- Instrucciones para la IA ----------
@@ -491,7 +513,7 @@ export function aplicarImportacion(datos, plan, { hoy, ahora = Date.now() } = {}
 // Texto corto para pegárselo al asistente, con tus comidas del día.
 export function formatoParaIA(momentos = []) {
   const nombres = momentos.map((m) => m.id).join(', ') || 'desayuno, comida, cena';
-  return `Devuélveme los datos en un único bloque JSON (formato "forma_import": 1), sin comentarios:
+  return `Devuélveme los datos en un único bloque JSON (formato "forma_import": 1), sin comentarios. Usa solo las secciones que necesites:
 {
   "forma_import": 1,
   "alimentos": [
@@ -500,13 +522,28 @@ export function formatoParaIA(momentos = []) {
   ],
   "registros": [
     { "fecha": "AAAA-MM-DD", "momento": "cena", "alimento": "Leche semidesnatada", "marca": "COVAP", "cantidad": 250 }
+  ],
+  "ejercicios": [
+    { "nombre": "Jalón al pecho", "grupo": "espalda", "grupos_secundarios": ["biceps"], "equipo": "polea", "principal": true, "unilateral": false, "alias": ["Lat pulldown"] }
+  ],
+  "rutinas": [
+    { "nombre": "Espalda y bíceps", "ejercicios": [ { "ejercicio": "Jalón al pecho", "series": 4, "reps_min": 6, "reps_max": 10, "descanso_s": 150 } ] }
+  ],
+  "sesiones": [
+    { "fecha": "AAAA-MM-DD", "hora_inicio": "20:00", "duracion_min": 90, "rutina": "Espalda y bíceps", "notas": "",
+      "ejercicios": [ { "ejercicio": "Jalón al pecho", "notas": "", "series": [
+        { "tipo": "calentamiento", "peso_kg": 30, "reps": 12 },
+        { "tipo": "efectiva", "peso_kg": 55, "reps": 8, "rir": 1 },
+        { "tipo": "efectiva", "peso_kg": 55, "reps": 7, "fallo": true } ] } ],
+      "cardio": [ { "tipo": "cinta", "duracion_min": 15, "velocidad_kmh": 3.5, "inclinacion_pct": 10, "intensidad": "media" } ] }
   ]
 }
-Reglas:
-- "alimentos" y "registros" son opcionales, pero al menos uno.
-- Valores de "por_100" por cada 100 g o 100 ml según "unidad" ("g" o "ml"). Obligatorios: kcal, proteina, hidratos, grasa. Opcionales: marca, azucares, saturadas, fibra, sal.
-- Que las kcal cuadren con proteína×4 + hidratos×4 + grasa×9.
-- Si te he pasado mi catálogo, usa sus nombres exactos o sus ids: en un alimento, "id" (y "ean" si sabes el código de barras); en un registro, "alimento_id". Crea alimentos nuevos solo si no existen. Opcional en alimentos: "alias" (lista de otros nombres).
-- En "registros", "alimento" (y "marca" si la tiene) es el nombre exacto de un alimento de la lista o de uno que ya tengo; "cantidad" en su unidad; "fecha" en AAAA-MM-DD (si falta, hoy); "momento": uno de ${nombres}. Opcional "hora": "HH:MM".
-- Números con punto decimal. Si no conoces un valor, no lo inventes: déjalo fuera si es opcional y avísame.`;
+Reglas de comida:
+- Valores de "por_100" por cada 100 g o 100 ml según "unidad" ("g" o "ml"). Obligatorios: kcal, proteina, hidratos, grasa. Que las kcal cuadren con proteína×4 + hidratos×4 + grasa×9.
+- En "registros", "alimento" (y "marca") es el nombre exacto de uno de la lista o de uno que ya tengo; "cantidad" en su unidad; "fecha" AAAA-MM-DD (si falta, hoy); "momento": uno de ${nombres}. Opcional "hora": "HH:MM".
+Reglas de entreno:
+- Serie: "tipo" calentamiento, efectiva o dropset (al fallo: "fallo": true); "peso_kg" (0 = peso corporal; o "peso_lb"); "reps" entero; opcionales "lastre_kg", "rir" (0-5), "descanso_s", "notas"; isométricos: "duracion_s" en vez de reps.
+- "grupo": pecho, espalda, hombro, biceps, triceps, antebrazo, pierna, gluteo, abdomen, cardio u otro. "equipo": barra, mancuerna, polea, maquina, peso_corporal u otro. Si "unilateral": true, el peso es por lado.
+- Cardio "tipo": cinta, andar, correr, bici, eliptica, remo, escaladora u otro; "intensidad": baja, media o alta. Las sesiones no pueden ser del futuro.
+Si te he pasado mi catálogo, usa sus nombres exactos o sus ids ("id"; en referencias "alimento_id", "ejercicio_id", "rutina_id"); crea elementos nuevos solo si no existen. Números con punto decimal. Si no conoces un valor, no lo inventes: déjalo fuera si es opcional y avísame.`;
 }
