@@ -13,6 +13,7 @@
 import { id, NUTRIENTES } from './datos.js';
 import { nutrientesDe, momentoPorHora, totales } from './diario.js';
 import { esFecha, diasEntre, minutosDe } from './fechas.js';
+import { emparejarAlimento, normalizarNombre, limpiarAlias, conAlias } from './emparejar.js';
 
 export const VERSION_IMPORTACION = 1;
 export const LIMITES = { texto: 200_000, alimentos: 300, registros: 500, diasAtras: 366, diasAdelante: 1 };
@@ -41,7 +42,8 @@ const normal = (t) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-export const claveAlimento = (nombre, marca = '') => `${normal(nombre)}|${normal(marca)}`;
+// Nombre normalizado (sin tildes, signos ni palabras vacías, en cualquier orden) y marca.
+export const claveAlimento = (nombre, marca = '') => `${normalizarNombre(nombre)}|${normalizarNombre(marca)}`;
 
 // Desde una «{», el trozo hasta su «}» (respetando las cadenas).
 function bloqueDesde(texto, inicio) {
@@ -167,7 +169,15 @@ export function validarAlimento(a, i = 0) {
     if (desvio > DESVIO_KCAL)
       avisos.push({ donde, campo: 'por_100.kcal', mensaje: `las kcal (${por100.kcal}) no cuadran con los macros: P×4 + H×4 + G×9 = ${calculadas} (${Math.round(desvio * 100)} % de diferencia). Revisa los valores.` });
   }
-  return { valor: errores.length ? null : { nombre, marca, unidad, racion, por100 }, errores, avisos };
+  const idApp = cadena(a.id).slice(0, 60);
+  let ean = '';
+  if (a.ean !== undefined && a.ean !== null && a.ean !== '') {
+    ean = cadena(a.ean).replace(/\s/g, '');
+    if (!/^\d{6,14}$/.test(ean)) mal('ean', 'debe ser un código de barras de 6 a 14 cifras');
+  }
+  if (a.alias !== undefined && !Array.isArray(a.alias)) mal('alias', 'tiene que ser una lista de textos');
+  const alias = limpiarAlias(a.alias, nombre);
+  return { valor: errores.length ? null : { nombre, marca, unidad, racion, por100, ...(idApp ? { id: idApp } : {}), ...(ean ? { ean } : {}), ...(alias.length ? { alias } : {}) }, errores, avisos };
 }
 
 // Un registro del JSON → { valor, errores, avisos }.
@@ -175,10 +185,11 @@ export function validarRegistro(r, i = 0, { hoy }) {
   const errores = [];
   const avisos = [];
   const alimento = cadena(r?.alimento);
-  const donde = `Registro ${i + 1}${alimento ? ` («${nombreCorto(alimento)}»)` : ''}`;
+  const alimentoId = cadena(r?.alimento_id ?? r?.alimentoId).slice(0, 60);
+  const donde = `Registro ${i + 1}${alimento ? ` («${nombreCorto(alimento)}»)` : alimentoId ? ` (${alimentoId})` : ''}`;
   const mal = (campo, mensaje) => errores.push({ donde, campo, mensaje });
   if (!r || typeof r !== 'object' || Array.isArray(r)) return { valor: null, errores: [{ donde: `Registro ${i + 1}`, mensaje: 'tiene que ser un objeto { … }' }], avisos };
-  if (!alimento) mal('alimento', 'es obligatorio (el nombre del alimento)');
+  if (!alimento && !alimentoId) mal('alimento', 'es obligatorio (el nombre del alimento o su "alimento_id")');
   const marca = cadena(r.marca).slice(0, 80);
   const cantidad = numero(r.cantidad);
   if (cantidad === undefined) mal('cantidad', 'es obligatoria');
@@ -201,7 +212,7 @@ export function validarRegistro(r, i = 0, { hoy }) {
       hora = undefined;
     }
   }
-  return { valor: errores.length ? null : { alimento, marca, cantidad, fecha, momento: cadena(r.momento).slice(0, 40), hora }, errores, avisos };
+  return { valor: errores.length ? null : { alimento, marca, cantidad, fecha, momento: cadena(r.momento).slice(0, 40), hora, ...(alimentoId ? { alimentoId } : {}) }, errores, avisos };
 }
 
 // Valida el objeto entero. Devuelve los elementos limpios, los errores y los avisos.
@@ -225,9 +236,10 @@ export function validarImportacion(obj, { hoy }) {
     errores.push(...v.errores);
     avisos.push(...v.avisos.map((e) => ({ ...e, clave: `a${i}` })));
     if (!v.valor) return;
-    const clave = claveAlimento(v.valor.nombre, v.valor.marca);
-    if (vistos.has(clave)) return errores.push({ donde: `Alimento ${i + 1} («${nombreCorto(v.valor.nombre)}»)`, mensaje: `está repetido (es igual que el alimento ${vistos.get(clave) + 1})` });
-    vistos.set(clave, i);
+    const claves = [claveAlimento(v.valor.nombre, v.valor.marca), v.valor.id && `id:${v.valor.id}`, v.valor.ean && `ean:${v.valor.ean}`].filter(Boolean);
+    const repetida = claves.find((k) => vistos.has(k));
+    if (repetida) return errores.push({ donde: `Alimento ${i + 1} («${nombreCorto(v.valor.nombre)}»)`, mensaje: `está repetido (es igual que el alimento ${vistos.get(repetida) + 1})` });
+    for (const k of claves) vistos.set(k, i);
     alimentos.push({ ...v.valor, indice: i });
   });
   const registros = [];
@@ -269,13 +281,17 @@ export function resolverMomento(momentos, texto, { hora, fecha, hoy, ahoraMin = 
 // duplicado y cada registro con su momento ya resuelto.
 export function prepararImportacion(datos, validado, { hoy, ahoraMin } = {}) {
   const alimentos = validado.alimentos.map((a) => {
-    const existente = duplicadosDe(datos, a.nombre, a.marca)[0] ?? null;
-    const iguales = existente ? mismosValores(a, existente) : false;
-    return { clave: `a${a.indice}`, indice: a.indice, incluir: true, alimento: a, existenteId: existente?.id ?? null, iguales, decision: existente ? (iguales ? 'usar' : 'actualizar') : 'crear' };
+    const e = emparejarAlimento(datos.alimentos, a);
+    const sugerencias = e.sugerencias.map((s) => ({ id: s.alimento.id, nombre: s.alimento.nombre, marca: s.alimento.marca, similitud: Math.round(s.similitud * 100) / 100, marcaDistinta: s.marcaDistinta }));
+    // Niveles 1-4: se usa el que tienes. Nivel 5: se sugiere (marcado salvo con marcas distintas).
+    const existenteId = e.existente?.id ?? sugerencias[0]?.id ?? null;
+    const existente = existenteId ? datos.alimentos.find((x) => x.id === existenteId) : null;
+    const decision = e.existente || (e.nivel === 'aproximado' && e.preseleccionar) ? 'usar' : 'crear';
+    return { clave: `a${a.indice}`, indice: a.indice, incluir: true, alimento: a, nivel: e.nivel, existenteId, sugerencias, iguales: existente ? mismosValores(a, existente) : false, decision, avisoId: e.avisos[0] ?? null };
   });
   const registros = validado.registros.map((r) => {
     const m = resolverMomento(datos.momentos, r.momento, { hora: r.hora, fecha: r.fecha, hoy, ahoraMin });
-    return { clave: `r${r.indice}`, indice: r.indice, incluir: true, alimento: r.alimento, marca: r.marca, cantidad: r.cantidad, fecha: r.fecha, momento: m.id, hora: r.hora, avisoMomento: m.aviso };
+    return { clave: `r${r.indice}`, indice: r.indice, incluir: true, alimento: r.alimento, marca: r.marca, ...(r.alimentoId ? { alimentoId: r.alimentoId } : {}), cantidad: r.cantidad, fecha: r.fecha, momento: m.id, hora: r.hora, avisoMomento: m.aviso };
   });
   return { version: VERSION_IMPORTACION, alimentos, registros, avisos: validado.avisos };
 }
@@ -294,14 +310,14 @@ const DECISIONES = ['usar', 'actualizar', 'crear'];
 export function resolverPlan(datos, plan, { hoy }) {
   const errores = [];
   if (!plan || typeof plan !== 'object' || !Array.isArray(plan.alimentos) || !Array.isArray(plan.registros)) throw new ErrorImportacion([{ mensaje: 'La importación no tiene el formato esperado. Vuelve a pegar el JSON.' }]);
-  // Cómo quedará cada alimento del JSON en tu catálogo.
-  const porClave = new Map();
+  // Cómo quedará cada alimento del JSON en tu catálogo (por nombre+marca, alias e id).
+  const json = { porClave: new Map(), porId: new Map(), porExistente: new Map(), desmarcados: new Set() };
   const alimentos = [];
   for (const x of plan.alimentos) {
     const i = Number.isInteger(x?.indice) ? x.indice : alimentos.length;
     const v = validarAlimento(x?.alimento, i);
     if (!x?.incluir) {
-      if (v.valor) porClave.set(claveAlimento(v.valor.nombre, v.valor.marca), { incluido: false });
+      if (v.valor) json.desmarcados.add(claveAlimento(v.valor.nombre, v.valor.marca));
       continue;
     }
     errores.push(...v.errores.map((e) => ({ ...e, clave: `a${i}` })));
@@ -316,12 +332,14 @@ export function resolverPlan(datos, plan, { hoy }) {
       continue;
     }
     const clave = claveAlimento(v.valor.nombre, v.valor.marca);
-    if (porClave.get(clave)?.incluido) {
+    if (json.porClave.get(clave)) {
       errores.push({ clave: `a${i}`, donde: `Alimento ${i + 1} («${nombreCorto(v.valor.nombre)}»)`, mensaje: 'está repetido en la importación' });
       continue;
     }
-    const entrada = { incluido: true, decision: x.decision, valor: v.valor, existente };
-    porClave.set(clave, entrada);
+    const entrada = { decision: x.decision, valor: v.valor, existente, clave: `a${i}` };
+    for (const k of [clave, ...(v.valor.alias ?? []).map((al) => claveAlimento(al, v.valor.marca))]) if (!json.porClave.has(k)) json.porClave.set(k, entrada);
+    if (v.valor.id) json.porId.set(v.valor.id, entrada);
+    if (existente) json.porExistente.set(existente.id, entrada);
     alimentos.push(entrada);
   }
   // Con qué alimento va cada registro y qué aporta.
@@ -329,53 +347,55 @@ export function resolverPlan(datos, plan, { hoy }) {
   for (const x of plan.registros) {
     if (!x?.incluir) continue;
     const i = Number.isInteger(x.indice) ? x.indice : registros.length;
-    const v = validarRegistro(x, i, { hoy });
+    const v = validarRegistro({ ...x, alimento_id: x.alimentoId }, i, { hoy });
     errores.push(...v.errores.map((e) => ({ ...e, clave: `r${i}` })));
     if (!v.valor) continue;
-    const donde = `Registro ${i + 1} («${nombreCorto(v.valor.alimento)}»)`;
+    const donde = `Registro ${i + 1} («${nombreCorto(v.valor.alimento || v.valor.alimentoId)}»)`;
     if (!datos.momentos.some((m) => m.id === x.momento)) {
       errores.push({ clave: `r${i}`, donde, campo: 'momento', mensaje: 'elige una de tus comidas del día' });
       continue;
     }
-    const ref = buscarReferencia(datos, porClave, v.valor.alimento, v.valor.marca);
+    const ref = buscarReferencia(datos, json, v.valor);
     if (ref.error) {
-      errores.push({ clave: `r${i}`, donde, campo: 'alimento', mensaje: ref.error });
+      errores.push({ clave: `r${i}`, donde, campo: 'alimento', mensaje: ref.error, sugerencias: ref.sugerencias ?? [] });
       continue;
     }
     const base = ref.entrada ? (ref.entrada.decision === 'usar' ? ref.entrada.existente : ref.entrada.valor) : ref.alimento;
-    registros.push({ ...v.valor, indice: i, clave: `r${i}`, momento: x.momento, entrada: ref.entrada ?? null, alimento: ref.alimento ?? null, nutrientes: nutrientesDe(base, v.valor.cantidad), unidad: base.unidad ?? 'g', nombre: base.nombre });
+    registros.push({ ...v.valor, nombreImportado: v.valor.alimento, indice: i, clave: `r${i}`, momento: x.momento, asociado: x.asociado === true, aviso: ref.aviso ?? null, entrada: ref.entrada ?? null, alimento: ref.alimento ?? null, nutrientes: nutrientesDe(base, v.valor.cantidad), unidad: base.unidad ?? 'g', nombre: base.nombre });
   }
   return { alimentos, registros, errores };
 }
 
-// El alimento de un registro: primero los del JSON, luego los tuyos.
-function buscarReferencia(datos, porClave, nombre, marca) {
-  const delJSON = (clave) => {
-    const e = porClave.get(clave);
-    return e?.incluido ? e : null;
-  };
-  const tuyo = (n, m) => duplicadosDe(datos, n, m)[0] ?? null;
-  if (marca) {
-    const clave = claveAlimento(nombre, marca);
-    const e = delJSON(clave);
-    if (e) return { entrada: e };
-    const a = tuyo(nombre, marca);
-    if (a) return { alimento: a };
-    return { error: `«${nombre}» (${marca}) no está en la importación ni en tus alimentos${porClave.has(clave) ? ' (lo has desmarcado)' : ''}` };
+// El alimento de un registro: por id (del JSON o tuyo), luego por nombre y
+// marca o alias (primero los del JSON, luego los tuyos). Si un alimento del
+// JSON va a parar a uno tuyo, el registro usa esa entrada (con sus valores).
+function buscarReferencia(datos, json, { alimento: nombre, marca, alimentoId }) {
+  const deTuyo = (a) => (json.porExistente.has(a.id) ? { entrada: json.porExistente.get(a.id) } : { alimento: a });
+  let aviso = null;
+  if (alimentoId) {
+    if (json.porId.has(alimentoId)) return { entrada: json.porId.get(alimentoId) };
+    const a = datos.alimentos.find((y) => y.id === alimentoId);
+    if (a) return deTuyo(a);
+    if (!nombre) return { error: `el alimento_id «${alimentoId}» no existe en tus alimentos ni en la importación` };
+    aviso = `el alimento_id «${alimentoId}» no existe; lo busco por nombre`;
   }
-  // Sin marca: el que tampoco tiene marca, o el único con ese nombre.
-  const e = delJSON(claveAlimento(nombre, ''));
-  if (e) return { entrada: e };
-  const a = tuyo(nombre, '');
-  if (a) return { alimento: a };
-  const n = normal(nombre);
-  const candidatosJSON = [...porClave.entries()].filter(([k, v]) => v.incluido && k.split('|')[0] === n).map(([, v]) => v);
-  const candidatosTuyos = datos.alimentos.filter((x) => normal(x.nombre) === n);
-  const total = candidatosJSON.length + candidatosTuyos.filter((x) => !candidatosJSON.some((c) => c.existente?.id === x.id)).length;
-  if (total > 1) return { error: `hay varios «${nombre}» de distinta marca: indica la marca` };
-  if (candidatosJSON.length) return { entrada: candidatosJSON[0] };
-  if (candidatosTuyos.length) return { alimento: candidatosTuyos[0] };
-  return { error: `«${nombre}» no está en la importación ni en tus alimentos${[...porClave.keys()].some((k) => k.split('|')[0] === n) ? ' (lo has desmarcado)' : ''}` };
+  const con = (r) => ({ ...r, aviso });
+  const clave = claveAlimento(nombre, marca);
+  if (json.porClave.has(clave)) return con({ entrada: json.porClave.get(clave) });
+  const e = emparejarAlimento(datos.alimentos, { nombre, marca }, { sinNutrientes: true });
+  if (e.existente) return con(deTuyo(e.existente));
+  const desmarcado = json.desmarcados.has(clave) ? ' (lo has desmarcado)' : '';
+  const sugerencias = e.sugerencias.map((s) => ({ id: s.alimento.id, nombre: s.alimento.nombre, marca: s.alimento.marca }));
+  if (marca) return { error: `«${nombre}» (${marca}) no está en la importación ni en tus alimentos${desmarcado}`, sugerencias };
+  // Sin marca: el único con ese nombre (del JSON o tuyo).
+  const n = normalizarNombre(nombre);
+  const candidatosJSON = [...new Set([...json.porClave.entries()].filter(([k]) => k.split('|')[0] === n).map(([, v]) => v))];
+  const candidatosTuyos = datos.alimentos.filter((y) => normalizarNombre(y.nombre) === n && !candidatosJSON.some((c) => c.existente?.id === y.id));
+  if (candidatosJSON.length + candidatosTuyos.length > 1) return { error: `hay varios «${nombre}» de distinta marca: indica la marca`, sugerencias: candidatosTuyos.map((y) => ({ id: y.id, nombre: y.nombre, marca: y.marca })) };
+  if (candidatosJSON.length) return con({ entrada: candidatosJSON[0] });
+  if (candidatosTuyos.length) return con(deTuyo(candidatosTuyos[0]));
+  const desmarcadoN = [...json.desmarcados].some((k) => k.split('|')[0] === n) ? ' (lo has desmarcado)' : '';
+  return { error: `«${nombre}» no está en la importación ni en tus alimentos${desmarcadoN}`, sugerencias };
 }
 
 // Lo que se sumará a cada día: { fecha: { kcal, proteina, … , n } }.
@@ -398,25 +418,40 @@ export function aplicarImportacion(datos, plan, { hoy, ahora = Date.now() } = {}
   if (resuelto.errores.length) throw new ErrorImportacion(resuelto.errores);
   if (!resuelto.alimentos.length && !resuelto.registros.length) throw new ErrorImportacion([{ mensaje: 'No has marcado nada para importar.' }]);
   let lista = [...datos.alimentos];
-  const resumen = { creados: 0, actualizados: 0, usados: 0, registros: 0 };
+  const resumen = { creados: 0, actualizados: 0, usados: 0, alias: 0, registros: 0 };
   for (const e of resuelto.alimentos) {
     const v = e.valor;
     const campos = { nombre: v.nombre, marca: v.marca, unidad: v.unidad, racion: v.racion, racionNombre: '', por100: v.por100, origen: 'importado' };
-    if (e.decision === 'usar') {
-      e.final = e.existente;
-      resumen.usados++;
-    } else if (e.decision === 'actualizar') {
-      e.final = { ...e.existente, ...campos, id: e.existente.id };
+    if (e.decision === 'usar' || e.decision === 'actualizar') {
+      // Si el nombre importado es otro, se guarda como alias para reconocerlo solo la próxima vez.
+      const nombres = [v.nombre, ...(v.alias ?? [])].filter((n) => normalizarNombre(n) !== normalizarNombre(e.existente.nombre));
+      const actual = lista.find((a) => a.id === e.existente.id) ?? e.existente;
+      const base = e.decision === 'usar' ? actual : { ...actual, ...campos, codigo: actual.codigo || v.ean || '', id: actual.id };
+      e.final = nombres.length ? conAlias(base, ...nombres) : base;
+      if (e.decision === 'usar' && nombres.length && e.final.alias.length > (actual.alias?.length ?? 0)) resumen.alias++;
       lista = lista.map((a) => (a.id === e.final.id ? e.final : a));
-      resumen.actualizados++;
+      if (e.decision === 'usar') resumen.usados++;
+      else resumen.actualizados++;
     } else {
-      e.final = { ...campos, id: id('a'), codigo: '', favorito: false, usado: 0, veces: 0 };
+      e.final = { ...campos, id: id('a'), codigo: v.ean ?? '', alias: limpiarAlias(v.alias, v.nombre), favorito: false, usado: 0, veces: 0 };
       lista.push(e.final);
       resumen.creados++;
     }
   }
+  // Un registro que asociaste a mano a uno de tus alimentos: ese nombre pasa a ser alias.
+  for (const r of resuelto.registros) {
+    if (!r.asociado || !r.nombreImportado) continue;
+    const destino = r.entrada ? r.entrada.final : r.alimento;
+    const actual = lista.find((a) => a.id === destino.id);
+    if (!actual) continue;
+    const nuevo = conAlias(actual, r.nombreImportado);
+    if (nuevo.alias.length === (actual.alias?.length ?? 0)) continue;
+    lista = lista.map((a) => (a.id === actual.id ? nuevo : a));
+    if (r.entrada) r.entrada.final = nuevo;
+    resumen.alias++;
+  }
   const nuevos = resuelto.registros.map((r, i) => {
-    const alimento = r.entrada ? r.entrada.final : r.alimento;
+    const alimento = r.entrada ? r.entrada.final : (lista.find((a) => a.id === r.alimento.id) ?? r.alimento);
     const n = nutrientesDe(alimento, r.cantidad);
     const m = datos.momentos.find((x) => x.id === r.momento);
     return {
@@ -471,6 +506,7 @@ Reglas:
 - "alimentos" y "registros" son opcionales, pero al menos uno.
 - Valores de "por_100" por cada 100 g o 100 ml según "unidad" ("g" o "ml"). Obligatorios: kcal, proteina, hidratos, grasa. Opcionales: marca, azucares, saturadas, fibra, sal.
 - Que las kcal cuadren con proteína×4 + hidratos×4 + grasa×9.
+- Si te he pasado mi catálogo, usa sus nombres exactos o sus ids: en un alimento, "id" (y "ean" si sabes el código de barras); en un registro, "alimento_id". Crea alimentos nuevos solo si no existen. Opcional en alimentos: "alias" (lista de otros nombres).
 - En "registros", "alimento" (y "marca" si la tiene) es el nombre exacto de un alimento de la lista o de uno que ya tengo; "cantidad" en su unidad; "fecha" en AAAA-MM-DD (si falta, hoy); "momento": uno de ${nombres}. Opcional "hora": "HH:MM".
 - Números con punto decimal. Si no conoces un valor, no lo inventes: déjalo fuera si es opcional y avísame.`;
 }

@@ -257,7 +257,7 @@ export function vistaEntreno(ctx) {
   function hojaElegirEjercicio(alElegir, titulo = 'Añadir ejercicio') {
     const pintarLista = (texto = '') => {
       const t = texto.toLowerCase();
-      const lista = ctx.datos.ejercicios.filter((e) => !t || e.nombre.toLowerCase().includes(t) || e.grupo.toLowerCase().includes(t));
+      const lista = ctx.datos.ejercicios.filter((e) => !e.oculto && (!t || e.nombre.toLowerCase().includes(t) || e.grupo.toLowerCase().includes(t) || e.alias.some((a) => a.toLowerCase().includes(t))));
       return GRUPOS.map((g) => {
         const es = lista.filter((e) => e.grupo === g);
         if (!es.length) return '';
@@ -368,12 +368,10 @@ export function vistaEntreno(ctx) {
     );
   }
 
-  function hojaBiblioteca() {
-    hojaElegirEjercicio((eid) => {
-      ctx.hojas.cerrar();
-      hojaEjercicio(eid);
-    }, 'Ejercicios');
-  }
+  // La biblioteca (crear, editar, alias, fusionar…) vive en biblioteca.js; su
+  // botón «Progreso» abre esta ficha con la gráfica.
+  const hojaBiblioteca = () => ctx.abrirBiblioteca();
+  ctx.verEjercicio = (eid) => hojaEjercicio(eid);
 
   // ---------- Acciones ----------
 

@@ -11,6 +11,7 @@
 // última vez), se bajan los del servidor, se aplican los que no chocan (si
 // chocan, gana el más reciente) y se suben los propios.
 import { AJUSTES_POR_DEFECTO, valorValido } from './ajustes.js';
+import { ejercicioAjustado } from './forma/datos.js';
 
 export const COLECCIONES_SINCRO = [
   ['memoria', 'Memoria'],
@@ -422,7 +423,7 @@ export function coleccionBiblia({ leer, guardar, normalizar = (d) => d, despues 
 // comida, alimento, peso, medida, hito, rutina, entreno y día, por separado.
 // El entreno que tienes a medias se queda en este dispositivo.
 const LISTAS_FORMA = ['alimentos', 'registros', 'plantillas', 'pesos', 'medidas', 'hitos', 'rutinas', 'sesiones', 'ejercicios'];
-const BASE_FORMA = ['perfil', 'bloqueados', 'ajustes', 'momentos', 'suplementos', 'tiposMedida', 'descartadas', 'descargas', 'descargaDescartada', 'usosIA', 'resumenVisto', 'avisosVistos'];
+const BASE_FORMA = ['perfil', 'bloqueados', 'ajustes', 'momentos', 'suplementos', 'tiposMedida', 'descartadas', 'descargas', 'descargaDescartada', 'usosIA', 'resumenVisto', 'avisosVistos', 'noDuplicados'];
 
 export function coleccionForma({ leer, guardar, normalizar = (d) => d, despues }) {
   return {
@@ -434,8 +435,9 @@ export function coleccionForma({ leer, guardar, normalizar = (d) => d, despues }
       poner('base', Object.fromEntries(BASE_FORMA.map((k) => [k, d[k] ?? null])));
       for (const lista of LISTAS_FORMA) {
         for (const x of d[lista] ?? []) {
-          // De la biblioteca de ejercicios solo viajan los tuyos y los que marcaste como principales.
-          if (lista === 'ejercicios' && !x.propio && !x.principal) continue;
+          // De la biblioteca de ejercicios solo viajan los tuyos, los principales y los de
+          // serie que has cambiado (alias, ocultos por una fusión, equipo…).
+          if (lista === 'ejercicios' && !x.propio && !x.principal && !ejercicioAjustado(x)) continue;
           if (x?.id) poner(`${lista}:${x.id}`, x);
         }
       }
@@ -460,10 +462,10 @@ export function coleccionForma({ leer, guardar, normalizar = (d) => d, despues }
           if (valor === null) delete dias[clave];
           else dias[clave] = JSON.parse(valor);
         } else if (listas[lista]) {
-          // Un ejercicio de la biblioteca que deja de ser principal se «borra» del lote: vuelve a ser normal.
+          // Un ejercicio de la biblioteca que deja de viajar vuelve a ser el de serie, sin principal.
           if (valor === null && lista === 'ejercicios') {
             const e = listas.ejercicios.get(clave);
-            if (e && !e.propio) listas.ejercicios.set(clave, { ...e, principal: false });
+            if (e && !e.propio) listas.ejercicios.set(clave, { id: clave, principal: false });
             else listas.ejercicios.delete(clave);
           } else if (valor === null) listas[lista].delete(clave);
           else listas[lista].set(clave, JSON.parse(valor));

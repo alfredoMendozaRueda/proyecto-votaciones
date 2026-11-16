@@ -44,6 +44,7 @@ const P = {
   basura: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   reloj: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/>',
   camara: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  fusionar: '<path d="M6 4v4a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4"/><path d="M12 14v6M9 17l3 3 3-3"/>',
   importar: '<path d="M9 4h6v3H9z"/><path d="M15 5h3v15H6V5h3"/><path d="M12 10v6M9 13.5l3 3 3-3"/>',
   copiar: '<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V4H4v12h4"/>',
   diana: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".6"/>',
@@ -74,11 +75,14 @@ export function crearHojas(contenedor) {
     hoja.el.classList.add('f-hoja--sale');
     hoja.alCerrar?.();
     setTimeout(() => hoja.el.remove(), 260);
+    // El foco vuelve a la hoja de debajo (o a Forma): así Escape sigue cerrando la siguiente.
+    const debajo = pila.at(-1)?.el.querySelector('.f-hoja__panel') ?? contenedor.closest('.forma');
+    debajo?.focus({ preventScroll: true });
   }
   function abrir(html, { alCerrar, clase = '', titulo = '' } = {}) {
     const el = document.createElement('div');
     el.className = `f-hoja ${clase}`;
-    el.innerHTML = `<div class="f-hoja__fondo" data-cerrar-hoja></div><section class="f-hoja__panel" role="dialog" aria-modal="true" ${titulo ? `aria-label="${escapar(titulo)}"` : ''}><span class="f-hoja__asa" aria-hidden="true"></span><div class="f-hoja__cuerpo">${html}</div></section>`;
+    el.innerHTML = `<div class="f-hoja__fondo" data-cerrar-hoja></div><section class="f-hoja__panel" role="dialog" aria-modal="true" tabindex="-1" ${titulo ? `aria-label="${escapar(titulo)}"` : ''}><span class="f-hoja__asa" aria-hidden="true"></span><div class="f-hoja__cuerpo">${html}</div></section>`;
     contenedor.append(el);
     const hoja = { el, alCerrar, cuerpo: el.querySelector('.f-hoja__cuerpo') };
     pila.push(hoja);

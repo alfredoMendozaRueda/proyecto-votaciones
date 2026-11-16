@@ -155,12 +155,14 @@ test('importar: detecta duplicados por nombre y marca sin mayúsculas ni tildes'
   assert.equal(duplicadosDe(d, 'Plátano', 'Chiquita').length, 0);
 });
 
-test('importar: decisión por defecto: crear si es nuevo, usar si es igual, actualizar si cambia', () => {
+test('importar: decisión por defecto: crear si es nuevo y usar el tuyo si ya existe (aunque cambien los valores)', () => {
   const iguales = conAlimentos([{ nombre: 'Leche Calcio semidesnatada', marca: 'COVAP', unidad: 'ml', racion: 250, por100: LECHE.por_100 }]);
   assert.equal(leerImportacion(iguales, JSON.stringify(EJEMPLO), OPC).alimentos[0].decision, 'usar');
   const distinta = conAlimentos([{ nombre: 'leche calcio semidesnatada', marca: 'covap', unidad: 'ml', racion: 200, por100: { ...LECHE.por_100, kcal: 46 } }]);
   const plan = leerImportacion(distinta, JSON.stringify(EJEMPLO), OPC);
-  assert.equal(plan.alimentos[0].decision, 'actualizar');
+  assert.equal(plan.alimentos[0].decision, 'usar');
+  assert.equal(plan.alimentos[0].nivel, 'nombre');
+  assert.equal(plan.alimentos[0].iguales, false);
   assert.equal(plan.alimentos[0].existenteId, distinta.alimentos[0].id);
   assert.equal(leerImportacion(vacios(), JSON.stringify(EJEMPLO), OPC).alimentos[0].decision, 'crear');
 });
@@ -220,7 +222,7 @@ test('importar: crea, marca «importado», enlaza el registro y lo pone en recie
   const d = vacios();
   const plan = leerImportacion(d, JSON.stringify(EJEMPLO), OPC);
   const { datos, resumen } = aplicarImportacion(d, plan, { ...OPC, ahora: 1_800_000_000_000 });
-  assert.deepEqual(resumen, { creados: 1, actualizados: 0, usados: 0, registros: 1, fechas: [HOY] });
+  assert.deepEqual(resumen, { creados: 1, actualizados: 0, usados: 0, alias: 0, registros: 1, fechas: [HOY] });
   const n = normalizarForma(datos);
   const a = n.alimentos[0];
   assert.equal(a.origen, 'importado');
@@ -241,6 +243,7 @@ test('importar: crea, marca «importado», enlaza el registro y lo pone en recie
 test('importar: «actualizar» cambia el que tenías sin perder favorito ni usos; «crear» hace otro', () => {
   const d = conAlimentos([{ nombre: 'Leche calcio semidesnatada', marca: 'COVAP', racion: 200, favorito: true, veces: 7, usado: 5, por100: { kcal: 46, proteina: 3.1, hidratos: 4.7, grasa: 1.6 } }]);
   const plan = leerImportacion(d, JSON.stringify(EJEMPLO), OPC);
+  plan.alimentos[0].decision = 'actualizar';
   const act = aplicarImportacion(d, plan, OPC).datos;
   assert.equal(act.alimentos.length, 1);
   assert.equal(act.alimentos[0].id, d.alimentos[0].id);

@@ -2621,3 +2621,178 @@ html[data-transformacion='kitsune']::view-transition-new(root) {
 .f-im-pie .f-boton {
   flex: none;
 }
+
+/* Coincidencias con tus alimentos (importar) */
+.f-im__nota {
+  margin: 0;
+  color: var(--f-t2);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.f-im__nota .f-enlace {
+  font-size: 12.5px;
+}
+
+.f-im__nivel {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--f-capa-3);
+  color: var(--f-hielo);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.f-im__dup p b {
+  color: var(--f-texto);
+  font-weight: 650;
+}
+
+.f-im__dup--sugerencia {
+  border-color: rgba(255, 181, 71, 0.4);
+  background: rgba(255, 181, 71, 0.04);
+}
+
+.f-im__si {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+.f-im__si input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--f-azul);
+}
+
+.f-im__dup .f-enlace {
+  justify-self: start;
+}
+
+.f-im__asociar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.f-im__asociar:empty {
+  display: none;
+}
+
+.f-im__asociar .f-chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Seleccionar y fusionar (Mis alimentos y biblioteca) */
+.f-casilla {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: 1.5px solid var(--f-linea-2);
+  border-radius: 6px;
+  color: #fff;
+}
+
+.f-item[aria-pressed='true'] .f-casilla {
+  border-color: var(--f-azul);
+  background: var(--f-azul);
+}
+
+.f-item[aria-pressed='true'] {
+  background: rgba(47, 125, 255, 0.08);
+}
+
+.f-fu {
+  cursor: pointer;
+}
+
+.f-fu input {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  margin: 0;
+  accent-color: var(--f-azul);
+}
+
+.f-fu-par {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.f-fu-par .f-item__texto {
+  flex: 1 1 200px;
+}
+
+.f-fu-par__botones {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.f-fu-duplicados .f-lista {
+  border-color: rgba(255, 181, 71, 0.35);
+}
+
+.f-chip--casilla {
+  position: relative;
+  cursor: pointer;
+}
+
+.f-chip--casilla input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.f-chip--casilla:has(input:checked) {
+  border-color: var(--f-azul);
+  background: rgba(47, 125, 255, 0.16);
+  color: var(--f-texto);
+}
+
+.f-interruptor {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.f-interruptor input {
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  accent-color: var(--f-azul);
+}
+
+.f-interruptor small {
+  display: block;
+  color: var(--f-t2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.f-alias {
+  min-height: 80px;
+  resize: vertical;
+}
+
+/* Contenedores que reciben el foco al cerrar una hoja: sin anillo. */
+.forma:focus,
+.f-hoja__panel:focus {
+  outline: none;
+}

@@ -2,6 +2,7 @@
 // medidas, hitos y entrenos. Las listas llevan id para sincronizarse una a una
 // entre el iPhone y Windows (ver coleccionForma en sincro.js).
 import { esFecha } from './fechas.js';
+import { limpiarAlias, sinTildes as sinTildesE } from './emparejar.js';
 
 export const id = (prefijo = '') => `${prefijo}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
@@ -15,9 +16,27 @@ export const MOMENTOS_POR_DEFECTO = [
 
 export const MEDIDAS_POR_DEFECTO = ['Cintura', 'Pecho', 'Brazo', 'Cadera', 'Muslo'];
 
-export const GRUPOS = ['Pecho', 'Espalda', 'Hombro', 'Bíceps', 'Tríceps', 'Cuádriceps', 'Femoral', 'Glúteo', 'Gemelo', 'Core'];
+export const GRUPOS = ['Pecho', 'Espalda', 'Hombro', 'Bíceps', 'Tríceps', 'Antebrazo', 'Cuádriceps', 'Femoral', 'Glúteo', 'Gemelo', 'Pierna', 'Core', 'Cardio', 'Otro'];
 
-// [nombre, grupo, principal]
+export const EQUIPOS = [
+  ['barra', 'Barra'],
+  ['mancuerna', 'Mancuerna'],
+  ['polea', 'Polea'],
+  ['maquina', 'Máquina'],
+  ['peso_corporal', 'Peso corporal'],
+  ['otro', 'Otro'],
+];
+const ID_EQUIPOS = EQUIPOS.map(([k]) => k);
+
+// Un grupo escrito como sea («espalda», «Bíceps», «abdomen», «piernas») → el de la app, o null.
+const SINONIMOS_GRUPO = { abdomen: 'Core', abdominales: 'Core', abs: 'Core', core: 'Core', piernas: 'Pierna', pierna: 'Pierna', cuadriceps: 'Cuádriceps', gluteos: 'Glúteo', gemelos: 'Gemelo', hombros: 'Hombro', antebrazos: 'Antebrazo', isquios: 'Femoral', isquiotibiales: 'Femoral', femorales: 'Femoral' };
+export function grupoDesdeTexto(t) {
+  const k = sinTildesE(t).trim();
+  if (!k) return null;
+  return SINONIMOS_GRUPO[k] ?? GRUPOS.find((g) => sinTildesE(g) === k) ?? null;
+}
+
+// [nombre, grupo, principal, equipo, unilateral, secundarios]
 const BIBLIOTECA = [
   ['Press banca', 'Pecho', true],
   ['Press inclinado con mancuernas', 'Pecho'],
@@ -63,7 +82,84 @@ const BIBLIOTECA = [
 const sinAcentos = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 export const idEjercicio = (nombre) => `x-${sinAcentos(nombre).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
 
-export const EJERCICIOS_POR_DEFECTO = BIBLIOTECA.map(([nombre, grupo, principal = false]) => ({ id: idEjercicio(nombre), nombre, grupo, principal, propio: false }));
+// Equipo, si es unilateral (el peso es por lado) y grupos secundarios de cada uno.
+const DETALLES = {
+  'Press banca': ['barra', false, ['Tríceps', 'Hombro']],
+  'Press inclinado con mancuernas': ['mancuerna', false, ['Hombro', 'Tríceps']],
+  'Aperturas en polea': ['polea'],
+  'Fondos en paralelas': ['peso_corporal', false, ['Tríceps', 'Hombro']],
+  Flexiones: ['peso_corporal', false, ['Tríceps']],
+  Dominadas: ['peso_corporal', false, ['Bíceps']],
+  'Remo con barra': ['barra', false, ['Bíceps']],
+  'Jalón al pecho': ['polea', false, ['Bíceps']],
+  'Remo en polea baja': ['polea', false, ['Bíceps']],
+  'Remo con mancuerna': ['mancuerna', true, ['Bíceps']],
+  'Pullover en polea': ['polea'],
+  'Press militar': ['barra', false, ['Tríceps']],
+  'Press de hombro con mancuernas': ['mancuerna', false, ['Tríceps']],
+  'Elevaciones laterales': ['mancuerna'],
+  Pájaros: ['mancuerna', false, ['Espalda']],
+  'Face pull': ['polea', false, ['Espalda']],
+  'Curl con barra': ['barra', false, ['Antebrazo']],
+  'Curl con mancuernas': ['mancuerna'],
+  'Curl martillo': ['mancuerna', false, ['Antebrazo']],
+  'Curl en banco Scott': ['barra'],
+  'Extensión de tríceps en polea': ['polea'],
+  'Press francés': ['barra'],
+  'Press banca agarre cerrado': ['barra', false, ['Pecho']],
+  Sentadilla: ['barra', false, ['Glúteo']],
+  Prensa: ['maquina', false, ['Glúteo']],
+  'Sentadilla búlgara': ['mancuerna', true, ['Glúteo']],
+  'Extensión de cuádriceps': ['maquina'],
+  Zancadas: ['mancuerna', true, ['Glúteo']],
+  'Peso muerto': ['barra', false, ['Glúteo', 'Espalda']],
+  'Peso muerto rumano': ['barra', false, ['Glúteo']],
+  'Curl femoral': ['maquina'],
+  'Hip thrust': ['barra', false, ['Femoral']],
+  'Patada de glúteo en polea': ['polea', true],
+  'Elevación de gemelos de pie': ['maquina'],
+  'Elevación de gemelos sentado': ['maquina'],
+  Plancha: ['peso_corporal'],
+  'Rueda abdominal': ['otro'],
+  'Elevación de piernas colgado': ['peso_corporal'],
+  'Crunch en polea': ['polea'],
+};
+
+export const EJERCICIOS_POR_DEFECTO = BIBLIOTECA.map(([nombre, grupo, principal = false]) => {
+  const [equipo = 'otro', unilateral = false, secundarios = []] = DETALLES[nombre] ?? [];
+  return { id: idEjercicio(nombre), nombre, grupo, secundarios, equipo, unilateral, principal, propio: false, alias: [], oculto: false };
+});
+const POR_DEFECTO = new Map(EJERCICIOS_POR_DEFECTO.map((e) => [e.id, e]));
+
+// ¿Un ejercicio de serie que has cambiado (principal, alias, oculto, equipo…)?
+// Esos (y los tuyos) son los que viajan en la sincronización.
+export function ejercicioAjustado(e) {
+  if (e.propio) return true;
+  const base = POR_DEFECTO.get(e.id);
+  if (!base) return true;
+  return (
+    e.principal !== base.principal ||
+    (e.alias?.length ?? 0) > 0 ||
+    e.oculto === true ||
+    (e.grupo !== undefined && e.grupo !== base.grupo) ||
+    (e.equipo !== undefined && e.equipo !== base.equipo) ||
+    (e.unilateral !== undefined && e.unilateral !== base.unilateral) ||
+    (e.secundarios !== undefined && e.secundarios.join('|') !== base.secundarios.join('|'))
+  );
+}
+
+function camposEjercicio(e, base, nombre) {
+  const grupo = GRUPOS.includes(e.grupo) ? e.grupo : base.grupo;
+  return {
+    grupo,
+    secundarios: Array.isArray(e.secundarios) ? [...new Set(e.secundarios.filter((g) => GRUPOS.includes(g) && g !== grupo))].slice(0, 5) : base.secundarios,
+    equipo: ID_EQUIPOS.includes(e.equipo) ? e.equipo : base.equipo,
+    unilateral: typeof e.unilateral === 'boolean' ? e.unilateral : base.unilateral,
+    principal: typeof e.principal === 'boolean' ? e.principal : base.principal,
+    alias: limpiarAlias(e.alias, nombre),
+    oculto: e.oculto === true,
+  };
+}
 
 export const AJUSTES_POR_DEFECTO = {
   barra: 20,
@@ -135,6 +231,8 @@ function normalizarAlimento(a) {
     racion: num(a.racion, 0.1, 5000) ?? 100,
     racionNombre: texto(a.racionNombre, 40),
     por100: normalizarNutrientes(a.por100),
+    // Otros nombres con los que lo reconoces al importar («Yogur proteínas fresa»).
+    alias: limpiarAlias(a.alias, nombre),
     codigo: texto(a.codigo, 32),
     origen: ORIGENES.includes(a.origen) ? a.origen : 'manual',
     favorito: a.favorito === true,
@@ -206,11 +304,16 @@ export function normalizarForma(d = {}) {
   ajustes.discos = (Array.isArray(ajustes.discos) ? ajustes.discos : AJUSTES_POR_DEFECTO.discos).filter((x) => num(x, 0.1, 100) !== undefined);
   ajustes.descanso = num(ajustes.descanso, 10, 900) ?? 120;
   ajustes.limiteIA = num(ajustes.limiteIA, 0, 500) ?? 30;
+  // Los de serie se rehacen siempre (con tus cambios encima); los tuyos, tal cual.
+  const guardados = new Map(lista(d.ejercicios).filter((e) => typeof e.id === 'string').map((e) => [e.id, e]));
   const propios = lista(d.ejercicios).filter((e) => e.propio && texto(e.nombre, 80));
-  const principales = new Map(lista(d.ejercicios).filter((e) => typeof e.principal === 'boolean').map((e) => [e.id, e.principal]));
+  const BASE_PROPIO = { grupo: 'Otro', secundarios: [], equipo: 'otro', unilateral: false, principal: false };
   const ejercicios = [
-    ...EJERCICIOS_POR_DEFECTO.map((e) => ({ ...e, principal: principales.get(e.id) ?? e.principal })),
-    ...propios.map((e) => ({ id: conId(e, 'x'), nombre: texto(e.nombre, 80), grupo: GRUPOS.includes(e.grupo) ? e.grupo : 'Core', principal: e.principal === true, propio: true })),
+    ...EJERCICIOS_POR_DEFECTO.map((e) => (guardados.has(e.id) ? { ...e, ...camposEjercicio(guardados.get(e.id), e, e.nombre) } : { ...e, secundarios: [...e.secundarios], alias: [] })),
+    ...propios.map((e) => {
+      const nombre = texto(e.nombre, 80);
+      return { id: conId(e, 'x'), nombre, ...camposEjercicio(e, BASE_PROPIO, nombre), propio: true };
+    }),
   ];
   const bloqueados = {};
   for (const [k, v] of Object.entries(d.bloqueados ?? {})) if (num(v, 0, 20000) !== undefined) bloqueados[k] = v;
@@ -273,8 +376,10 @@ export function normalizarForma(d = {}) {
     descargaDescartada: esFecha(d.descargaDescartada) ? d.descargaDescartada : null,
     usosIA: Object.fromEntries(Object.entries(d.usosIA ?? {}).filter(([f, n]) => esFecha(f) && num(n, 0) !== undefined)),
     resumenVisto: esFecha(d.resumenVisto) ? d.resumenVisto : null,
+    // Parejas «idA|idB» que marcaste como «No son el mismo» en Posibles duplicados.
+    noDuplicados: Array.isArray(d.noDuplicados) ? [...new Set(d.noDuplicados.filter((x) => typeof x === 'string' && x.includes('|')))].slice(-500) : [],
     avisosVistos: Array.isArray(d.avisosVistos) ? d.avisosVistos.filter((x) => typeof x === 'string').slice(-100) : [],
   };
 }
 
-export const ejercicio = (datos, eid) => datos.ejercicios.find((e) => e.id === eid) ?? { id: eid, nombre: 'Ejercicio', grupo: 'Core', principal: false };
+export const ejercicio = (datos, eid) => datos.ejercicios.find((e) => e.id === eid) ?? { id: eid, nombre: 'Ejercicio', grupo: 'Otro', secundarios: [], equipo: 'otro', unilateral: false, principal: false, alias: [], oculto: false };

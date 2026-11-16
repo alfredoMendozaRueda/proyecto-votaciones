@@ -14,6 +14,7 @@ import { vistaBienvenida } from './vista-bienvenida.js';
 import { crearAnadir } from './anadir.js';
 import { crearImportador } from './importador.js';
 import { crearMisAlimentos } from './mis-alimentos.js';
+import { crearBiblioteca } from './biblioteca.js';
 import { aplicarImportacion } from '../../compartido/forma/importar.js';
 
 const VISTAS = [
@@ -25,6 +26,7 @@ const VISTAS = [
 ];
 
 export async function montarForma({ raiz, api, salir }) {
+  raiz.tabIndex = -1;
   raiz.innerHTML = `
     <header class="f-cab">
       <div class="f-marca" aria-label="Forma"><span class="f-marca__signo" aria-hidden="true"></span>FORMA</div>
@@ -93,6 +95,8 @@ export async function montarForma({ raiz, api, salir }) {
   const anadir = crearAnadir(ctx);
   const importador = crearImportador(ctx);
   const misAlimentos = crearMisAlimentos(ctx);
+  const biblioteca = crearBiblioteca(ctx);
+  ctx.abrirBiblioteca = () => biblioteca.abrir();
 
   const vistas = { diario: vistaDiario(ctx), entreno: vistaEntreno(ctx), progreso: vistaProgreso(ctx), perfil: vistaPerfil(ctx) };
   const bienvenida = vistaBienvenida(ctx);
@@ -160,7 +164,7 @@ export async function montarForma({ raiz, api, salir }) {
     },
   };
 
-  const modulos = () => [...Object.values(vistas), bienvenida, anadir, importador, misAlimentos];
+  const modulos = () => [...Object.values(vistas), bienvenida, anadir, importador, misAlimentos, biblioteca];
   const buscarAccion = (el) => {
     const a = el.dataset.a;
     if (acciones[a]) return acciones[a];

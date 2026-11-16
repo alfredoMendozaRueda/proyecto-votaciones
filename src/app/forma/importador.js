@@ -1,10 +1,15 @@
 // Importar desde JSON: pegas lo que te ha preparado una IA, revisas una vista
 // previa (marcas, cantidades y comidas editables, duplicados) e importas de una
 // vez. Nada se guarda hasta pulsar «Importar», y se puede deshacer.
-import { leerImportacion, resolverPlan, totalesPorDia, formatoParaIA, textoError, ErrorImportacion } from '../../compartido/forma/importar.js';
+import { leerImportacion, resolverPlan, totalesPorDia, formatoParaIA, textoError, ErrorImportacion, mismosValores } from '../../compartido/forma/importar.js';
 import { resumenDia } from '../../compartido/forma/diario.js';
 import { minutosDe, nombreDia, fechaCorta } from '../../compartido/forma/fechas.js';
+import { buscarLocal } from '../../compartido/forma/alimentos.js';
+import { normalizarNombre } from '../../compartido/forma/emparejar.js';
 import { ic, escapar, num } from './ui.js';
+
+const NIVEL = { id: 'por su id', ean: 'por el código de barras', nombre: 'por el nombre', alias: 'por un alias', manual: 'lo has elegido tú' };
+const conMarca = (a) => `${a.nombre}${a.marca ? ` (${a.marca})` : ''}`;
 
 const macros = (n) => `${num(n.kcal ?? 0)} kcal · P ${num(n.proteina ?? 0, 1)} · H ${num(n.hidratos ?? 0, 1)} · G ${num(n.grasa ?? 0, 1)}`;
 const listaErrores = (errores, max = 12) =>
@@ -68,25 +73,81 @@ export function crearImportador(ctx) {
         <div class="f-im__detalle">Por 100 ${u} · ${macros(a.por100)}</div>
         <label class="f-im__campo"><span>Ración habitual</span><span class="f-con-unidad" data-unidad="${u}"><input class="f-entrada" type="text" inputmode="decimal" autocomplete="off" value="${a.racion}" data-entrada="im-racion" data-clave="${x.clave}" aria-label="Ración habitual"></span></label>
         ${avisos.map((v) => `<p class="f-im__aviso">${escapar(v.mensaje)}</p>`).join('')}
-        ${
-          existente
-            ? `<div class="f-im__dup">
-                <p>${x.iguales ? 'Ya lo tienes en Mis alimentos, con los mismos valores.' : `Ya lo tienes en Mis alimentos con otros valores: ${macros(existente.por100)} por 100 ${existente.unidad ?? 'g'}${existente.unidad !== u ? ' (otra unidad)' : ''}.`}</p>
-                <div class="f-segmento" role="group" aria-label="Qué hago con el que ya tienes">
-                  ${[
-                    ['usar', 'Usar el mío'],
-                    ['actualizar', 'Actualizarlo'],
-                    ['crear', 'Crear otro'],
-                  ]
-                    .map(([v, t]) => `<button type="button" data-a="im-decision" data-clave="${x.clave}" data-v="${v}" aria-pressed="${x.decision === v}">${t}</button>`)
-                    .join('')}
-                </div>
-              </div>`
-            : '<span class="f-im__nuevo">Nuevo en Mis alimentos</span>'
-        }
+        ${x.avisoId ? `<p class="f-im__aviso">${escapar(x.avisoId)}</p>` : ''}
+        ${cajaCoincidencia(x, existente)}
         <p class="f-error" data-im-err="${x.clave}" hidden></p>
       </div>
     </div>`;
+  }
+
+  // Qué pasa con este alimento frente a los tuyos: ya lo tienes (niveles 1-4 o
+  // elegido a mano), se parece a uno (nivel 5, sugerencia) o es nuevo.
+  function cajaCoincidencia(x, existente) {
+    const a = x.alimento;
+    const otroNombre = existente && normalizarNombre(a.nombre) !== normalizarNombre(existente.nombre);
+    const nota = (texto) => `<p class="f-im__nota">${texto}</p>`;
+    const segmento = `<div class="f-segmento" role="group" aria-label="Qué hago con el que ya tienes">
+        ${[
+          ['usar', 'Usar el mío'],
+          ['actualizar', 'Actualizarlo'],
+          ['crear', 'Crear otro'],
+        ]
+          .map(([v, t]) => `<button type="button" data-a="im-decision" data-clave="${x.clave}" data-v="${v}" aria-pressed="${x.decision === v}">${t}</button>`)
+          .join('')}
+      </div>`;
+    if (existente && x.nivel !== 'aproximado') {
+      return `<div class="f-im__dup">
+        <p><b>Ya lo tienes:</b> ${escapar(conMarca(existente))} <span class="f-im__nivel">${NIVEL[x.nivel] ?? ''}</span></p>
+        ${x.iguales ? '' : nota(`Tus valores: ${macros(existente.por100)} por 100 ${existente.unidad ?? 'g'}${existente.unidad !== a.unidad ? ' (otra unidad)' : ''}.`)}
+        ${otroNombre && x.decision !== 'crear' ? nota(`«${escapar(a.nombre)}» se guardará como alias para reconocerlo solo la próxima vez.`) : ''}
+        ${segmento}
+      </div>`;
+    }
+    if (x.nivel === 'aproximado' && x.sugerencias?.length) {
+      const s = x.sugerencias.find((y) => y.id === x.existenteId) ?? x.sugerencias[0];
+      const si = x.decision !== 'crear';
+      return `<div class="f-im__dup f-im__dup--sugerencia">
+        <label class="f-im__si"><input type="checkbox" data-cambio="im-sugerencia" data-clave="${x.clave}" ${si ? 'checked' : ''}><span>¿Es tu <b>${escapar(conMarca(s))}</b>? <span class="f-im__nivel">parecido ${Math.round(s.similitud * 100)}&nbsp;%</span></span></label>
+        ${s.marcaDistinta ? `<p class="f-im__aviso">Marca distinta (${escapar(a.marca)} ≠ ${escapar(s.marca)}): por defecto se crea como alimento nuevo.</p>` : ''}
+        ${
+          x.sugerencias.length > 1
+            ? `<select class="f-entrada" data-cambio="im-sugerida" data-clave="${x.clave}" aria-label="Cuál de los tuyos">${x.sugerencias.map((y) => `<option value="${y.id}" ${y.id === s.id ? 'selected' : ''}>${escapar(conMarca(y))}</option>`).join('')}</select>`
+            : ''
+        }
+        ${si ? nota(`Se usará el tuyo y «${escapar(a.nombre)}» quedará como alias.`) : nota('Se creará como alimento nuevo.')}
+        <button type="button" class="f-enlace" data-a="im-elegir" data-clave="${x.clave}">Es otro de los míos…</button>
+      </div>`;
+    }
+    return `<div class="f-fila f-entre"><span class="f-im__nuevo">Nuevo en Mis alimentos</span><button type="button" class="f-enlace" data-a="im-elegir" data-clave="${x.clave}">Es uno que ya tengo…</button></div>`;
+  }
+
+  // Elegir uno de tus alimentos para un alimento o un registro importado.
+  function hojaElegir(clave) {
+    const x = buscar(clave);
+    if (!x) return;
+    const nombre = typeof x.alimento === 'string' ? x.alimento : x.alimento.nombre;
+    im.eligiendo = { clave, texto: nombre };
+    im.hojaElegir = ctx.hojas.abrir(
+      `<div class="f-hoja__titulo"><h2>¿Cuál es?</h2></div>
+       <p class="f-tenue">Elige el alimento tuyo que corresponde a «${escapar(nombre)}». Ese nombre se guardará como alias.</p>
+       <div class="f-buscador">${ic('buscar', 17)}<input class="f-entrada" type="search" value="${escapar(nombre)}" data-entrada="im-buscar-mio" autocomplete="off" aria-label="Buscar en tus alimentos"></div>
+       <div data-im-mios></div>`,
+      { clase: 'f-hoja--alta', titulo: 'Elegir alimento', alCerrar: () => (im && (im.eligiendo = null)) },
+    );
+    pintarMios();
+  }
+
+  function pintarMios() {
+    const caja = im?.hojaElegir?.cuerpo.querySelector('[data-im-mios]');
+    if (!caja) return;
+    const t = im.eligiendo.texto.trim();
+    // Por palabras sueltas: basta con que coincida alguna.
+    let lista = t ? buscarLocal(ctx.datos, t, 40) : [];
+    if (!lista.length && t) lista = [...new Map(t.split(/\s+/).flatMap((w) => buscarLocal(ctx.datos, w, 15)).map((a) => [a.id, a])).values()].slice(0, 40);
+    if (!t) lista = [...ctx.datos.alimentos].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).slice(0, 60);
+    caja.innerHTML = lista.length
+      ? `<div class="f-lista">${lista.map((a) => `<button type="button" class="f-item" data-a="im-mio" data-id="${a.id}"><span class="f-item__texto"><span class="f-item__nombre">${escapar(a.nombre)}</span><span class="f-item__detalle">${escapar([a.marca, `${num(a.por100.kcal ?? 0)} kcal/100 ${a.unidad}`].filter(Boolean).join(' · '))}</span></span></button>`).join('')}</div>`
+      : '<p class="f-tenue">No encuentro ninguno con ese nombre. Prueba con otra palabra.</p>';
   }
 
   function filaRegistro(x) {
@@ -94,18 +155,20 @@ export function crearImportador(ctx) {
     return `<div class="f-im" data-im-fila="${x.clave}" ${x.incluir ? '' : 'data-fuera'}>
       <input type="checkbox" class="f-im__marca" data-cambio="im-incluir" data-clave="${x.clave}" ${x.incluir ? 'checked' : ''} aria-label="Importar ${escapar(x.alimento)}">
       <div class="f-im__cuerpo">
-        <div class="f-im__nombre">${escapar(x.alimento)}${x.marca ? ` <small>${escapar(x.marca)}</small>` : ''}</div>
+        <div class="f-im__nombre">${escapar(x.alimento || x.alimentoId)}${x.marca ? ` <small>${escapar(x.marca)}</small>` : ''}</div>
         <div class="f-im__campos">
           <span class="f-con-unidad" data-unidad="${unidad}" data-im-unidad="${x.clave}"><input class="f-entrada" type="text" inputmode="decimal" autocomplete="off" value="${x.cantidad}" data-entrada="im-cantidad" data-clave="${x.clave}" aria-label="Cantidad"></span>
           <select class="f-entrada" data-cambio="im-momento" data-clave="${x.clave}" aria-label="Comida">${ctx.datos.momentos.map((m) => `<option value="${m.id}" ${m.id === x.momento ? 'selected' : ''}>${escapar(m.nombre)}</option>`).join('')}</select>
         </div>
         <div class="f-im__detalle" data-im-n="${x.clave}"></div>
+        <p class="f-im__nota" data-im-av="${x.clave}" hidden></p>
         ${x.avisoMomento ? `<p class="f-im__aviso" data-im-aviso-momento>${escapar(x.avisoMomento)}</p>` : ''}
         ${(im.plan.avisos ?? [])
           .filter((v) => v.clave === x.clave)
           .map((v) => `<p class="f-im__aviso">${escapar(`${v.campo}: ${v.mensaje}`)}</p>`)
           .join('')}
         <p class="f-error" data-im-err="${x.clave}" hidden></p>
+        <div class="f-im__asociar" data-im-asociar="${x.clave}"></div>
       </div>
     </div>`;
   }
@@ -172,6 +235,24 @@ export function crearImportador(ctx) {
       const propios = r.errores.filter((e) => e.clave === fila.dataset.imErr);
       fila.hidden = !propios.length;
       fila.textContent = propios.map((e) => `${e.campo ? `${e.campo}: ` : ''}${e.mensaje}`).join(' · ');
+      // Un registro que no encuentra su alimento: «¿Es…?» con los tuyos más parecidos.
+      const caja = c.querySelector(`[data-im-asociar="${fila.dataset.imErr}"]`);
+      if (caja) {
+        const conAlimento = propios.find((e) => e.campo === 'alimento');
+        caja.innerHTML = conAlimento
+          ? `${(conAlimento.sugerencias ?? []).map((y) => `<button type="button" class="f-chip" data-a="im-asociar" data-clave="${fila.dataset.imErr}" data-id="${y.id}">¿Es ${escapar(conMarca(y))}?</button>`).join('')}<button type="button" class="f-chip" data-a="im-elegir" data-clave="${fila.dataset.imErr}">${ic('buscar', 13)}Buscar en los míos…</button>`
+          : '';
+      }
+    }
+    // Notas de cada registro: asociado a mano, o un alimento_id que no existe.
+    for (const x of im.plan.registros) {
+      const p = c.querySelector(`[data-im-av="${x.clave}"]`);
+      if (!p) continue;
+      const res = r.registros.find((y) => y.clave === x.clave);
+      const destino = x.asociado ? ctx.datos.alimentos.find((a) => a.id === x.alimentoId) : null;
+      const texto = destino ? `Asociado a tu «${escapar(conMarca(destino))}»: «${escapar(x.alimento)}» se guardará como alias. <button type="button" class="f-enlace" data-a="im-desasociar" data-clave="${x.clave}">Quitar</button>` : res?.aviso ? escapar(res.aviso) : '';
+      p.hidden = !texto;
+      p.innerHTML = texto;
     }
     const sueltos = r.errores.filter((e) => !e.clave);
     c.querySelector('[data-im-errores]').innerHTML = listaErrores(sueltos);
@@ -225,6 +306,7 @@ export function crearImportador(ctx) {
     const partes = [];
     if (resumen.creados) partes.push(`${resumen.creados} ${resumen.creados === 1 ? 'alimento nuevo' : 'alimentos nuevos'}`);
     if (resumen.actualizados) partes.push(`${resumen.actualizados} ${resumen.actualizados === 1 ? 'actualizado' : 'actualizados'}`);
+    if (resumen.alias) partes.push(`${resumen.alias} ${resumen.alias === 1 ? 'alias nuevo' : 'alias nuevos'}`);
     if (resumen.registros) partes.push(`${resumen.registros} ${resumen.registros === 1 ? 'comida' : 'comidas'} en el diario`);
     ctx.hojas.cerrarTodas();
     if (resumen.fechas.length) {
@@ -266,13 +348,50 @@ export function crearImportador(ctx) {
       const x = buscar(el.dataset.clave);
       if (!x) return;
       x.decision = el.dataset.v;
-      for (const b of el.parentElement.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b === el));
-      actualizar();
+      repintarRevision();
     },
     'im-importar': (el) => importar(el),
+    'im-elegir': (el) => hojaElegir(el.dataset.clave),
+    // Elegido en «¿Cuál es?»: un alimento importado pasa a usar el tuyo; un registro se asocia.
+    'im-mio': (el) => {
+      const clave = im?.eligiendo?.clave;
+      const x = buscar(clave);
+      ctx.hojas.cerrar(im.hojaElegir);
+      if (!x) return;
+      if (clave.startsWith('a')) {
+        const e = ctx.datos.alimentos.find((a) => a.id === el.dataset.id);
+        Object.assign(x, { existenteId: el.dataset.id, nivel: 'manual', decision: 'usar', iguales: e ? mismosValores(x.alimento, e) : false });
+      } else Object.assign(x, { alimentoId: el.dataset.id, asociado: true });
+      repintarRevision();
+    },
+    'im-asociar': (el) => {
+      const x = buscar(el.dataset.clave);
+      if (!x) return;
+      Object.assign(x, { alimentoId: el.dataset.id, asociado: true });
+      actualizar();
+    },
+    'im-desasociar': (el) => {
+      const x = buscar(el.dataset.clave);
+      if (!x) return;
+      delete x.alimentoId;
+      x.asociado = false;
+      actualizar();
+    },
   };
 
+  // Repinta la vista previa sin perder por dónde ibas.
+  function repintarRevision() {
+    const arriba = im.hoja.cuerpo.scrollTop;
+    pintarRevision();
+    im.hoja.cuerpo.scrollTop = arriba;
+  }
+
   const entradas = {
+    'im-buscar-mio': (el) => {
+      if (!im?.eligiendo) return;
+      im.eligiendo.texto = el.value;
+      pintarMios();
+    },
     'im-texto': (el) => {
       im.texto = el.value;
       const b = im.hoja.cuerpo.querySelector('[data-im-revisar]');
@@ -293,6 +412,19 @@ export function crearImportador(ctx) {
   };
 
   const cambios = {
+    // «¿Es tu X?»: sí → se usa el tuyo (y el nombre queda como alias); no → nuevo.
+    'im-sugerencia': (el) => {
+      const x = buscar(el.dataset.clave);
+      if (!x) return;
+      x.decision = el.checked ? 'usar' : 'crear';
+      repintarRevision();
+    },
+    'im-sugerida': (el) => {
+      const x = buscar(el.dataset.clave);
+      if (!x) return;
+      x.existenteId = el.value;
+      repintarRevision();
+    },
     'im-incluir': (el) => {
       const x = buscar(el.dataset.clave);
       if (!x) return;
