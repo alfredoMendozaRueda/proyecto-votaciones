@@ -15,6 +15,7 @@ import { crearAnadir } from './anadir.js';
 import { crearImportador } from './importador.js';
 import { crearMisAlimentos } from './mis-alimentos.js';
 import { crearBiblioteca } from './biblioteca.js';
+import { crearEditorSesion } from './editor-sesion.js';
 import { aplicarImportacion } from '../../compartido/forma/importar.js';
 
 const VISTAS = [
@@ -97,6 +98,8 @@ export async function montarForma({ raiz, api, salir }) {
   const misAlimentos = crearMisAlimentos(ctx);
   const biblioteca = crearBiblioteca(ctx);
   ctx.abrirBiblioteca = () => biblioteca.abrir();
+  const editorSesion = crearEditorSesion(ctx);
+  ctx.editarSesion = (sid) => editorSesion.abrir(sid);
 
   const vistas = { diario: vistaDiario(ctx), entreno: vistaEntreno(ctx), progreso: vistaProgreso(ctx), perfil: vistaPerfil(ctx) };
   const bienvenida = vistaBienvenida(ctx);
@@ -164,7 +167,7 @@ export async function montarForma({ raiz, api, salir }) {
     },
   };
 
-  const modulos = () => [...Object.values(vistas), bienvenida, anadir, importador, misAlimentos, biblioteca];
+  const modulos = () => [...Object.values(vistas), bienvenida, anadir, importador, misAlimentos, biblioteca, editorSesion];
   const buscarAccion = (el) => {
     const a = el.dataset.a;
     if (acciones[a]) return acciones[a];

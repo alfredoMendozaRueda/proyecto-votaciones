@@ -2915,3 +2915,56 @@ html[data-transformacion='kitsune']::view-transition-new(root) {
   color: var(--f-t2);
   font-size: 12px;
 }
+
+/* Editar un entreno hecho */
+.f-dia-entreno {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.f-dia-entreno:disabled {
+  cursor: default;
+}
+
+.f-dia-entreno:not(:disabled):active span:last-child {
+  transform: scale(0.94);
+}
+
+.f-ie__fila--editar {
+  grid-template-columns: 16px minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 0.7fr) 22px 22px;
+  gap: 4px;
+}
+
+.f-ie__quitar {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--f-t3);
+}
+
+.f-es-cardio {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--f-linea);
+}
+
+/* Tipo de serie en filas estrechas: flecha pegada al borde para que quepa «Efectiva». */
+.f-ie__fila select.f-entrada {
+  padding: 0 14px 0 6px;
+  background-position:
+    calc(100% - 9px) 50%,
+    calc(100% - 4px) 50%;
+}
+
+.f-ie__fila--editar {
+  grid-template-columns: 16px minmax(0, 1.55fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 0.7fr) 22px 22px;
+}

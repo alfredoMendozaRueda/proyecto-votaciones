@@ -3,7 +3,7 @@
 // descanso entre series, la calculadora de discos, el historial, la gráfica de
 // cada ejercicio y el asesor de descarga.
 import { ultimaVez, textoSeries, sugerenciaSubida, asesorDescarga, avisoFuerzaEnDeficit, historialEjercicio, ejerciciosDeSesion, duracionSesion, kcalDeCardio, volumenSemanal, volumenSesion, carga, tipoSerie } from '../../compartido/forma/entreno.js';
-import { empezarSesion, actualizarActiva, terminarSesion, descartarActiva, borrarSesion, guardarRutina, borrarRutina, crearEjercicio, alternarPrincipal, aceptarDescarga, descartarDescarga, verAviso } from '../../compartido/forma/acciones.js';
+import { empezarSesion, actualizarActiva, terminarSesion, descartarActiva, guardarRutina, borrarRutina, crearEjercicio, alternarPrincipal, aceptarDescarga, descartarDescarga, verAviso } from '../../compartido/forma/acciones.js';
 import { discosPorLado, epley } from '../../compartido/forma/calculos.js';
 import { ejercicio, GRUPOS, TIPOS_CARDIO, id as nuevoId } from '../../compartido/forma/datos.js';
 
@@ -127,7 +127,8 @@ export function vistaEntreno(ctx) {
           .map((l, i) => {
             const f = sumar(semana, i);
             const hecho = d.sesiones.some((s) => s.fecha === f);
-            return `<div style="display:grid;justify-items:center;gap:6px"><span class="f-tenue" style="font-size:11px">${l}</span><span style="width:100%;height:30px;border-radius:7px;border:1px solid ${f === hoy ? 'var(--f-azul)' : 'var(--f-linea)'};${hecho ? 'background:linear-gradient(180deg,var(--f-azul-2),var(--f-azul));box-shadow:0 0 12px -3px var(--f-azul);border-color:transparent' : ''}"></span></div>`;
+            // Tocar un día con entreno abre su edición.
+            return `<button type="button" class="f-dia-entreno" ${hecho ? `data-a="dia-entreno" data-fecha="${f}" aria-label="Editar el entreno del ${escapar(nombreDia(f, hoy).toLowerCase())}"` : 'disabled aria-hidden="true" tabindex="-1"'}><span class="f-tenue" style="font-size:11px">${l}</span><span style="width:100%;height:30px;border-radius:7px;border:1px solid ${f === hoy ? 'var(--f-azul)' : 'var(--f-linea)'};${hecho ? 'background:linear-gradient(180deg,var(--f-azul-2),var(--f-azul));box-shadow:0 0 12px -3px var(--f-azul);border-color:transparent' : ''}"></span></button>`;
           })
           .join('')}</div>
         <div class="f-kpis">
@@ -338,30 +339,6 @@ export function vistaEntreno(ctx) {
       </div>`;
   }
 
-  function hojaSesion(s) {
-    const porEj = ejerciciosDeSesion(s);
-    ctx.hojas.abrir(
-      `<div class="f-hoja__titulo"><h2>${escapar(s.nombre || 'Entreno')}</h2></div>
-       <p class="f-tenue">${escapar(nombreDia(s.fecha, ctx.hoy()))}${duracionSesion(s) ? ` · ${duracionSesion(s)} min` : ''}</p>
-       ${porEj
-         .map((eid) => {
-           const ss = s.series.filter((x) => x.ejercicioId === eid);
-           const meta = (s.ejercicios ?? []).find((e) => e.ejercicioId === eid);
-           const marca = (x) => ({ calentamiento: '(C) ', dropset: '(D) ' })[tipoSerie(x)] ?? '';
-           const cifra = (x) => (x.segundos && !x.reps ? `${x.segundos} s` : `${num(x.kg, 2)}${x.lastre ? `+${num(x.lastre, 2)}` : ''}×${x.reps}`);
-           return `<div class="f-panel" style="padding:12px"><strong style="font-size:14px">${meta?.superserie ? `${meta.superserie} · ` : ''}${escapar(ejercicio(ctx.datos, eid).nombre)}</strong>
-           <p class="f-tenue">${ss.map((x) => `${marca(x)}${cifra(x)}${x.fallo ? ' al fallo' : x.rir !== undefined ? ` @${x.rir}` : ''}`).join(' · ')}</p>
-           ${meta?.notas ? `<p class="f-tenue" style="font-style:italic">${escapar(meta.notas)}</p>` : ''}</div>`;
-         })
-         .join('')}
-       <p class="f-tenue">Volumen: ${num(volumenSesion(ctx.datos, s))} kg${s.origen === 'importado' ? ' · importado' : ''}</p>
-       ${s.cardio.map((c) => `<p class="f-tenue">${escapar(NOMBRE_CARDIO[c.tipo] ?? c.tipo)} · ${c.minutos} min${c.velocidad ? ` · ${num(c.velocidad, 1)} km/h` : ''}${c.inclinacion ? ` · ${num(c.inclinacion, 1)} % de inclinación` : ''} · ${num(c.kcal)} kcal</p>`).join('')}
-       ${s.notas ? `<p class="f-explica">${escapar(s.notas)}</p>` : ''}
-       <button type="button" class="f-boton f-boton--peligro" data-a="sesion-borrar" data-id="${s.id}">${ic('basura', 15)}Borrar este entreno</button>`,
-      { titulo: 'Entreno' },
-    );
-  }
-
   function hojaEjercicio(eid) {
     const e = ejercicio(ctx.datos, eid);
     const h = historialEjercicio(ctx.datos, eid);
@@ -541,14 +518,8 @@ export function vistaEntreno(ctx) {
       pintarDescanso();
     },
     'sesion-ver': (el) => {
-      const s = ctx.datos.sesiones.find((x) => x.id === el.dataset.id);
-      if (s) hojaSesion(s);
-    },
-    'sesion-borrar': (el) => {
-      const antes = ctx.datos;
-      ctx.hojas.cerrar();
-      ctx.guardar(borrarSesion(ctx.datos, el.dataset.id));
-      ctx.tostada('Entreno borrado', { accion: () => ctx.guardar(antes) });
+      // El historial abre el editor del entreno.
+      ctx.editarSesion(el.dataset.id);
     },
     'rutina-nueva': () => hojaRutina(),
     'rutina-editar': (el) => hojaRutina(ctx.datos.rutinas.find((r) => r.id === el.dataset.id)),
