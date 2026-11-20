@@ -100,6 +100,25 @@ export function vistaPerfil(ctx) {
         <p class="f-tenue">Hoy llevas ${d.usosIA[ctx.hoy()] ?? 0} usos. La IA usa las claves de Kitsune (Ajustes → IA); las fotos necesitan la de OpenAI o la de Claude. Sin IA, todo lo demás funciona igual.</p>
       </section>
 
+      <section class="f-panel f-columna" data-panel="ajustes-resumen">
+        <div class="f-etiqueta"><span>Resumen semanal e hitos</span></div>
+        <p class="f-explica">Cada semana (lunes a domingo) se guarda un resumen con tu peso, comidas, entrenos y el avance hacia tus hitos. Lo ves en Progreso → Semanas.</p>
+        <div class="f-rejilla-2">
+          <label class="f-campo"><span>Se genera el</span><select class="f-entrada" data-cambio="ajuste-resumen" data-k="resumenDia">${['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
+            .map((n, i) => `<option value="${i + 1}" ${d.ajustes.resumenDia === i + 1 ? 'selected' : ''}>${i + 1 === 7 ? 'domingo' : `${n} siguiente`}</option>`)
+            .join('')}</select></label>
+          <label class="f-campo"><span>A las</span><input class="f-entrada" type="time" value="${d.ajustes.resumenHora}" data-cambio="ajuste-resumen" data-k="resumenHora"></label>
+        </div>
+        <label class="f-check"><input type="checkbox" data-cambio="ajuste-resumen" data-k="resumenAviso" ${d.ajustes.resumenAviso ? 'checked' : ''}><span>Avisarme con una notificación (con el servidor de avisos conectado)</span></label>
+        <label class="f-check"><input type="checkbox" data-cambio="ajuste-resumen" data-k="resumenIA" ${d.ajustes.resumenIA ? 'checked' : ''}><span>Que el texto lo escriba la IA (solo recibe las cifras de la semana, nunca tus comidas)</span></label>
+        <span class="f-etiqueta">Días que entrenas</span>
+        <div class="f-chips">${['L', 'M', 'X', 'J', 'V', 'S', 'D']
+          .map((n, i) => `<button type="button" class="f-chip" data-a="perfil-dia-entreno" data-dia="${i + 1}" aria-pressed="${d.ajustes.diasEntrenoSemana.includes(i + 1)}" aria-label="${['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][i]}">${n}</button>`)
+          .join('')}</div>
+        <p class="f-tenue">${d.ajustes.diasEntrenoSemana.length ? `${d.ajustes.diasEntrenoSemana.length} sesiones planificadas a la semana. Si cambias un entreno de día, cuenta igual.` : `Sin marcar: se planifican los ${p.diasEntreno ?? 0} días de tu perfil.`}</p>
+        <button type="button" class="f-boton" data-a="sem-hitos">${ic('trofeo', 16)}Hitos y recompensas</button>
+      </section>
+
       <section class="f-panel f-columna">
         <div class="f-etiqueta"><span>Mis alimentos</span><b>${d.alimentos.length}</b></div>
         <p class="f-explica">Todos los que has buscado, escaneado, creado o importado. Corrígelos, márcalos como favoritos o trae muchos de golpe desde el JSON que te prepare una IA.</p>
@@ -229,6 +248,13 @@ export function vistaPerfil(ctx) {
       ctx.guardar({ ...ctx.datos, ajustes: { ...ctx.datos.ajustes, discos } }, { pintar: false });
       ctx.repintar();
     },
+    'perfil-dia-entreno': (el) => {
+      const dia = Number(el.dataset.dia);
+      const dias = ctx.datos.ajustes.diasEntrenoSemana;
+      const nuevos = dias.includes(dia) ? dias.filter((x) => x !== dia) : [...dias, dia].sort();
+      ctx.guardar({ ...ctx.datos, ajustes: { ...ctx.datos.ajustes, diasEntrenoSemana: nuevos } }, { pintar: false });
+      ctx.repintar();
+    },
     'copiar-atajo': async (el) => {
       try {
         await navigator.clipboard.writeText(el.dataset.url);
@@ -273,6 +299,13 @@ export function vistaPerfil(ctx) {
     momento: (el) => {
       const momentos = ctx.datos.momentos.map((m, i) => (i === Number(el.dataset.i) ? { ...m, [el.dataset.k]: el.value || m[el.dataset.k] } : m));
       ctx.guardar({ ...ctx.datos, momentos }, { pintar: false });
+    },
+    'ajuste-resumen': (el) => {
+      const k = el.dataset.k;
+      const v = el.type === 'checkbox' ? el.checked : k === 'resumenDia' ? Number(el.value) : el.value;
+      if (k === 'resumenHora' && !/^\d{2}:\d{2}$/.test(v)) return;
+      ctx.guardar({ ...ctx.datos, ajustes: { ...ctx.datos.ajustes, [k]: v } }, { pintar: false });
+      if (k !== 'resumenIA') ctx.sincronizarAvisoResumen?.();
     },
     ajuste: (el) => {
       const k = el.dataset.k;

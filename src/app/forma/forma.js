@@ -18,6 +18,9 @@ import { crearBiblioteca } from './biblioteca.js';
 import { crearEditorSesion } from './editor-sesion.js';
 import { crearIntegraciones } from './integraciones.js';
 import { aplicarImportacion } from '../../compartido/forma/importar.js';
+import { generarResumen, semanasPendientes, peticionResumenIA, leerTextoIA } from '../../compartido/forma/semanas.js';
+import { puedeUsarIA } from '../../compartido/forma/ia.js';
+import { contarUsoIA } from '../../compartido/forma/acciones.js';
 
 const VISTAS = [
   { id: 'diario', nombre: 'Diario', icono: 'diario' },
@@ -122,6 +125,67 @@ export async function montarForma({ raiz, api, salir }) {
     },
   };
   let ultimaRecogida = 0;
+
+  // ---------- Resumen semanal ----------
+  // El texto lo escribe la IA (si está activada y quedan usos) solo con las
+  // métricas ya calculadas; si no hay IA o falla, el de reglas.
+  async function textoIA(m) {
+    if (!estado.datos.ajustes.resumenIA || !api.ia?.tarea || !puedeUsarIA(estado.datos, fechaISO())) return null;
+    try {
+      const r = await api.ia.tarea(peticionResumenIA(m));
+      estado.datos = contarUsoIA(estado.datos, fechaISO());
+      return leerTextoIA(r?.texto);
+    } catch {
+      return null;
+    }
+  }
+  // Genera (o regenera) una semana y la guarda. Devuelve el resumen.
+  ctx.generarSemana = async (lunes, { ia = true } = {}) => {
+    await guardando;
+    const base = generarResumen(estado.datos, lunes, { ahora: Date.now() });
+    const texto = ia ? await textoIA(base.resumen.datos) : null;
+    const r = texto ? generarResumen(estado.datos, lunes, { ahora: Date.now(), texto, origen: 'ia' }) : generarResumen(estado.datos, lunes, { ahora: Date.now() });
+    await ctx.guardar(r.datos, { pintar: false });
+    return r.resumen;
+  };
+  // Las semanas cerradas que aún no tienen resumen (al abrir Forma, al volver y
+  // cada minuto). Solo la más reciente lleva texto de la IA.
+  let generando = false;
+  ctx.generarResumenes = async () => {
+    if (generando || !estado.datos.perfil) return;
+    const pendientes = semanasPendientes(estado.datos, Date.now());
+    if (!pendientes.length) return;
+    generando = true;
+    try {
+      for (const lunes of pendientes) await ctx.generarSemana(lunes, { ia: lunes === pendientes.at(-1) });
+      if (!raiz.hidden) {
+        tostada('Tu resumen semanal está listo', { accion: () => ctx.irASemanas(), etiqueta: 'Ver', ms: 8000 });
+        if (!hojas.abierta()) pintar();
+      }
+    } finally {
+      generando = false;
+    }
+  };
+  ctx.irASemanas = () => {
+    hojas.cerrarTodas();
+    estado.local.progreso = 'semanas';
+    const ultimo = estado.datos.resumenes.at(-1);
+    if (ultimo && estado.datos.resumenVisto !== ultimo.id) ctx.guardar({ ...estado.datos, resumenVisto: ultimo.id }, { pintar: false });
+    irA('progreso');
+  };
+  // El servidor avisa a la hora elegida (solo sabe el día y la hora, no tus datos).
+  let avisoEnviado = '';
+  ctx.sincronizarAvisoResumen = async () => {
+    const a = estado.datos.ajustes;
+    const cfg = { activo: Boolean(a.resumenAviso && estado.datos.perfil), dia: a.resumenDia, hora: a.resumenHora };
+    const firma = JSON.stringify(cfg);
+    if (firma === avisoEnviado || !api.forma.avisoResumen) return;
+    try {
+      if (await api.forma.avisoResumen(cfg)) avisoEnviado = firma;
+    } catch {
+      // Sin servidor: el resumen se genera igual al abrir la app.
+    }
+  };
   const anadir = crearAnadir(ctx);
   const importador = crearImportador(ctx);
   const misAlimentos = crearMisAlimentos(ctx);
@@ -273,13 +337,17 @@ export async function montarForma({ raiz, api, salir }) {
       ultimoHoy = ahora;
       if (!raiz.hidden && !hojas.abierta()) ctx.repintar();
     }
+    if (!raiz.hidden) ctx.generarResumenes();
   }, 60_000);
 
   pintar();
   // Lo que haya mandado el Atajo de Apple Salud: al arrancar, al abrir Forma y al volver a la app.
-  if (!raiz.hidden) ctx.recogerSalud();
+  // Y los resúmenes semanales pendientes, después de recoger lo de Salud.
+  const ponerseAlDia = () => Promise.resolve(ctx.recogerSalud()).finally(() => ctx.generarResumenes());
+  if (!raiz.hidden) ponerseAlDia();
+  ctx.sincronizarAvisoResumen();
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && !raiz.hidden) ctx.recogerSalud();
+    if (document.visibilityState === 'visible' && !raiz.hidden) ponerseAlDia();
   });
 
   return {
@@ -287,7 +355,7 @@ export async function montarForma({ raiz, api, salir }) {
       raiz.hidden = false;
       if (estado.fecha !== fechaISO() && estado.fecha === ultimoHoy) estado.fecha = fechaISO();
       pintar();
-      ctx.recogerSalud();
+      ponerseAlDia();
     },
     ocultar() {
       hojas.cerrarTodas();
@@ -308,6 +376,7 @@ export async function montarForma({ raiz, api, salir }) {
         vistas.progreso.acciones['nuevo-peso']?.();
       } else if (nombre === 'entreno') irA('entreno');
       else if (nombre === 'importar') importador.abrir();
+      else if (nombre === 'semanas') ctx.irASemanas();
     },
   };
 }

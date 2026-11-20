@@ -1,16 +1,20 @@
 // Progreso: peso con la media de 7 días, ritmo real frente al previsto, fecha
 // estimada, resumen semanal, TDEE adaptativo, avisos, hitos, medidas y fotos.
-import { serieMedia, pesoDeReferencia, ritmoReal, avisosProgreso, estadoHito, hitosSugeridos, resumenSemanal, tdeeAdaptativo, serieMedida, pesosPorDia, serieComposicion, pesoDelDia, pesajesPorFecha } from '../../compartido/forma/progreso.js';
+import { serieMedia, pesoDeReferencia, ritmoReal, avisosProgreso, estadoHito, hitosSugeridos, tdeeAdaptativo, serieMedida, pesosPorDia, serieComposicion, pesoDelDia, pesajesPorFecha } from '../../compartido/forma/progreso.js';
 import { apuntarPeso, apuntarMedida, anadirHito, borrarHito, verAviso, borrarPeso } from '../../compartido/forma/acciones.js';
 import { calcularPlan, fechaEstimada, deKg, aKg, unidadPeso, deCm, aCm, unidadLongitud, KCAL_POR_KG_GRASA } from '../../compartido/forma/calculos.js';
-import { objetivoDelDia, perfilActual } from '../../compartido/forma/diario.js';
+import { perfilActual } from '../../compartido/forma/diario.js';
 import { ejercicio } from '../../compartido/forma/datos.js';
-import { lunesDe, sumarDias, fechaLarga, fechaCorta, nombreDia, aDia } from '../../compartido/forma/fechas.js';
+import { lunesDe, sumarDias, fechaLarga, fechaCorta, nombreDia } from '../../compartido/forma/fechas.js';
 import { ic, escapar, num, signo, grafica, minigrafica, fotoReducida } from './ui.js';
 import { nombreFuente } from '../../compartido/forma/salud.js';
+import { crearSemanas } from './vista-semanas.js';
 import { listarFotos, guardarFoto, borrarFoto } from './fotos.js';
 
 export function vistaProgreso(ctx) {
+  const semanas = crearSemanas(ctx);
+  ctx.abrirHitos = () => semanas.abrirHitos();
+  ctx.verSemana = (lunes) => semanas.verSemana(lunes);
   let fotos = null; // se cargan al abrir
   const elegidas = new Set();
   const u = () => ctx.datos.perfil?.unidades ?? 'metrico';
@@ -83,37 +87,6 @@ export function vistaProgreso(ctx) {
     </section>`;
   }
 
-  function panelResumen() {
-    const d = ctx.datos;
-    const hoy = ctx.hoy();
-    // El domingo por la noche, la semana en curso; si no, la última cerrada.
-    const ahora = new Date();
-    const esDomingoNoche = aDia(hoy).getDay() === 0 && ahora.getHours() >= 18;
-    const lunes = esDomingoNoche ? lunesDe(hoy) : sumarDias(lunesDe(hoy), -7);
-    const r = resumenSemanal(d, lunes, { objetivo: (f) => objetivoDelDia(d, f) });
-    if (!r.diasRegistrados && !r.entrenos && r.cambio === null) return '';
-    const nuevo = d.resumenVisto !== lunes;
-    return `<section class="f-panel f-panel--azul">
-      <div class="f-etiqueta"><span>${nuevo ? '● ' : ''}Resumen semanal</span><b>${escapar(fechaCorta(r.lunes))} – ${escapar(fechaCorta(r.domingo))}</b></div>
-      <div class="f-informe">
-        <div><span>Kcal en objetivo</span><b>${r.cumplimientoKcal ?? '—'}${r.cumplimientoKcal !== null ? ' %' : ''}</b><small class="f-tenue">${r.diasRegistrados} días apuntados</small></div>
-        <div><span>Proteína cumplida</span><b>${r.cumplimientoProteina ?? '—'}${r.cumplimientoProteina !== null ? ' %' : ''}</b><small class="f-tenue">días con ≥ 90 %</small></div>
-        <div><span>Media de peso</span><b>${r.cambio === null ? '—' : `${signo(deKg(r.cambio, u()), 2)}`}</b><small class="f-tenue">${unidadPeso(u())} en la semana</small></div>
-        <div><span>Entrenos</span><b>${r.entrenos}</b><small class="f-tenue">${r.records.length ? `${r.records.length} récord${r.records.length > 1 ? 's' : ''}` : 'sin récords'}</small></div>
-      </div>
-      ${
-        r.records.length
-          ? `<div class="f-columna" style="margin-top:28px;gap:6px"><span class="f-etiqueta">${ic('trofeo', 13)} Récords</span>${[...r.records]
-              .sort((a, b) => b.e1rm / (b.anterior || b.e1rm) - a.e1rm / (a.anterior || a.e1rm))
-              .slice(0, 3)
-              .map((x) => `<div class="f-fila f-entre" style="font-size:13px"><span>${escapar(ejercicio(d, x.ejercicioId).nombre)}</span><b>${num(x.kg, 2)} × ${x.reps}${x.anterior ? ` <span class="f-tenue">(+${num(x.e1rm - x.anterior, 1)} kg 1RM)</span>` : ''}</b></div>`)
-              .join('')}${r.records.length > 3 ? `<span class="f-tenue">y ${r.records.length - 3} más</span>` : ''}</div>`
-          : ''
-      }
-      ${nuevo ? `<button type="button" class="f-enlace" style="margin-top:12px" data-a="resumen-visto" data-lunes="${lunes}">Marcar como visto</button>` : ''}
-    </section>`;
-  }
-
   function panelAdaptativo() {
     const d = ctx.datos;
     const hoy = ctx.hoy();
@@ -152,7 +125,7 @@ export function vistaProgreso(ctx) {
     const inicial = pesosPorDia(d)[0]?.kg ?? d.perfil.peso;
     const ordenados = [...d.hitos].sort((a, b) => Boolean(a.cumplido) - Boolean(b.cumplido));
     return `<section class="f-panel f-panel--plano">
-      <div class="f-etiqueta" style="padding:14px 14px 4px"><span>Hitos y recompensas</span><button type="button" class="f-enlace" data-a="hito-nuevo">${ic('mas', 14)}</button></div>
+      <div class="f-etiqueta" style="padding:14px 14px 4px"><span>Hitos y recompensas</span><span class="f-fila" style="gap:14px"><button type="button" class="f-enlace" data-a="sem-hitos">${ic('lapiz', 14)} Ordenar</button><button type="button" class="f-enlace" data-a="hito-nuevo" aria-label="Nuevo hito">${ic('mas', 14)}</button></span></div>
       ${
         ordenados.length
           ? ordenados
@@ -166,7 +139,7 @@ export function vistaProgreso(ctx) {
                 }
                 return `<div class="f-hito ${h.cumplido ? 'cumplido' : ''}">
                   <span class="f-hito__icono">${ic(h.cumplido ? 'trofeo' : h.tipo === 'fuerza' ? 'entreno' : h.tipo === 'medida' ? 'regla' : 'diana', 17)}</span>
-                  <div><strong>${escapar(textoHito(h))}</strong><small>${h.cumplido ? `Cumplido el ${escapar(fechaCorta(h.cumplido))}` : e.actual !== null ? `Ahora: ${h.tipo === 'peso' ? `${P(e.actual)} ${unidadPeso(u())} (media 7 días)` : h.tipo === 'medida' ? `${num(deCm(e.actual, u()), 1)} ${unidadLongitud(u())}` : `${num(e.actual, 2)} kg`}` : 'Sin datos todavía'}${h.recompensa ? ` · 🎁 ${escapar(h.recompensa)}` : ''}</small>
+                  <div><strong>${escapar(textoHito(h))}</strong><small>${h.cumplido ? `Cumplido el ${escapar(fechaCorta(h.cumplido))}` : e.actual !== null ? `Ahora: ${h.tipo === 'peso' ? `${P(e.actual)} ${unidadPeso(u())} (media de la semana)` : h.tipo === 'medida' ? `${num(deCm(e.actual, u()), 1)} ${unidadLongitud(u())}` : `${num(e.actual, 2)} kg`}` : 'Sin datos todavía'}${h.recompensa ? ` · 🎁 ${escapar(h.recompensa)}` : ''}</small>
                   ${h.cumplido ? '' : `<div class="f-progreso"><i style="--p:${p}%"></i></div>`}</div>
                   <button type="button" class="f-icono-boton" style="border:0;background:none" data-a="hito-borrar" data-id="${h.id}" aria-label="Borrar hito">${ic('basura', 15)}</button>
                 </div>`;
@@ -212,9 +185,26 @@ export function vistaProgreso(ctx) {
     </section>`;
   }
 
+  // Enlace a la pestaña Semanas (sustituye al antiguo panel de resumen).
+  function panelResumen() {
+    const r = ctx.datos.resumenes.at(-1);
+    if (!r) return '';
+    const p = r.datos.peso;
+    const nuevo = ctx.datos.resumenVisto !== r.id;
+    return `<button type="button" class="f-panel f-panel--azul f-sem__enlace" data-a="prog-tab" data-tab="semanas">
+      <span class="f-etiqueta"><span>${nuevo ? '● ' : ''}Resumen semanal</span><b>${escapar(fechaCorta(r.id))} – ${escapar(fechaCorta(sumarDias(r.id, 6)))}</b></span>
+      <span class="f-sem__enlace-fila"><span>${p.media !== null ? `${P(p.media, 1)} ${unidadPeso(u())} de media` : 'Sin pesajes'}${p.cambioKg !== null ? ` · ${signo(deKg(p.cambioKg, u()), 2)}` : ''}</span>${ic('adelante', 16)}</span>
+    </button>`;
+  }
+
   function html() {
+    const pestana = ctx.estado.local.progreso ?? 'general';
+    const boton = (id, nombre) => `<button type="button" role="tab" data-a="prog-tab" data-tab="${id}" aria-pressed="${pestana === id}" aria-selected="${pestana === id}">${nombre}</button>`;
+    const cabecera = `<h1 class="f-titulo">Progreso</h1>
+      <div class="f-segmento" role="tablist" aria-label="Progreso">${boton('general', 'General')}${boton('semanas', 'Semanas')}</div>`;
+    if (pestana === 'semanas') return `<div class="f-vista">${cabecera}${semanas.html()}</div>`;
     return `<div class="f-vista">
-      <h1 class="f-titulo">Progreso</h1>
+      ${cabecera}
       ${panelPeso()}
       ${panelComposicion()}
       ${panelAdaptativo()}
@@ -241,7 +231,7 @@ export function vistaProgreso(ctx) {
     ctx.hojas.abrir(
       `<div class="f-hoja__titulo"><h2>Nuevo hito</h2></div>
        <form class="f-columna" data-form="hito">
-         <label class="f-campo"><span>Tipo</span><select class="f-entrada" name="tipo" data-cambio="hito-tipo"><option value="peso">Peso (media de 7 días)</option><option value="medida">Medida</option><option value="fuerza">Fuerza</option></select></label>
+         <label class="f-campo"><span>Tipo</span><select class="f-entrada" name="tipo" data-cambio="hito-tipo"><option value="peso">Peso (media de la semana)</option><option value="medida">Medida</option><option value="fuerza">Fuerza</option></select></label>
          <label class="f-campo" data-solo="medida" hidden><span>Medida</span><select class="f-entrada" name="medida">${d.tiposMedida.map((t) => `<option>${escapar(t)}</option>`).join('')}</select></label>
          <label class="f-campo" data-solo="fuerza" hidden><span>Ejercicio</span><select class="f-entrada" name="ejercicioId">${d.ejercicios
            .filter((e) => e.principal)
@@ -276,7 +266,14 @@ export function vistaProgreso(ctx) {
     'nuevo-peso': () => {
       setTimeout(() => document.querySelector('[data-peso-hoy]')?.focus(), 60);
     },
-    'resumen-visto': (el) => ctx.guardar({ ...ctx.datos, resumenVisto: el.dataset.lunes }),
+    'prog-tab': (el) => {
+      ctx.estado.local.progreso = el.dataset.tab;
+      // Ver la pestaña cuenta como haber visto el último resumen.
+      const ultimo = ctx.datos.resumenes.at(-1);
+      if (el.dataset.tab === 'semanas' && ultimo && ctx.datos.resumenVisto !== ultimo.id) ctx.guardar({ ...ctx.datos, resumenVisto: ultimo.id }, { pintar: false });
+      ctx.repintar();
+      document.querySelector('.f-cuerpo')?.scrollTo?.(0, 0);
+    },
     'aceptar-tdee': (el) => {
       const valor = Number(el.dataset.valor);
       ctx.guardar({ ...ctx.datos, perfil: { ...ctx.datos.perfil, mantenimientoReal: valor } });
@@ -420,5 +417,5 @@ export function vistaProgreso(ctx) {
     },
   };
 
-  return { html, despues, acciones, cambios, formularios };
+  return { html, despues, acciones: { ...acciones, ...semanas.acciones }, cambios: { ...cambios, ...semanas.cambios }, formularios: { ...formularios, ...semanas.formularios } };
 }

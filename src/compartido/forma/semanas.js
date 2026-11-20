@@ -203,7 +203,8 @@ function bloqueEntreno(datos, lunes) {
   for (const eid of ids) {
     const esta = mejorMarca(datos, eid, domingo, lunes);
     const previa = mejorMarca(datos, eid, sumarDias(lunes, -1));
-    if (esta && (!previa || esta.e1rm > previa.e1rm + 0.01)) records.push({ ejercicioId: eid, nombre: ejercicio(datos, eid).nombre, kg: esta.kg, reps: esta.reps, e1rm: r(esta.e1rm, 1), anterior: previa ? r(previa.e1rm, 1) : null });
+    // Récord = 1RM estimado mejor que el de antes (un ejercicio nuevo no cuenta).
+    if (esta && previa && esta.e1rm > previa.e1rm + 0.01) records.push({ ejercicioId: eid, nombre: ejercicio(datos, eid).nombre, kg: esta.kg, reps: esta.reps, e1rm: r(esta.e1rm, 1), anterior: previa ? r(previa.e1rm, 1) : null });
   }
   const pasos = [];
   for (let i = 0; i < 7; i++) {

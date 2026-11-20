@@ -72,6 +72,7 @@ contextBridge.exposeInMainWorld('asistente', {
     leer: () => invocar('forma:leer'),
     guardar: (datos) => invocar('forma:guardar', datos),
     importar: (plan) => invocar('forma:importar', plan),
+    avisoResumen: (cfg) => invocar('forma:avisoResumen', cfg),
     salud: {
       estado: () => invocar('forma:salud', 'estado'),
       crearToken: (nombre) => invocar('forma:salud', 'crearToken', nombre),

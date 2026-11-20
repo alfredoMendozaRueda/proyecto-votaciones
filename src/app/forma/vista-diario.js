@@ -54,6 +54,26 @@ export function vistaDiario(ctx) {
     </section>`;
   }
 
+  // «Tu resumen semanal está listo»: el día en que se genera (domingo por la
+  // noche, por defecto) y el siguiente, hasta que lo abres.
+  function tarjetaResumen(r) {
+    const d = ctx.datos;
+    const ultimo = d.resumenes.at(-1);
+    const hoy = ctx.hoy();
+    if (!ultimo || r.fecha !== hoy || d.resumenVisto === ultimo.id) return '';
+    const dia = d.ajustes.resumenDia;
+    const generado = sumarDias(ultimo.id, dia === 7 ? 6 : 6 + dia);
+    if (hoy < generado || hoy > sumarDias(generado, 1)) return '';
+    const p = ultimo.datos.peso;
+    const logro = ultimo.datos.hitos.conseguidos.length;
+    return `<button type="button" class="f-panel f-panel--azul f-tarjeta-resumen" data-a="ver-resumen">
+      <span class="f-tarjeta-resumen__icono">${ic(logro ? 'trofeo' : 'progreso', 20)}</span>
+      <span class="f-tarjeta-resumen__texto"><strong>${logro ? '¡Hito conseguido! ' : ''}Tu resumen semanal está listo</strong>
+      <small>${p.media !== null ? `Media ${num(p.media, 1)} kg${p.cambioKg !== null ? ` (${p.cambioKg > 0 ? '+' : ''}${num(p.cambioKg, 2)})` : ''} · ` : ''}${ultimo.datos.entreno.hechas} entrenos · ${ultimo.datos.nutricion.dias}/7 días</small></span>
+      ${ic('adelante', 16)}
+    </button>`;
+  }
+
   // Pasos de Apple Salud: sustituyen la estimación del perfil en el objetivo.
   function lineaPasos(r) {
     const o = r.objetivo;
@@ -156,6 +176,7 @@ export function vistaDiario(ctx) {
     if (!r.objetivo) return '';
     const hayAlgo = r.registros.length > 0;
     return `<div class="f-vista">
+      ${tarjetaResumen(r)}
       ${instrumento(r)}
       <section class="f-panel f-macros">${MACROS.map((m) => barraMacro(m, r)).join('')}</section>
       ${avisos(r)}
@@ -267,6 +288,7 @@ export function vistaDiario(ctx) {
   // ---------- Acciones ----------
 
   const acciones = {
+    'ver-resumen': () => ctx.irASemanas(),
     'tipo-dia': () => {
       const f = ctx.estado.fecha;
       ctx.guardar(marcarEntreno(ctx.datos, f, !esDiaEntreno(ctx.datos, f)), { pintar: false });

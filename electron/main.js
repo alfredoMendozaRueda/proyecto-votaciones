@@ -573,6 +573,12 @@ function registrarCanales() {
       tocado();
     },
   });
+  // Resumen semanal: el servidor solo avisa a la hora elegida (no ve tus datos).
+  manejar('forma:avisoResumen', async (cfg) => {
+    if (!leerSecreto('servidorToken')) return false;
+    await clienteServidor().formaResumen(cfg);
+    return true;
+  });
   manejar('forma:salud', async (metodo, ...args) => {
     if (!['estado', 'crearToken', 'revocar', 'recoger'].includes(metodo)) throw new Error('Acción no válida.');
     return salud[metodo](...args);

@@ -564,6 +564,11 @@ export function crearDemo() {
       },
       async tarea({ sistema, usuario, etiqueta }) {
         await new Promise((r) => setTimeout(r, 700));
+        if (etiqueta === 'forma-resumen')
+          return {
+            texto: 'Buena semana: la media de peso baja a buen ritmo y has entrenado casi todos los días previstos. La proteína se queda corta en las cenas: añade una ración de pollo, huevos o yogur proteico. Mantén el mismo plan de kcal la semana que viene.',
+            fuentes: [],
+          };
         if (String(etiqueta ?? '').startsWith('forma-')) return { texto: JSON.stringify((await import('./forma/demo-forma.js')).respuestaFormaDemo(etiqueta)), fuentes: [] };
         if (/lectura bíblica/.test(sistema)) {
           return {
@@ -612,6 +617,7 @@ export function crearDemo() {
       return {
         leer,
         guardar,
+        avisoResumen: async () => true,
         salud: (() => {
           let api = null;
           const cargar = async () => {

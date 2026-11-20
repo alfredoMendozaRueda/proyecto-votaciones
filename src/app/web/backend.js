@@ -678,6 +678,12 @@ export function crearBackendWeb() {
         await guardarForma(normalizarForma(datos));
         tocado();
       },
+      // Resumen semanal: el servidor solo avisa a la hora elegida (no ve tus datos).
+      avisoResumen: async (cfg) => {
+        if (!(await avisos.vinculado().catch(() => false))) return false;
+        await (await avisos.cliente()).formaResumen(cfg);
+        return true;
+      },
       // Apple Salud: tokens del Atajo y el buzón cifrado del servidor.
       salud: crearApiSalud({
         cliente: () => avisos.cliente(),

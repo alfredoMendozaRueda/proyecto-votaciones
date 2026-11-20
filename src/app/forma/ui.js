@@ -169,15 +169,20 @@ export function medidor(fraccion, { tam = 220, grosor = 14 } = {}) {
 }
 
 // Gráfica de líneas: series [{ puntos: [{ x: 'AAAA-MM-DD', y }], clase, puntosVisibles }], línea de objetivo opcional.
-export function grafica({ series, objetivo = null, alto = 170, formato = (v) => num(v, 1), vacio = 'Aún no hay datos' }) {
+// lineas: [{ y, etiqueta, hecha }] horizontales (los hitos), con su texto a la izquierda.
+export function grafica({ series, objetivo = null, lineas = [], alto = 170, formato = (v) => num(v, 1), vacio = 'Aún no hay datos' }) {
   const todos = series.flatMap((s) => s.puntos).filter((p) => Number.isFinite(p.y));
   if (todos.length < 2) return `<div class="f-grafica f-grafica--vacia">${escapar(vacio)}</div>`;
+  lineas = lineas.filter((l) => Number.isFinite(l.y));
   const ancho = 340;
   const m = { i: 6, d: 40, a: 12, b: 22 };
   const xs = todos.map((p) => Date.parse(`${p.x}T12:00:00`));
   const x0 = Math.min(...xs);
   const x1 = Math.max(...xs);
-  const ys = todos.map((p) => p.y).concat(Number.isFinite(objetivo) ? [objetivo] : []);
+  const ys = todos
+    .map((p) => p.y)
+    .concat(Number.isFinite(objetivo) ? [objetivo] : [])
+    .concat(lineas.map((l) => l.y));
   let y0 = Math.min(...ys);
   let y1 = Math.max(...ys);
   const holgura = Math.max((y1 - y0) * 0.12, 0.5);
@@ -185,7 +190,7 @@ export function grafica({ series, objetivo = null, alto = 170, formato = (v) => 
   y1 += holgura;
   const X = (x) => m.i + ((Date.parse(`${x}T12:00:00`) - x0) / Math.max(1, x1 - x0)) * (ancho - m.i - m.d);
   const Y = (y) => m.a + (1 - (y - y0) / (y1 - y0)) * (alto - m.a - m.b);
-  const lineas = [0, 0.5, 1].map((f) => {
+  const guias = [0, 0.5, 1].map((f) => {
     const v = y0 + (y1 - y0) * f;
     return `<line class="f-grafica__guia" x1="${m.i}" x2="${ancho - m.d}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="f-grafica__eje" x="${ancho - m.d + 6}" y="${(Y(v) + 3).toFixed(1)}">${formato(v)}</text>`;
   });
@@ -205,8 +210,15 @@ export function grafica({ series, objetivo = null, alto = 170, formato = (v) => 
     })
     .join('');
   const meta = Number.isFinite(objetivo) && objetivo >= y0 && objetivo <= y1 ? `<line class="f-grafica__objetivo" x1="${m.i}" x2="${ancho - m.d}" y1="${Y(objetivo).toFixed(1)}" y2="${Y(objetivo).toFixed(1)}"/>` : '';
+  const hitos = lineas
+    .map(
+      (l) =>
+        `<line class="f-grafica__hito${l.hecha ? ' hecha' : ''}" x1="${m.i}" x2="${ancho - m.d}" y1="${Y(l.y).toFixed(1)}" y2="${Y(l.y).toFixed(1)}"/>` +
+        (l.etiqueta ? `<text class="f-grafica__eje f-grafica__hito-texto" x="${m.i + 4}" y="${(Y(l.y) - 3).toFixed(1)}">${escapar(l.etiqueta)}</text>` : ''),
+    )
+    .join('');
   return `<svg class="f-grafica" viewBox="0 0 ${ancho} ${alto}" preserveAspectRatio="none" role="img" aria-label="Gráfica">
-    ${lineas.join('')}${meta}${trazos}
+    ${guias.join('')}${meta}${hitos}${trazos}
     <text class="f-grafica__eje" x="${m.i}" y="${alto - 6}">${etiquetaFecha(fechas[0])}</text>
     <text class="f-grafica__eje" x="${ancho - m.d}" y="${alto - 6}" text-anchor="end">${etiquetaFecha(fechas[1])}</text>
   </svg>`;
