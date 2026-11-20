@@ -112,6 +112,19 @@ Cabeceras: `Authorization: Bearer forma_…` y `Content-Type: application/json`.
 }
 ```
 
+También vale un formato **plano**, más fácil de montar en Atajos, porque no
+lleva listas y las fechas de los días las pone el servidor:
+
+```json
+{ "pasos_hoy": 4321, "pasos_ayer": 11234, "peso_kg": 77.55, "grasa_pct": 22.9, "masa_magra_kg": 59.8, "fecha_peso": "20 nov 2026, 8:12" }
+```
+
+En este formato:
+
+- **Campos vacíos:** se ignoran. Si no hay peso, no se manda pesaje, pero los
+  pasos se guardan igual.
+- **`fecha_peso`:** vale en ISO 8601 o tal como la escribe el iPhone en español.
+
 Reglas del envío:
 
 - **Pasos:** son el total de cada día y se reemplazan; repetir un envío no

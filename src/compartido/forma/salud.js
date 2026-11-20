@@ -48,7 +48,8 @@ export function numeroTolerante(v, { entero = false } = {}) {
 export function momentoDe(texto, zona) {
   if (typeof texto !== 'string') return null;
   const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{1,2}):(\d{2})(?::(\d{2})(?:[.,]\d+)?)?\s*(Z|[+-]\d{2}(?::?\d{2})?)?$/i.exec(texto.trim());
-  if (!m || !esFecha(m[1])) return null;
+  if (!m) return momentoEspanol(texto, zona);
+  if (!esFecha(m[1])) return null;
   const [, fecha, h, mi, s = '0', z] = m;
   if (Number(h) > 23 || Number(mi) > 59 || Number(s) > 59) return null;
   const hora = `${h.padStart(2, '0')}:${mi}`;
@@ -58,13 +59,83 @@ export function momentoDe(texto, zona) {
   return Number.isFinite(ms) ? ms : null;
 }
 
+const MESES = { ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6, jul: 7, ago: 8, sep: 9, set: 9, oct: 10, nov: 11, dic: 12 };
+const dos = (n) => String(n).padStart(2, '0');
+
+// Las fechas como las escribe un iPhone en español si no se formatean:
+// «20/11/2026, 8:12», «20 nov 2026, 8:12», «20 de noviembre de 2026 a las 8:12:05», «… 8:12 p. m.».
+function momentoEspanol(texto, zona) {
+  const t = texto.trim().toLowerCase().replace(/[\s\u00a0\u202f]+/g, ' ');
+  const hora = String.raw`,?\s*(?:a las\s*)?(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(a\.?\s?m\.?|p\.?\s?m\.?)?`;
+  let d;
+  let mes;
+  let a;
+  let resto;
+  let m = new RegExp(String.raw`^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})${hora}$`).exec(t);
+  if (m) [, d, mes, a, ...resto] = m;
+  else {
+    m = new RegExp(String.raw`^(\d{1,2})(?: de)? ([a-záéíóú]{3,10})\.?(?: de)? (\d{4})${hora}$`).exec(t);
+    if (!m) return null;
+    [, d, mes, a, ...resto] = m;
+    mes = MESES[mes.normalize('NFD').replace(/[\u0300-\u036f]/g, '').slice(0, 3)];
+    if (!mes) return null;
+  }
+  let [h, mi, sg = '0', ampm] = resto;
+  h = Number(h);
+  if (ampm) {
+    if (h < 1 || h > 12) return null;
+    h = (h % 12) + (ampm.startsWith('p') ? 12 : 0);
+  }
+  const anio = a.length === 2 ? 2000 + Number(a) : Number(a);
+  const fecha = `${anio}-${dos(mes)}-${dos(d)}`;
+  if (!esFecha(fecha) || h > 23 || Number(mi) > 59 || Number(sg) > 59) return null;
+  return desdeLocal(fecha, `${dos(h)}:${mi}`, zona) + Number(sg) * 1000;
+}
+
+// Formato plano, más fácil de montar en Atajos (sin listas ni fechas de los días):
+// { pasos_hoy, pasos_ayer, peso_kg, grasa_pct, masa_magra_kg, fecha_peso }.
+// Lo vacío se ignora: sin peso no hay pesaje, pero los pasos se guardan igual.
+const PLANOS = ['pasos_hoy', 'pasos_ayer', 'peso_kg', 'grasa_pct', 'masa_magra_kg', 'fecha_peso'];
+const CAMPO_PLANO = { 'pesaje.fecha_hora': 'fecha_peso', 'pesaje.peso_kg': 'peso_kg', 'pesaje.grasa_pct': 'grasa_pct', 'pesaje.masa_magra_kg': 'masa_magra_kg' };
+const vacio = (v) => v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+export const esPlano = (c) => Boolean(c) && typeof c === 'object' && !Array.isArray(c) && c.dias === undefined && c.pesaje === undefined && PLANOS.some((k) => k in c);
+
+export function desdePlano(c, { zona = 'Europe/Madrid', ahora = Date.now() } = {}) {
+  const hoy = partesLocales(ahora, zona).fecha;
+  const dias = [];
+  const origen = [];
+  for (const [clave, fecha] of [
+    ['pasos_ayer', sumarDias(hoy, -1)],
+    ['pasos_hoy', hoy],
+  ]) {
+    if (vacio(c[clave])) continue;
+    dias.push({ fecha, pasos: c[clave] });
+    origen.push(clave);
+  }
+  const cuerpo = { fuente: c.fuente };
+  if (dias.length) cuerpo.dias = dias;
+  if (!vacio(c.peso_kg)) {
+    cuerpo.pesaje = { fecha_hora: vacio(c.fecha_peso) ? undefined : c.fecha_peso, peso_kg: c.peso_kg };
+    if (!vacio(c.grasa_pct)) cuerpo.pesaje.grasa_pct = c.grasa_pct;
+    if (!vacio(c.masa_magra_kg)) cuerpo.pesaje.masa_magra_kg = c.masa_magra_kg;
+  }
+  // Para que los errores digan el nombre del campo que mandaste.
+  const campo = (x) => CAMPO_PLANO[x] ?? x.replace(/^dias\[(\d+)\]\.(pasos|fecha)$/, (_, i) => origen[Number(i)] ?? x);
+  return { cuerpo, campo };
+}
+
 // Valida lo que manda el Atajo. Todo o nada: con un solo error no se guarda nada.
 // Devuelve { dias, pesaje, fuente, errores: [{ campo, motivo }] }.
 export function validarSalud(cuerpo, { zona = 'Europe/Madrid', ahora = Date.now() } = {}) {
+  if (esPlano(cuerpo)) {
+    const { cuerpo: completo, campo } = desdePlano(cuerpo, { zona, ahora });
+    const v = validarSalud(completo, { zona, ahora });
+    return { ...v, errores: v.errores.map((e) => ({ ...e, campo: campo(e.campo) })) };
+  }
   const errores = [];
   const mal = (campo, motivo) => errores.push({ campo, motivo });
   if (!cuerpo || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) {
-    mal('', 'el cuerpo debe ser un objeto JSON con «dias» y/o «pesaje»');
+    mal('', 'el cuerpo debe ser un objeto JSON con «dias» y/o «pesaje» (o con pasos_hoy, pasos_ayer, peso_kg…)');
     return { dias: [], pesaje: null, fuente: FUENTE_SALUD, errores };
   }
   const fuente = typeof cuerpo.fuente === 'string' && /^[a-z0-9_]{1,30}$/.test(cuerpo.fuente) ? cuerpo.fuente : FUENTE_SALUD;
@@ -99,7 +170,8 @@ export function validarSalud(cuerpo, { zona = 'Europe/Madrid', ahora = Date.now(
     if (typeof p !== 'object' || Array.isArray(p)) mal('pesaje', 'debe ser un objeto { fecha_hora, peso_kg, … }');
     else {
       const momento = momentoDe(p.fecha_hora, zona);
-      if (momento === null) mal('pesaje.fecha_hora', 'debe ser una fecha y hora ISO 8601, como 2026-11-20T08:12:00+01:00');
+      if (p.fecha_hora === undefined || p.fecha_hora === null || p.fecha_hora === '') mal('pesaje.fecha_hora', 'falta la fecha y hora del pesaje');
+      else if (momento === null) mal('pesaje.fecha_hora', 'debe ser una fecha y hora ISO 8601, como 2026-11-20T08:12:00+01:00');
       else if (momento > ahora + 5 * 60_000) mal('pesaje.fecha_hora', 'es una hora futura');
       const kg = numeroTolerante(p.peso_kg);
       if (p.peso_kg === undefined || p.peso_kg === null || p.peso_kg === '') mal('pesaje.peso_kg', 'falta el peso');

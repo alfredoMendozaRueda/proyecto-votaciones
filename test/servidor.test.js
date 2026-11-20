@@ -1254,3 +1254,17 @@ test('salud: zona horaria (sin zona = la del usuario) y límite de 60 peticiones
   assert.equal(ultima.status, 429);
   assert.ok(Number(ultima.headers.get('Retry-After')) > 0);
 });
+
+test('salud: el formato plano del Atajo llega igual (y sin peso no rechaza los pasos)', async () => {
+  const { enviar, buzon, llave, hoy, ayer } = await preparadoSalud();
+  const r = await enviar({ pasos_hoy: 4321, pasos_ayer: '11.234', peso_kg: '', grasa_pct: '', masa_magra_kg: '', fecha_peso: '' });
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { pasos_guardados: 2, pesaje: 'no_enviado' });
+  const dias = (await Promise.all((await buzon()).map((e) => descifrarDelBuzon(llave.privada, e.sobre)))).filter((c) => c.tipo !== 'resumen').flatMap((c) => c.dias ?? []);
+  assert.deepEqual(dias.sort((a, b) => (a.fecha < b.fecha ? -1 : 1)), [
+    { fecha: ayer, pasos: 11234 },
+    { fecha: hoy, pasos: 4321 },
+  ]);
+  const mal = await (await enviar({ pasos_hoy: 4321, peso_kg: 77.5 })).json();
+  assert.equal(mal.campo, 'fecha_peso');
+});

@@ -29,7 +29,7 @@ test('fecha y hora: con zona, en UTC y sin zona (la del usuario, con horario de 
   assert.equal(momentoDe('2026-11-20T08:12:00', Z), Date.parse('2026-11-20T07:12:00Z'));
   assert.equal(momentoDe('2026-07-20 08:12', Z), Date.parse('2026-07-20T06:12:00Z'));
   assert.equal(momentoDe('2026-11-20T08:12:00+0100', Z), Date.parse('2026-11-20T07:12:00Z'));
-  assert.equal(momentoDe('20/11/2026 8:12', Z), null);
+  assert.equal(momentoDe('ayer por la mañana', Z), null);
   assert.equal(momentoDe('2026-02-30T08:00:00', Z), null);
 });
 
@@ -135,4 +135,31 @@ test('buzón: cifrado de un solo uso que solo abre la llave privada', async () =
   let d = anotarUltima(datos, { recibido: 2000, dias: [], pesaje: null, resultado: 'no_enviado' });
   d = anotarUltima(d, { recibido: 1000, dias: [{ fecha: '2026-11-20', pasos: 1 }], resultado: 'guardado' });
   assert.equal(normalizarForma(d).integracion.ultima.recibido, 2000);
+});
+
+test('formato plano (fácil en Atajos): fechas de hoy y ayer, lo vacío se ignora y errores con su nombre', () => {
+  const v = validarSalud({ pasos_hoy: '4321', pasos_ayer: 11234, peso_kg: '77,55', grasa_pct: 0.229, masa_magra_kg: '', fecha_peso: '20 nov 2026, 8:12' }, { zona: Z, ahora: AHORA });
+  assert.deepEqual(v.errores, []);
+  assert.deepEqual(v.dias, [
+    { fecha: '2026-11-19', pasos: 11234 },
+    { fecha: '2026-11-20', pasos: 4321 },
+  ]);
+  assert.equal(v.pesaje.hora, '08:12');
+  assert.equal(v.pesaje.grasa, 22.9);
+  assert.equal(v.pesaje.magra, undefined);
+  // Sin peso (no te pesaste): se guardan los pasos y no hay pesaje.
+  const sinPeso = validarSalud({ pasos_hoy: 4321, pasos_ayer: '', peso_kg: '', grasa_pct: '', masa_magra_kg: '', fecha_peso: '' }, { zona: Z, ahora: AHORA });
+  assert.deepEqual(sinPeso.errores, []);
+  assert.equal(sinPeso.pesaje, null);
+  assert.equal(sinPeso.dias.length, 1);
+  const mal = validarSalud({ pasos_hoy: -1, peso_kg: 77 }, { zona: Z, ahora: AHORA }).errores.map((e) => e.campo);
+  assert.deepEqual(mal, ['pasos_hoy', 'fecha_peso']);
+});
+
+test('fechas del iPhone en español sin formatear', () => {
+  const ms = Date.parse('2026-11-20T07:12:00Z');
+  for (const t of ['20/11/2026, 8:12', '20/11/26 8:12', '20 nov 2026, 8:12', '20 de noviembre de 2026 a las 8:12', '20/11/2026 8:12 a. m.']) assert.equal(momentoDe(t, Z), ms, t);
+  assert.equal(momentoDe('20/11/2026 8:12 p. m.', Z), ms + 12 * 3_600_000);
+  assert.equal(momentoDe('31/02/2026 8:12', Z), null);
+  assert.equal(momentoDe('20 brumario 2026 8:12', Z), null);
 });

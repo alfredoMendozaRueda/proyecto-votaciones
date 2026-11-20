@@ -6,12 +6,12 @@ import { fechaCorta } from '../../compartido/forma/fechas.js';
 import { ic, escapar, num } from './ui.js';
 
 const EJEMPLO = {
-  fuente: 'apple_salud',
-  dias: [
-    { fecha: '2026-11-19', pasos: 11234 },
-    { fecha: '2026-11-20', pasos: 4321 },
-  ],
-  pesaje: { fecha_hora: '2026-11-20T08:12:00+01:00', peso_kg: 77.55, grasa_pct: 22.9, masa_magra_kg: 59.8 },
+  pasos_hoy: 4321,
+  pasos_ayer: 11234,
+  peso_kg: 77.55,
+  grasa_pct: 22.9,
+  masa_magra_kg: 59.8,
+  fecha_peso: '2026-11-20T08:12:00+01:00',
 };
 
 export function haceCuanto(ms, ahora = Date.now()) {
@@ -145,28 +145,30 @@ export function crearIntegraciones(ctx) {
        <span class="f-etiqueta">Cabeceras</span>
        <code class="f-codigo">Authorization: Bearer forma_…tu token…
 Content-Type: application/json</code>
+       <p class="f-tenue">Con el cuerpo en JSON, Atajos pone el Content-Type solo.</p>
 
-       <span class="f-etiqueta">Cuerpo JSON</span>
+       <span class="f-etiqueta">Cuerpo JSON (sencillo)</span>
        <pre class="f-codigo">${escapar(json)}</pre>
        <button type="button" class="f-boton" data-a="int-copiar" data-texto="${escapar(json)}" data-que="Ejemplo copiado">${ic('copiar', 16)}Copiar ejemplo</button>
        <ul class="f-tenue f-guia__notas">
-         <li><b>dias</b>: el TOTAL de pasos de cada día (hasta 31). Mandar lo mismo dos veces no duplica nada: se reemplaza.</li>
-         <li><b>pesaje</b>: opcional. Peso de 30 a 300 kg; % de grasa de 3 a 60 (si llega como fracción, 0,229, se pasa a 22,9 %); masa magra en kg.</li>
-         <li>Los números pueden ir como número o como texto, con coma decimal («77,55»).</li>
-         <li>Una fecha y hora sin zona se entiende en la de tu perfil (${escapar(ctx.datos.perfil?.zona ?? 'Europe/Madrid')}).</li>
+         <li><b>pasos_hoy</b> y <b>pasos_ayer</b>: el TOTAL de cada día; el servidor pone las fechas. Mandar lo mismo dos veces no duplica nada: se reemplaza.</li>
+         <li><b>peso_kg</b> (30 a 300), <b>grasa_pct</b> (3 a 60; si llega como fracción, 0,229, se pasa a 22,9 %), <b>masa_magra_kg</b> y <b>fecha_peso</b>. Si un día no te pesas y van vacíos, se guardan los pasos igual.</li>
+         <li>Los números pueden ir como número o como texto, con coma decimal («77,55» o «77,55 kg»).</li>
+         <li><b>fecha_peso</b> vale tal cual la escribe el iPhone («20 nov 2026, 8:12») o en ISO 8601; sin zona, se entiende en la de tu perfil (${escapar(ctx.datos.perfil?.zona ?? 'Europe/Madrid')}).</li>
          <li>Respuesta: <code>{"pasos_guardados": 2, "pesaje": "guardado"}</code> (o <code>"duplicado"</code>, <code>"no_enviado"</code>). Si algo no vale, 400 con el campo y el motivo, y no se guarda nada.</li>
-         <li>Como mucho 60 envíos por hora y token.</li>
+         <li>Como mucho 60 envíos por hora y token. También vale el formato completo con <code>dias</code> (lista de fecha y pasos) y <code>pesaje</code>.</li>
        </ul>
 
-       <span class="f-etiqueta">Crear el Atajo en el iPhone</span>
+       <span class="f-etiqueta">Crear el Atajo en el iPhone (a mano)</span>
        <ol class="f-guia">
-         ${paso(1, '<b>Buscar muestras de salud</b>: tipo <i>Pasos</i>, fecha de inicio <i>hoy</i>. Después <b>Calcular estadísticas</b> → <i>Suma</i>. Guárdalo en la variable <code>pasos_hoy</code>.')}
-         ${paso(2, 'Lo mismo con fecha de inicio <i>ayer</i> (y fin <i>hoy</i>) → <code>pasos_ayer</code>. Así llegan los de ayer completos aunque el Atajo no se ejecutara anoche.')}
-         ${paso(3, '<b>Buscar muestras de salud</b>: tipo <i>Peso</i>, ordenar por <i>fecha de inicio</i> (más reciente primero), límite <i>1</i>, fecha de inicio <i>en el último día</i>. Saca su <i>valor</i> (en kg) y su <i>fecha de inicio</i>.')}
-         ${paso(4, 'Igual con <i>Porcentaje de grasa corporal</i> y con <i>Masa corporal magra</i>. Si un día no hay pesaje, quita el bloque «pesaje».')}
-         ${paso(5, '<b>Formatear fecha</b>: los días con formato personalizado <code>yyyy-MM-dd</code>; la hora del pesaje en <i>ISO 8601</i>.')}
-         ${paso(6, `<b>Obtener contenido de URL</b>: <code>${escapar(url)}</code>, método <i>POST</i>, cabeceras <code>Authorization</code> = <code>Bearer forma_…</code> y <code>Content-Type</code> = <code>application/json</code>. Cuerpo <i>JSON</i>: <code>fuente</code> (texto), <code>dias</code> (matriz de diccionarios con <code>fecha</code> y <code>pasos</code> como <i>Número</i>) y <code>pesaje</code> (diccionario con <code>fecha_hora</code>, <code>peso_kg</code>, <code>grasa_pct</code> y <code>masa_magra_kg</code> como <i>Número</i>).`)}
-         ${paso(7, '<b>Automatizaciones</b> (pestaña Automatización): <i>al cerrar la app Renpho Health</i> (sincroniza el peso justo después de pesarte) y <i>a diario a las 22:30</i>. Desactiva «Preguntar antes de ejecutar».')}
+         ${paso(1, '<b>Fecha</b> (fecha actual) → <b>Ajustar fecha</b>: <i>Obtener inicio del día</i>. Guárdalo con <b>Establecer variable</b> como <code>inicio_hoy</code>. Otra <b>Ajustar fecha</b>: <i>restar 1 día</i> a <code>inicio_hoy</code> → <code>inicio_ayer</code>.')}
+         ${paso(2, '<b>Buscar muestras de salud</b>: tipo <i>Pasos</i>, filtro <i>Fecha de inicio es posterior a</i> <code>inicio_hoy</code>. Después <b>Calcular estadísticas</b> → <i>Suma</i> → variable <code>pasos_hoy</code>.')}
+         ${paso(3, 'Igual con dos filtros: <i>Fecha de inicio es posterior a</i> <code>inicio_ayer</code> y <i>es anterior a</i> <code>inicio_hoy</code> → <i>Suma</i> → <code>pasos_ayer</code>.')}
+         ${paso(4, '<b>Buscar muestras de salud</b>: tipo <i>Peso</i>, <i>Fecha de inicio está en los últimos 1 días</i>, ordenar por <i>Fecha de inicio</i>, <i>más reciente primero</i>, límite <i>1</i> → variable <code>peso</code>.')}
+         ${paso(5, 'Igual con <i>Porcentaje de grasa corporal</i> → <code>grasa</code> y con <i>Masa corporal magra</i> → <code>magra</code>.')}
+         ${paso(6, `<b>Obtener contenido de URL</b>: <code>${escapar(url)}</code>, método <i>POST</i>, cabecera <code>Authorization</code> = <code>Bearer forma_…</code>. Cuerpo <i>JSON</i> con <code>pasos_hoy</code>, <code>pasos_ayer</code>, <code>peso_kg</code> (variable <code>peso</code> → toca y elige <i>Valor</i>), <code>grasa_pct</code> (<code>grasa</code> → <i>Valor</i>), <code>masa_magra_kg</code> (<code>magra</code> → <i>Valor</i>) y <code>fecha_peso</code> (<code>peso</code> → <i>Fecha de inicio</i>).`)}
+         ${paso(7, '<b>Mostrar notificación</b> con el <i>Contenido de la URL</i>, para ver la respuesta.')}
+         ${paso(8, '<b>Automatizaciones</b> (pestaña Automatización): <i>App → Renpho Health → Se cierra</i> (sincroniza el peso justo después de pesarte) y <i>Hora del día → 22:30 → Diariamente</i>. En las dos, <i>Ejecutar inmediatamente</i>.')}
        </ol>
        <p class="f-tenue">iOS no deja leer Salud con el iPhone bloqueado: por eso el Atajo manda también los pasos de ayer. Forma recoge lo que llega cada vez que la abres.</p>`,
       { clase: 'f-hoja--alta', titulo: 'Atajo de Apple Salud' },
