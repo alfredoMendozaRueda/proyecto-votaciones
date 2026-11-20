@@ -422,6 +422,9 @@ export function normalizarForma(d = {}) {
             // Pasos del día que mandó Apple Salud (el total; reemplaza la estimación del perfil).
             pasos: num(v.pasos, 0, 100000),
             pasosFuente: num(v.pasos, 0, 100000) !== undefined ? fuenteDe(v.pasosFuente) : undefined,
+            // Minutos que dormiste la noche que acaba ese día (Apple Salud).
+            sueno: num(v.sueno, 0, 1440),
+            suenoFuente: num(v.sueno, 0, 1440) !== undefined ? fuenteDe(v.suenoFuente) : undefined,
             // Nota del día («cumpleaños»): sale en el resumen semanal.
             nota: texto(v.nota, 80) || undefined,
           }),
@@ -539,8 +542,8 @@ function normalizarIntegracion(x) {
       aplicado: num(u.aplicado, 0),
       fuente: fuenteDe(u.fuente),
       dias: lista(u.dias)
-        .filter((dd) => esFecha(dd.fecha) && num(dd.pasos, 0, 100000) !== undefined)
-        .map((dd) => ({ fecha: dd.fecha, pasos: dd.pasos }))
+        .filter((dd) => esFecha(dd.fecha) && (num(dd.pasos, 0, 100000) !== undefined || num(dd.sueno, 0, 1440) !== undefined))
+        .map((dd) => sinVacios({ fecha: dd.fecha, pasos: num(dd.pasos, 0, 100000), sueno: num(dd.sueno, 0, 1440) }))
         .slice(0, 31),
       pesaje:
         u.pesaje && esFecha(u.pesaje.fecha) && num(u.pesaje.kg, 20, 400) !== undefined

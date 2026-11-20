@@ -62,14 +62,21 @@ export async function rutaIntegraciones(n, peticion, ruta, { json, ErrorHttp, cu
   }
 
   const sentencias = [];
-  // Pasos: uno por día. Si ese día aún no se ha recogido, se reemplaza.
+  // Pasos y sueño: uno de cada por día (por separado, para que uno no pise al
+  // otro). Si ese día aún no se ha recogido, se reemplaza.
   for (const dia of v.dias) {
-    const sobre = JSON.stringify(await cifrarParaBuzon(publica, { fuente: v.fuente, dias: [dia] }));
-    sentencias.push(
-      n.db
-        .prepare('INSERT INTO buzon_salud (id, clave, recibido, sobre) VALUES (?, ?, ?, ?) ON CONFLICT(clave) DO UPDATE SET recibido = excluded.recibido, sobre = excluded.sobre')
-        .bind(`s${aleatorio(9)}`, await hmac(n.env.CLAVE_CIFRADO, `pasos|${dia.fecha}`), n.ahora, sobre),
-    );
+    for (const [tipo, campo] of [
+      ['pasos', 'pasos'],
+      ['sueno', 'sueno'],
+    ]) {
+      if (!Number.isFinite(dia[campo])) continue;
+      const sobre = JSON.stringify(await cifrarParaBuzon(publica, { fuente: v.fuente, dias: [{ fecha: dia.fecha, [campo]: dia[campo] }] }));
+      sentencias.push(
+        n.db
+          .prepare('INSERT INTO buzon_salud (id, clave, recibido, sobre) VALUES (?, ?, ?, ?) ON CONFLICT(clave) DO UPDATE SET recibido = excluded.recibido, sobre = excluded.sobre')
+          .bind(`s${aleatorio(9)}`, await hmac(n.env.CLAVE_CIFRADO, `${tipo}|${dia.fecha}`), n.ahora, sobre),
+      );
+    }
   }
   // Pesaje: si ya llegó uno igual (±1 minuto y mismo peso), no se guarda otra vez.
   let pesaje = 'no_enviado';
@@ -96,7 +103,8 @@ export async function rutaIntegraciones(n, peticion, ruta, { json, ErrorHttp, cu
   sentencias.push(n.db.prepare('UPDATE token_integracion SET ultimo_uso_en = ? WHERE id = ?').bind(n.ahora, fila.id));
   await n.db.batch(sentencias);
   // Avisos (claves que no se reconocen, campos vacíos): ayudan a arreglar el Atajo.
-  return json({ pasos_guardados: v.dias.length, pesaje, ...(v.avisos?.length ? { avisos: v.avisos } : {}) });
+  const sueno = v.dias.some((d) => Number.isFinite(d.sueno));
+  return json({ pasos_guardados: v.dias.filter((d) => Number.isFinite(d.pasos)).length, pesaje, ...(sueno ? { sueno: 'guardado' } : {}), ...(v.avisos?.length ? { avisos: v.avisos } : {}) });
 }
 
 // ---------- Los dispositivos: tokens y buzón ----------

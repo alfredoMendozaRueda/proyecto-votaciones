@@ -113,8 +113,8 @@ export async function montarForma({ raiz, api, salir }) {
         if (r?.recogidas) {
           const nuevos = normalizarForma(r.datos ?? (await api.forma.leer()));
           estado.datos = { ...nuevos, activa: estado.datos.activa ?? nuevos.activa };
-          const partes = [r.pasos ? `${r.pasos} día${r.pasos > 1 ? 's' : ''} de pasos` : '', r.pesajes ? `${r.pesajes} pesaje${r.pesajes > 1 ? 's' : ''}` : ''].filter(Boolean);
-          if (partes.length) tostada(`Apple Salud: ${partes.join(' y ')}.`);
+          const partes = [r.pasos ? `${r.pasos} día${r.pasos > 1 ? 's' : ''} de pasos` : '', r.sueno ? 'el sueño' : '', r.pesajes ? `${r.pesajes} pesaje${r.pesajes > 1 ? 's' : ''}` : ''].filter(Boolean);
+          if (partes.length) tostada(`Apple Salud: ${partes.length > 1 ? `${partes.slice(0, -1).join(', ')} y ${partes.at(-1)}` : partes[0]}.`);
           if (!raiz.hidden && !hojas.abierta()) pintar();
         }
         return r;

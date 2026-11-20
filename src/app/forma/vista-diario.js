@@ -3,6 +3,7 @@
 // «Qué puedo comer».
 import { pasosDe } from '../../compartido/forma/calculos.js';
 import { nombreFuente } from '../../compartido/forma/salud.js';
+import { horasYMinutos } from '../../compartido/forma/semanas.js';
 import { resumenDia, comidasHabituales, avisosDelDia, quePuedoComer, nutrientesDe, totales, esDiaEntreno } from '../../compartido/forma/diario.js';
 import { apuntar, editarRegistro, borrarRegistros, sumarAgua, alternarSuplemento, marcarEntreno, descartarSugerencia, verAviso, copiarDia, guardarPlantilla, contarUsoIA } from '../../compartido/forma/acciones.js';
 import { peticionIdeas, leerIdeas, puedeUsarIA } from '../../compartido/forma/ia.js';
@@ -51,6 +52,7 @@ export function vistaDiario(ctx) {
         <div class="f-dato"><span>Objetivo</span><strong>${num(o.kcal)}</strong></div>
       </div>
       ${lineaPasos(r)}
+      ${lineaSueno(r)}
     </section>`;
   }
 
@@ -72,6 +74,14 @@ export function vistaDiario(ctx) {
       <small>${p.media !== null ? `Media ${num(p.media, 1)} kg${p.cambioKg !== null ? ` (${p.cambioKg > 0 ? '+' : ''}${num(p.cambioKg, 2)})` : ''} · ` : ''}${ultimo.datos.entreno.hechas} entrenos · ${ultimo.datos.nutricion.dias}/7 días</small></span>
       ${ic('adelante', 16)}
     </button>`;
+  }
+
+  // Lo que dormiste la noche que acaba ese día (Apple Salud).
+  function lineaSueno(r) {
+    const dia = ctx.datos.dias[r.fecha];
+    if (!Number.isFinite(dia?.sueno)) return '';
+    const corto = dia.sueno < 420;
+    return `<p class="f-pasos"><span aria-hidden="true">😴</span> <b>${escapar(horasYMinutos(dia.sueno))}</b> de sueño · ${escapar(nombreFuente(dia.suenoFuente))}${corto ? '<span class="f-pasos__efecto">menos de 7 h: hoy cuida el hambre</span>' : ''}</p>`;
   }
 
   // Pasos de Apple Salud: sustituyen la estimación del perfil en el objetivo.

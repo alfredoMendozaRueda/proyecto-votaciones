@@ -2,7 +2,7 @@
 // semana en curso, la gráfica de medias semanales con los hitos, el próximo hito,
 // el historial y el detalle de cada semana (con «Regenerar»). También el editor
 // de hitos (Perfil → Hitos y recompensas) y la celebración al conseguir uno.
-import { metricasSemana, hitosDePeso, hitosRedondos, proximoHito, pesoInicial, momentoGeneracion, aplicarPropuesta, descartarPropuesta } from '../../compartido/forma/semanas.js';
+import { metricasSemana, hitosDePeso, hitosRedondos, proximoHito, pesoInicial, momentoGeneracion, aplicarPropuesta, descartarPropuesta, horasYMinutos } from '../../compartido/forma/semanas.js';
 import { mediasSemanales } from '../../compartido/forma/progreso.js';
 import { lunesDe, sumarDias, fechaCorta } from '../../compartido/forma/fechas.js';
 import { deKg, aKg, unidadPeso } from '../../compartido/forma/calculos.js';
@@ -46,6 +46,7 @@ export function crearSemanas(ctx) {
       <span>${ic('diana', 13)} proteína ${n.proteina.dias} d</span>
       ${e.records.length ? `<span>${ic('trofeo', 13)} ${e.records.length} récord${e.records.length > 1 ? 's' : ''}</span>` : ''}
       ${e.pasos ? `<span>👣 ${num(e.pasos.media)}</span>` : ''}
+      ${e.sueno ? `<span>😴 ${escapar(horasYMinutos(e.sueno.media))}</span>` : ''}
     </div>`;
   }
 
@@ -210,6 +211,7 @@ export function crearSemanas(ctx) {
          ${e.records.length ? `<span class="f-etiqueta">${ic('trofeo', 13)} Récords</span>${e.records.map((x) => fila(escapar(x.nombre), `${num(x.kg, 2)} × ${x.reps}`, `1RM ${num(x.e1rm, 1)} kg${x.anterior ? ` (antes ${num(x.anterior, 1)})` : ''}`)).join('')}` : ''}
          ${fila('Cardio', `${num(e.cardioMin)} min`)}
          ${e.pasos ? fila('Pasos', `${num(e.pasos.media)} de media`, `${e.pasos.dias} días con Apple Salud`) : ''}
+         ${e.sueno ? fila('Sueño', `${escapar(horasYMinutos(e.sueno.media))} de media`, `${e.sueno.noches} noches con Apple Salud${e.sueno.media < 420 ? ' · menos de las 7 h recomendadas' : ''}`) : ''}
          ${e.descarga ? `<p class="f-sem__aviso">${escapar(e.descarga.texto)} ${escapar(e.descarga.propuesta)}</p>` : ''}
        </section>
        <section class="f-sem__bloque"><span class="f-etiqueta">Proyección e hitos</span>

@@ -208,9 +208,11 @@ function bloqueEntreno(datos, lunes) {
     if (esta && previa && esta.e1rm > previa.e1rm + 0.01) records.push({ ejercicioId: eid, nombre: ejercicio(datos, eid).nombre, kg: esta.kg, reps: esta.reps, e1rm: r(esta.e1rm, 1), anterior: previa ? r(previa.e1rm, 1) : null });
   }
   const pasos = [];
+  const sueno = [];
   for (let i = 0; i < 7; i++) {
-    const p = datos.dias[sumarDias(lunes, i)]?.pasos;
-    if (Number.isFinite(p)) pasos.push(p);
+    const dia = datos.dias[sumarDias(lunes, i)];
+    if (Number.isFinite(dia?.pasos)) pasos.push(dia.pasos);
+    if (Number.isFinite(dia?.sueno)) sueno.push(dia.sueno);
   }
   const descarga = asesorDescarga(datos, sumarDias(domingo, 1));
   const volumen = sesiones.reduce((t, s) => t + volumenDe(s), 0);
@@ -224,6 +226,8 @@ function bloqueEntreno(datos, lunes) {
     records: records.sort((a, b) => b.e1rm - a.e1rm),
     cardioMin: Math.round(sesiones.flatMap((s) => s.cardio ?? []).reduce((t, c) => t + (c.minutos ?? 0), 0)),
     pasos: pasos.length ? { media: Math.round(media(pasos)), dias: pasos.length } : null,
+    // Sueño de Apple Salud: minutos de media por noche.
+    sueno: sueno.length ? { media: Math.round(media(sueno)), noches: sueno.length } : null,
     descarga: descarga ? { texto: descarga.texto, propuesta: descarga.propuesta } : null,
   };
 }
@@ -381,6 +385,7 @@ export function quitarAjuste(datos, hoy) {
 
 // ---------- Texto por reglas ----------
 
+export const horasYMinutos = (min) => `${Math.floor(min / 60)} h${min % 60 ? ` ${String(min % 60).padStart(2, '0')} min` : ''}`;
 const es = (n, d = 1) => (Number.isFinite(n) ? n.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: d }) : '—');
 const conSigno = (n, d = 1) => (Number.isFinite(n) ? `${n > 0 ? '+' : n < 0 ? '−' : ''}${es(Math.abs(n), d)}` : '—');
 const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
@@ -399,6 +404,9 @@ export function recomendaciones(m) {
     );
   }
   if (peso.ritmo.estado === 'amarillo' && !m.propuesta) salida.push('Llevas dos semanas casi sin bajar: quita unas 100–150 kcal al día o suma unos 2.000 pasos diarios.');
+  if (e.sueno && e.sueno.noches >= 3 && e.sueno.media < 420) {
+    salida.push(`Duermes de media ${horasYMinutos(e.sueno.media)}: intenta llegar a 7 h. Dormir poco sube el hambre, frena la pérdida de grasa y empeora la recuperación.`);
+  }
   if (e.descarga) salida.push(e.descarga.propuesta);
   if (e.planificadas && e.hechas < e.planificadas) salida.push(`Te ${e.planificadas - e.hechas === 1 ? 'faltó 1 sesión' : `faltaron ${e.planificadas - e.hechas} sesiones`}: si una semana se complica, prioriza los ejercicios principales.`);
   if (!n.completo) salida.push('Apunta al menos 5 días de comidas para que el resumen sea fiable.');
@@ -422,6 +430,7 @@ export function textoReglas(m) {
     frases.push(`Apuntaste ${n.dias} de 7 días, con ${es(n.kcal.media, 0)} kcal de media (objetivo ${es(n.kcal.objetivo, 0)}) y la proteína cumplida ${plural(n.proteina.dias, 'día', 'días')}.`);
   } else frases.push('No apuntaste comidas.');
   frases.push(`Entrenaste ${e.hechas}${e.planificadas ? ` de ${e.planificadas}` : ''} ${e.hechas === 1 ? 'vez' : 'veces'}${e.records.length ? `, con ${plural(e.records.length, 'récord', 'récords')}` : ''}.`);
+  if (e.sueno) frases.push(`Dormiste ${horasYMinutos(e.sueno.media)} de media (${plural(e.sueno.noches, 'noche', 'noches')} con datos).`);
   if (hitos.conseguidos.length) frases.push(`¡Hito conseguido: ${hitos.conseguidos.map((h) => `${es(h.valor)} kg${h.recompensa ? ` → ${h.recompensa}` : ''}`).join(', ')}!`);
   return `${frases.join(' ')} ${recomendaciones(m).join(' ')}`.trim();
 }
@@ -485,7 +494,7 @@ export function peticionResumenIA(m) {
       comida_con_menos_proteina: n.momentoMenosProteina?.nombre ?? null,
       dia_con_mas_kcal: n.maximo ? { kcal: n.maximo.kcal, nota: n.maximo.nota } : null,
     },
-    entreno: { sesiones: e.hechas, planificadas: e.planificadas, records: e.records.map((x) => x.nombre), minutos_cardio: e.cardioMin, pasos_media: e.pasos?.media ?? null, descarga_recomendada: Boolean(e.descarga) },
+    entreno: { sesiones: e.hechas, planificadas: e.planificadas, records: e.records.map((x) => x.nombre), minutos_cardio: e.cardioMin, pasos_media: e.pasos?.media ?? null, sueno_media_h: e.sueno ? Math.round((e.sueno.media / 60) * 10) / 10 : null, descarga_recomendada: Boolean(e.descarga) },
     hitos: { conseguidos: m.hitos.conseguidos.map((h) => ({ kg: h.valor, recompensa: h.recompensa })), proximo: m.hitos.proximo ? { kg: m.hitos.proximo.valor, faltan_kg: m.hitos.proximo.faltan, fecha_estimada: m.hitos.proximo.fecha } : null },
     ajuste_propuesto_kcal: m.propuesta?.delta ?? null,
     recomendaciones_sugeridas: recomendaciones(m),

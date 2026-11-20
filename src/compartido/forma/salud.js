@@ -43,6 +43,27 @@ export function numeroTolerante(v, { entero = false } = {}) {
   return s === '' || s === '.' ? NaN : Number(s);
 }
 
+// Sueño en minutos desde lo que mande el Atajo: «7,3» (horas), «440» (minutos),
+// «26400» (segundos), «7 h 20 min», «07:20». enHoras: el campo dice que son horas.
+export const MAX_SUENO_MIN = 1440;
+export function minutosSueno(v, { enHoras = false } = {}) {
+  if (typeof v === 'string') {
+    const t = v.trim().toLowerCase();
+    let m = /^(\d{1,2}):(\d{2})$/.exec(t);
+    if (m) return Number(m[1]) * 60 + Number(m[2]);
+    m = /^(\d+(?:[.,]\d+)?)\s*h(?:oras?|rs?)?\.?\s*(?:y\s*)?(?:(\d{1,2})\s*(?:min(?:utos?)?|m)?\.?)?$/.exec(t);
+    if (m) return Math.round(Number(m[1].replace(',', '.')) * 60 + Number(m[2] ?? 0));
+    m = /^(\d+)\s*min(?:utos?)?\.?$/.exec(t);
+    if (m) return Number(m[1]);
+  }
+  const n = numeroTolerante(v);
+  if (!Number.isFinite(n)) return NaN;
+  if (enHoras || n <= 24) return Math.round(n * 60);
+  if (n <= MAX_SUENO_MIN) return Math.round(n);
+  if (n <= 86_400) return Math.round(n / 60);
+  return NaN;
+}
+
 // «2026-11-20T08:12:00+01:00», «2026-11-20T07:12:00Z», «2026-11-20 08:12»…
 // Sin zona, se entiende en la del usuario. Devuelve milisegundos o null.
 export function momentoDe(texto, zona) {
@@ -93,7 +114,7 @@ function momentoEspanol(texto, zona) {
 }
 
 // Formato plano, más fácil de montar en Atajos (sin listas ni fechas de los días):
-// { pasos_hoy, pasos_ayer, peso_kg, grasa_pct, masa_magra_kg, fecha_peso }.
+// { pasos_hoy, pasos_ayer, peso_kg, grasa_pct, masa_magra_kg, fecha_peso, sueno_horas }.
 // Lo vacío se ignora: sin peso no hay pesaje, pero los pasos se guardan igual.
 // Acepta también los nombres que suele poner Siri («peso», «grasa_corporal»,
 // «masa_magra»…), y avisa de lo que llega vacío o no reconoce.
@@ -104,6 +125,8 @@ const ALIAS = {
   grasa_pct: ['grasa_pct', 'grasa', 'grasa_corporal', 'grasa_corporal_pct', 'porcentaje_grasa', 'porcentaje_de_grasa', 'porcentaje_grasa_corporal', 'porcentaje_de_grasa_corporal', 'body_fat', 'body_fat_pct'],
   masa_magra_kg: ['masa_magra_kg', 'masa_magra', 'magra', 'masa_corporal_magra', 'masa_corporal_magra_kg', 'lean_body_mass', 'lean_mass_kg'],
   fecha_peso: ['fecha_peso', 'fecha_pesaje', 'fecha_del_peso', 'fecha_hora', 'fecha_hora_peso', 'fecha'],
+  // Lo que dormiste la última noche (cuenta para hoy).
+  sueno: ['sueno', 'sueno_min', 'sueno_minutos', 'minutos_sueno', 'minutos_de_sueno', 'sueno_horas', 'horas_sueno', 'horas_de_sueno', 'horas_dormidas', 'dormido', 'analisis_del_sueno', 'sleep', 'sleep_minutes', 'sleep_hours'],
 };
 const CANONICA = new Map(Object.entries(ALIAS).flatMap(([k, lista]) => lista.map((a) => [a, k])));
 const claveLimpia = (k) =>
@@ -145,6 +168,19 @@ export function desdePlano(entrada, { zona = 'Europe/Madrid', ahora = Date.now()
     dias.push({ fecha, pasos: c[clave] });
     origen.push(llamado(clave));
   }
+  // Sueño: la noche que acaba hoy. «sueno_horas» → horas; si no, se deduce.
+  if ('sueno' in c) {
+    if (vacio(c.sueno)) avisos.push(`«${llamado('sueno')}» llegó vacío`);
+    else {
+      const hoyDia = dias.find((x) => x.fecha === hoy);
+      const enHoras = /hora|hours/.test(claveLimpia(llamado('sueno')));
+      if (hoyDia) hoyDia.sueno_min = { valor: c.sueno, enHoras };
+      else {
+        dias.push({ fecha: hoy, sueno_min: { valor: c.sueno, enHoras } });
+        origen.push(llamado('sueno'));
+      }
+    }
+  }
   const cuerpo = { fuente: entrada.fuente };
   if (dias.length) cuerpo.dias = dias;
   if (!vacio(c.peso_kg)) {
@@ -155,7 +191,7 @@ export function desdePlano(entrada, { zona = 'Europe/Madrid', ahora = Date.now()
   else if (!vacio(c.grasa_pct) || !vacio(c.masa_magra_kg)) avisos.push('falta el peso («peso_kg»): sin él no se guarda el pesaje');
   // Para que los errores digan el nombre del campo que mandaste.
   const CAMPO = { 'pesaje.fecha_hora': 'fecha_peso', 'pesaje.peso_kg': 'peso_kg', 'pesaje.grasa_pct': 'grasa_pct', 'pesaje.masa_magra_kg': 'masa_magra_kg' };
-  const campo = (x) => (CAMPO[x] ? llamado(CAMPO[x]) : x.replace(/^dias\[(\d+)\]\.(pasos|fecha)$/, (_, i) => origen[Number(i)] ?? x));
+  const campo = (x) => (CAMPO[x] ? llamado(CAMPO[x]) : /\.sueno_min$/.test(x) ? llamado('sueno') : x.replace(/^dias\[(\d+)\]\.(pasos|fecha)$/, (_, i) => origen[Number(i)] ?? x));
   return { cuerpo, campo, avisos };
 }
 
@@ -190,11 +226,25 @@ export function validarSalud(cuerpo, { zona = 'Europe/Madrid', ahora = Date.now(
         const fecha = /^\d{4}-\d{2}-\d{2}(?:[T ].*)?$/.test(crudo) ? crudo.slice(0, 10) : '';
         if (!esFecha(fecha)) return mal(`${campo}.fecha`, 'debe ser una fecha real con formato aaaa-mm-dd');
         if (fecha > hoy) return mal(`${campo}.fecha`, `es una fecha futura (hoy es ${hoy})`);
-        if (d.pasos === undefined || d.pasos === null || d.pasos === '') return mal(`${campo}.pasos`, 'falta el número de pasos');
-        const pasos = numeroTolerante(d.pasos, { entero: true });
-        if (!Number.isFinite(pasos)) return mal(`${campo}.pasos`, 'debe ser un número');
-        if (pasos < 0 || pasos > MAX_PASOS) return mal(`${campo}.pasos`, `debe estar entre 0 y ${miles(MAX_PASOS)}`);
-        porFecha.set(fecha, Math.round(pasos));
+        const hayPasos = !(d.pasos === undefined || d.pasos === null || d.pasos === '');
+        // sueno_min: número (o texto) o { valor, enHoras } desde el formato plano.
+        const crudoSueno = d.sueno_min && typeof d.sueno_min === 'object' ? d.sueno_min.valor : d.sueno_min;
+        const haySueno = !(crudoSueno === undefined || crudoSueno === null || crudoSueno === '');
+        if (!hayPasos && !haySueno) return mal(`${campo}.pasos`, 'falta el número de pasos (o el sueño)');
+        const dia = { ...porFecha.get(fecha) };
+        if (hayPasos) {
+          const pasos = numeroTolerante(d.pasos, { entero: true });
+          if (!Number.isFinite(pasos)) return mal(`${campo}.pasos`, 'debe ser un número');
+          if (pasos < 0 || pasos > MAX_PASOS) return mal(`${campo}.pasos`, `debe estar entre 0 y ${miles(MAX_PASOS)}`);
+          dia.pasos = Math.round(pasos);
+        }
+        if (haySueno) {
+          const min = minutosSueno(crudoSueno, { enHoras: Boolean(d.sueno_min?.enHoras) });
+          if (!Number.isFinite(min)) return mal(`${campo}.sueno_min`, 'debe ser una duración: horas («7,5»), minutos («450») o «7 h 30 min»');
+          if (min < 30 || min > MAX_SUENO_MIN) return mal(`${campo}.sueno_min`, 'debe estar entre 30 minutos y 24 horas');
+          dia.sueno = min;
+        }
+        porFecha.set(fecha, dia);
       });
     }
   }
@@ -240,8 +290,8 @@ export function validarSalud(cuerpo, { zona = 'Europe/Madrid', ahora = Date.now(
       }
     }
   }
-  if (!errores.length && !porFecha.size && !pesaje) mal('', 'no hay nada que guardar: manda «dias» con pasos o un «pesaje»');
-  const dias = [...porFecha].map(([fecha, pasos]) => ({ fecha, pasos })).sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
+  if (!errores.length && !porFecha.size && !pesaje) mal('', 'no hay nada que guardar: manda «dias» con pasos (o sueño) o un «pesaje»');
+  const dias = [...porFecha].map(([fecha, d]) => ({ fecha, ...d })).sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
   return { dias, pesaje: errores.length ? null : pesaje, fuente, errores };
 }
 
@@ -255,14 +305,19 @@ export function aplicarSalud(datos, entrega, { zona = datos.perfil?.zona ?? 'Eur
   // Se vuelve a validar aquí: la app no se fía de lo que guarda el servidor.
   const cuerpo = {
     fuente: entrega?.fuente,
-    dias: entrega?.dias,
+    dias: Array.isArray(entrega?.dias) ? entrega.dias.map((d) => ({ fecha: d?.fecha, pasos: d?.pasos, sueno_min: d?.sueno })) : entrega?.dias,
     pesaje: entrega?.pesaje ? { fecha_hora: new Date(entrega.pesaje.momento).toISOString(), peso_kg: entrega.pesaje.kg, grasa_pct: entrega.pesaje.grasa, masa_magra_kg: entrega.pesaje.magra } : undefined,
   };
   const v = validarSalud(cuerpo, { zona, ahora: Math.max(ahora, Number(entrega?.recibido) || 0) });
   if (v.errores.length) return { datos, resultado: { pasos: 0, pesaje: 'no_valido', errores: v.errores } };
   const fuente = v.fuente;
   const dias = { ...datos.dias };
-  for (const d of v.dias) dias[d.fecha] = { agua: 0, suplementos: [], ...dias[d.fecha], pasos: d.pasos, pasosFuente: fuente };
+  for (const d of v.dias) {
+    const dia = { agua: 0, suplementos: [], ...dias[d.fecha] };
+    if (Number.isFinite(d.pasos)) Object.assign(dia, { pasos: d.pasos, pasosFuente: fuente });
+    if (Number.isFinite(d.sueno)) Object.assign(dia, { sueno: d.sueno, suenoFuente: fuente });
+    dias[d.fecha] = dia;
+  }
   let pesos = datos.pesos;
   let estadoPesaje = 'no_enviado';
   if (v.pesaje) {
@@ -274,7 +329,7 @@ export function aplicarSalud(datos, entrega, { zona = datos.perfil?.zona ?? 'Eur
   }
   let nuevo = { ...datos, dias, pesos };
   if (estadoPesaje === 'guardado') nuevo = revisarHitos(nuevo, partesLocales(ahora, zona).fecha).datos;
-  return { datos: nuevo, resultado: { pasos: v.dias.length, pesaje: estadoPesaje, errores: [] } };
+  return { datos: nuevo, resultado: { pasos: v.dias.filter((d) => Number.isFinite(d.pasos)).length, sueno: v.dias.filter((d) => Number.isFinite(d.sueno)).length, pesaje: estadoPesaje, errores: [] } };
 }
 
 // «Última sincronización»: lo que mandó el Atajo en su último envío (aunque el
@@ -392,10 +447,12 @@ export async function recogerBuzonSalud({ cliente, leer, guardar, ahora = () => 
   }
   let pasos = 0;
   let pesajes = 0;
+  let sueno = 0;
   for (const { ids, ...envio } of envios.values()) {
     const r = aplicarSalud(datos, envio, { ahora: ahora() });
     datos = r.datos;
     pasos += r.resultado.pasos;
+    sueno += r.resultado.sueno ?? 0;
     if (r.resultado.pesaje === 'guardado') pesajes++;
     hechas.push(...ids);
   }
@@ -403,7 +460,7 @@ export async function recogerBuzonSalud({ cliente, leer, guardar, ahora = () => 
     await guardar(datos);
     await cliente.saludRecogidas(hechas);
   }
-  return { recogidas: hechas.length, pasos, pesajes, datos };
+  return { recogidas: hechas.length, pasos, pesajes, sueno, datos };
 }
 
 // ---------- API para la pantalla (igual en la web y en Windows) ----------

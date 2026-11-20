@@ -124,6 +124,9 @@ En este formato:
 - **Campos vacíos:** se ignoran. Si no hay peso, no se manda pesaje, pero los
   pasos se guardan igual.
 - **`fecha_peso`:** vale en ISO 8601 o tal como la escribe el iPhone en español.
+- **`sueno_horas`** (opcional): lo que dormiste la última noche, que cuenta para
+  hoy. Vale en horas, en minutos o como «7 h 20 min». En el formato completo va
+  como `sueno_min` dentro de cada día.
 
 Reglas del envío:
 

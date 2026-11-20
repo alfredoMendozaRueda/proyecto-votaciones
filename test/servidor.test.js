@@ -1308,3 +1308,20 @@ test('Forma: el aviso del resumen semanal llega una vez a la hora elegida (y nun
     globalThis.fetch = antes;
   }
 });
+
+test('salud: el sueño viaja aparte de los pasos y no los pisa en el buzón', async () => {
+  const { enviar, buzon, llave, hoy, dispositivo, env } = await preparadoSalud();
+  const r = await (await enviar({ pasos_hoy: 4321, sueno_horas: '7,5' })).json();
+  assert.deepEqual(r, { pasos_guardados: 1, pesaje: 'no_enviado', sueno: 'guardado', avisos: ['no ha llegado «pasos_ayer»'] });
+  // Otro envío solo con pasos: el sueño pendiente sigue.
+  await enviar({ pasos_hoy: 5000, pasos_ayer: 9000 });
+  const contenidos = (await Promise.all((await buzon()).map((e) => descifrarDelBuzon(llave.privada, e.sobre)))).filter((c) => c.tipo !== 'resumen');
+  const hoyDias = contenidos.flatMap((c) => c.dias ?? []).filter((d) => d.fecha === hoy);
+  assert.deepEqual(hoyDias.sort((a, b) => ('sueno' in a ? 1 : -1)), [{ fecha: hoy, pasos: 5000 }, { fecha: hoy, sueno: 450 }]);
+  let datos = normalizarForma({ perfil: { peso: 78 }, integracion: llave });
+  const cliente = new ClienteServidor({ url: 'https://kitsune.ejemplo.workers.dev', token: dispositivo, fetch: (url, init) => servidor.fetch(new Request(url, init), env) });
+  const res = await recogerBuzonSalud({ cliente, leer: async () => datos, guardar: async (d) => (datos = normalizarForma(d)) });
+  assert.equal(res.sueno, 1);
+  assert.equal(datos.dias[hoy].pasos, 5000);
+  assert.equal(datos.dias[hoy].sueno, 450);
+});

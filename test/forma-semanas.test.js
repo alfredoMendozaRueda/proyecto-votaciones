@@ -264,3 +264,17 @@ test('ajuste: nunca propone bajar del metabolismo basal', () => {
   const enElLimite = { ...datos, perfil: { ...datos.perfil, ajusteKcal: -790 } };
   assert.equal(propuestaAjuste(enElLimite, metricasSemana(datos, L3)), null);
 });
+
+test('sueño en el resumen: media por noche y recomendación si es menos de 7 h', () => {
+  const dias = {};
+  for (let i = 0; i < 5; i++) dias[sumarDias(L2, i)] = { sueno: 380 + i * 5 };
+  const m = metricasSemana(base({ dias, pesos: semana(L2, Array(7).fill(80)) }), L2);
+  assert.deepEqual(m.entreno.sueno, { media: 390, noches: 5 });
+  assert.match(recomendaciones(m).join(' '), /Duermes de media 6 h 30 min/);
+  assert.match(textoReglas(m), /Dormiste 6 h 30 min de media \(5 noches con datos\)/);
+  assert.match(peticionResumenIA(m).usuario, /"sueno_media_h":6.5/);
+  // Durmiendo bien, sin recomendación de sueño.
+  const bien = {};
+  for (let i = 0; i < 5; i++) bien[sumarDias(L2, i)] = { sueno: 460 };
+  assert.doesNotMatch(recomendaciones(metricasSemana(base({ dias: bien }), L2)).join(' '), /Duermes/);
+});

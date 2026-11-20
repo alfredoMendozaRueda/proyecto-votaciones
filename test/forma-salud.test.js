@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { numeroTolerante, momentoDe, validarSalud, aplicarSalud, anotarUltima, crearLlaveBuzon, cifrarParaBuzon, descifrarDelBuzon, mediaPasos } from '../src/compartido/forma/salud.js';
+import { minutosSueno, numeroTolerante, momentoDe, validarSalud, aplicarSalud, anotarUltima, crearLlaveBuzon, cifrarParaBuzon, descifrarDelBuzon, mediaPasos } from '../src/compartido/forma/salud.js';
 import { normalizarForma } from '../src/compartido/forma/datos.js';
 import { pesosPorDia, pesoDelDia, serieComposicion } from '../src/compartido/forma/progreso.js';
 import { apuntarPeso } from '../src/compartido/forma/acciones.js';
@@ -87,7 +87,7 @@ test('aplicar: los pasos reemplazan el total del día y un pesaje repetido no se
   let datos = normalizarForma({ perfil: { peso: 78 }, dias: { '2026-11-19': { agua: 1500, suplementos: ['u1'] } } });
   const envio = { recibido: AHORA, dias: [{ fecha: '2026-11-19', pasos: 9000 }], pesaje: { momento: Date.parse('2026-11-20T07:12:00Z'), kg: 77.55, grasa: 22.9 } };
   let r = aplicarSalud(datos, envio, { ahora: AHORA });
-  assert.deepEqual(r.resultado, { pasos: 1, pesaje: 'guardado', errores: [] });
+  assert.deepEqual(r.resultado, { pasos: 1, sueno: 0, pesaje: 'guardado', errores: [] });
   datos = normalizarForma(r.datos);
   assert.equal(datos.dias['2026-11-19'].agua, 1500);
   assert.deepEqual(datos.dias['2026-11-19'].suplementos, ['u1']);
@@ -173,4 +173,34 @@ test('formato plano con los nombres que pone Siri y avisos de lo vacío o descon
   assert.deepEqual(otros.avisos, ['«otra» no se reconoce: se ignora', 'no ha llegado «pasos_ayer»', '«peso» llegó vacío: sin peso en las últimas 24 h no se guarda pesaje']);
   // Los errores usan el nombre que mandaste.
   assert.equal(validarSalud({ pasos_hoy: 1, peso: 500, fecha_peso: '20 nov 2026, 8:12' }, { zona: Z, ahora: AHORA }).errores[0].campo, 'peso');
+});
+
+test('sueño: horas, minutos, segundos y «7 h 20 min»; va a la noche que acaba hoy y no pisa los pasos', () => {
+  assert.equal(minutosSueno('7,5'), 450);
+  assert.equal(minutosSueno(7.25), 435);
+  assert.equal(minutosSueno('440'), 440);
+  assert.equal(minutosSueno(26400), 440);
+  assert.equal(minutosSueno('7 h 20 min'), 440);
+  assert.equal(minutosSueno('07:20'), 440);
+  assert.equal(minutosSueno('7h'), 420);
+  assert.equal(minutosSueno('8', { enHoras: true }), 480);
+  assert.ok(Number.isNaN(minutosSueno('mucho')));
+  // Plano: «sueno_horas» va al día de hoy junto a los pasos.
+  const v = validarSalud({ pasos_hoy: 4321, sueno_horas: '7,5' }, { zona: Z, ahora: AHORA });
+  assert.deepEqual(v.errores, []);
+  assert.deepEqual(v.dias, [{ fecha: '2026-11-20', pasos: 4321, sueno: 450 }]);
+  // Solo sueño (sin pasos): también vale.
+  assert.deepEqual(validarSalud({ sueno: '7 h 20 min' }, { zona: Z, ahora: AHORA }).dias, [{ fecha: '2026-11-20', sueno: 440 }]);
+  // Fuera de rango, con el nombre del campo enviado.
+  const mal = validarSalud({ pasos_hoy: 1, horas_sueno: '30 h' }, { zona: Z, ahora: AHORA }).errores[0];
+  assert.equal(mal.campo, 'horas_sueno');
+  // Formato completo: sueno_min por día.
+  assert.deepEqual(validarSalud({ dias: [{ fecha: '2026-11-19', sueno_min: 400 }] }, { zona: Z, ahora: AHORA }).dias, [{ fecha: '2026-11-19', sueno: 400 }]);
+  // Aplicar: el sueño y los pasos del mismo día no se pisan.
+  let datos = normalizarForma({ perfil: { peso: 78 } });
+  datos = normalizarForma(aplicarSalud(datos, { recibido: AHORA, dias: [{ fecha: '2026-11-20', pasos: 3000 }] }, { ahora: AHORA }).datos);
+  datos = normalizarForma(aplicarSalud(datos, { recibido: AHORA, dias: [{ fecha: '2026-11-20', sueno: 450 }] }, { ahora: AHORA }).datos);
+  assert.equal(datos.dias['2026-11-20'].pasos, 3000);
+  assert.equal(datos.dias['2026-11-20'].sueno, 450);
+  assert.equal(datos.dias['2026-11-20'].suenoFuente, 'apple_salud');
 });

@@ -3,6 +3,7 @@
 // y la guía para montar el Atajo sin depender de nadie.
 import { nombreFuente } from '../../compartido/forma/salud.js';
 import { fechaCorta } from '../../compartido/forma/fechas.js';
+import { horasYMinutos } from '../../compartido/forma/semanas.js';
 import { ic, escapar, num } from './ui.js';
 
 const EJEMPLO = {
@@ -12,6 +13,7 @@ const EJEMPLO = {
   grasa_pct: 22.9,
   masa_magra_kg: 59.8,
   fecha_peso: '2026-11-20T08:12:00+01:00',
+  sueno_horas: 7.4,
 };
 
 export function haceCuanto(ms, ahora = Date.now()) {
@@ -52,7 +54,13 @@ export function crearIntegraciones(ctx) {
     if (!u && !usoServidor) return '<p class="f-tenue">Aún no ha llegado nada. Cuando el Atajo mande datos, los verás aquí.</p>';
     const cuando = Math.max(u?.recibido ?? 0, usoServidor ?? 0);
     const partes = [];
-    if (u?.dias?.length) partes.push(u.dias.map((d) => `${escapar(fechaCorta(d.fecha))}: <b>${num(d.pasos)}</b> pasos`).join(' · '));
+    if (u?.dias?.length) {
+      partes.push(
+        u.dias
+          .map((d) => [Number.isFinite(d.pasos) ? `${escapar(fechaCorta(d.fecha))}: <b>${num(d.pasos)}</b> pasos` : '', Number.isFinite(d.sueno) ? `sueño <b>${escapar(horasYMinutos(d.sueno))}</b>` : ''].filter(Boolean).join(', '))
+          .join(' · '),
+      );
+    }
     if (u?.pesaje) {
       const p = u.pesaje;
       const extra = [Number.isFinite(p.grasa) ? `${num(p.grasa, 1)} % grasa` : '', Number.isFinite(p.magra) ? `${num(p.magra, 1)} kg magra` : ''].filter(Boolean).join(', ');
@@ -153,6 +161,7 @@ Content-Type: application/json</code>
        <ul class="f-tenue f-guia__notas">
          <li><b>pasos_hoy</b> y <b>pasos_ayer</b>: el TOTAL de cada día; el servidor pone las fechas. Mandar lo mismo dos veces no duplica nada: se reemplaza.</li>
          <li><b>peso_kg</b> (30 a 300), <b>grasa_pct</b> (3 a 60; si llega como fracción, 0,229, se pasa a 22,9 %), <b>masa_magra_kg</b> y <b>fecha_peso</b>. Si un día no te pesas y van vacíos, se guardan los pasos igual.</li>
+         <li><b>sueno_horas</b>: lo que dormiste la última noche (cuenta para hoy). Vale en horas («7,4»), en minutos («444») o como «7 h 24 min».</li>
          <li>Los números pueden ir como número o como texto, con coma decimal («77,55» o «77,55 kg»).</li>
          <li><b>fecha_peso</b> vale tal cual la escribe el iPhone («20 nov 2026, 8:12») o en ISO 8601; sin zona, se entiende en la de tu perfil (${escapar(ctx.datos.perfil?.zona ?? 'Europe/Madrid')}).</li>
          <li>Respuesta: <code>{"pasos_guardados": 2, "pesaje": "guardado"}</code> (o <code>"duplicado"</code>, <code>"no_enviado"</code>). Si algo no vale, 400 con el campo y el motivo, y no se guarda nada.</li>
@@ -166,7 +175,8 @@ Content-Type: application/json</code>
          ${paso(3, 'Igual con dos filtros: <i>Fecha de inicio es posterior a</i> <code>inicio_ayer</code> y <i>es anterior a</i> <code>inicio_hoy</code> → <i>Suma</i> → <code>pasos_ayer</code>.')}
          ${paso(4, '<b>Buscar muestras de salud</b>: tipo <i>Peso</i>, <i>Fecha de inicio está en los últimos 1 días</i>, ordenar por <i>Fecha de inicio</i>, <i>más reciente primero</i>, límite <i>1</i> → variable <code>peso</code>.')}
          ${paso(5, 'Igual con <i>Porcentaje de grasa corporal</i> → <code>grasa</code> y con <i>Masa corporal magra</i> → <code>magra</code>.')}
-         ${paso(6, `<b>Obtener contenido de URL</b>: <code>${escapar(url)}</code>, método <i>POST</i>, cabecera <code>Authorization</code> = <code>Bearer forma_…</code>. Cuerpo <i>JSON</i> con <code>pasos_hoy</code>, <code>pasos_ayer</code>, <code>peso_kg</code> (variable <code>peso</code> → toca y elige <i>Valor</i>), <code>grasa_pct</code> (<code>grasa</code> → <i>Valor</i>), <code>masa_magra_kg</code> (<code>magra</code> → <i>Valor</i>) y <code>fecha_peso</code> (<code>peso</code> → <i>Fecha de inicio</i>).`)}
+         ${paso('5b', '<b>Sueño</b> (opcional): <b>Buscar muestras de salud</b> de tipo <i>Análisis del sueño</i>, <i>Fecha de inicio está en las últimas 18 horas</i> y valor <i>Dormido</i> (o los tipos de sueño: núcleo, profundo y REM). Saca su <i>Duración</i> con <b>Obtener detalles</b>, súmala con <b>Calcular estadísticas</b> → <i>Suma</i> y mándala como <code>sueno_horas</code> (o <code>sueno</code> en minutos).')}
+         ${paso(6, `<b>Obtener contenido de URL</b>: <code>${escapar(url)}</code>, método <i>POST</i>, cabecera <code>Authorization</code> = <code>Bearer forma_…</code>. Cuerpo <i>JSON</i> con <code>pasos_hoy</code>, <code>pasos_ayer</code>, <code>peso_kg</code> (variable <code>peso</code> → toca y elige <i>Valor</i>), <code>grasa_pct</code> (<code>grasa</code> → <i>Valor</i>), <code>masa_magra_kg</code> (<code>magra</code> → <i>Valor</i>) y <code>fecha_peso</code> (<code>peso</code> → <i>Fecha de inicio</i>) y, si quieres, <code>sueno_horas</code>.`)}
          ${paso(7, '<b>Mostrar notificación</b> con el <i>Contenido de la URL</i>, para ver la respuesta.')}
          ${paso(8, '<b>Automatizaciones</b> (pestaña Automatización): <i>App → Renpho Health → Se cierra</i> (sincroniza el peso justo después de pesarte) y <i>Hora del día → 22:30 → Diariamente</i>. En las dos, <i>Ejecutar inmediatamente</i>.')}
        </ol>
