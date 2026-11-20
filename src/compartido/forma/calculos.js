@@ -118,7 +118,9 @@ export function calcularPlan(perfil, { bloqueados = {}, hoy = fechaISO() } = {})
   const media = gasto.media * escala;
   const ciclo = perfil.modoKcal === 'ciclo';
   // Repartir el mismo total semanal: cada día su gasto × (1 + ajuste) es lineal, así que la media cuadra.
-  const kcalDia = (g) => (Number.isFinite(bloqueados.kcal) ? bloqueados.kcal : r5(g * escala * (1 + ajuste)));
+  // + el ajuste automático por tu ritmo real (Progreso → Semanas), si lo aplicaste.
+  const extra = Number.isFinite(perfil.ajusteKcal) ? perfil.ajusteKcal : 0;
+  const kcalDia = (g) => (Number.isFinite(bloqueados.kcal) ? bloqueados.kcal : r5(g * escala * (1 + ajuste) + extra));
   const kcalEntreno = ciclo ? kcalDia(gasto.entreno) : kcalDia(gasto.media);
   const kcalDescanso = ciclo ? kcalDia(gasto.descanso) : kcalDia(gasto.media);
   const kcalMedia = (gasto.dias * kcalEntreno + (7 - gasto.dias) * kcalDescanso) / 7;

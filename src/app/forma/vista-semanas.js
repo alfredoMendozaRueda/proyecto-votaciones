@@ -2,7 +2,7 @@
 // semana en curso, la gráfica de medias semanales con los hitos, el próximo hito,
 // el historial y el detalle de cada semana (con «Regenerar»). También el editor
 // de hitos (Perfil → Hitos y recompensas) y la celebración al conseguir uno.
-import { metricasSemana, hitosDePeso, hitosRedondos, proximoHito, pesoInicial, momentoGeneracion } from '../../compartido/forma/semanas.js';
+import { metricasSemana, hitosDePeso, hitosRedondos, proximoHito, pesoInicial, momentoGeneracion, aplicarPropuesta, descartarPropuesta } from '../../compartido/forma/semanas.js';
 import { mediasSemanales } from '../../compartido/forma/progreso.js';
 import { lunesDe, sumarDias, fechaCorta } from '../../compartido/forma/fechas.js';
 import { deKg, aKg, unidadPeso } from '../../compartido/forma/calculos.js';
@@ -49,6 +49,20 @@ export function crearSemanas(ctx) {
     </div>`;
   }
 
+  // Propuesta de ajuste del objetivo (o lo que decidiste con ella).
+  function bloquePropuesta(r) {
+    const prop = r.datos.propuesta;
+    if (!prop) return '';
+    const cifra = `${prop.delta > 0 ? '+' : '−'}${num(Math.abs(prop.delta))} kcal al día`;
+    if (r.decision === 'aplicada') return `<p class="f-sem__decision">${ic('check', 14)} Ajuste aplicado: ${cifra}.</p>`;
+    if (r.decision === 'descartada') return `<p class="f-sem__decision f-tenue">Propuesta de ${cifra} descartada.</p>`;
+    return `<div class="f-sem__propuesta" data-propuesta>
+      <div class="f-fila">${ic('diana', 18)}<strong>Ajuste propuesto: ${cifra}</strong></div>
+      <p class="f-explica">${escapar(prop.motivo)} Se aplica a tu objetivo de todos los días y puedes quitarlo en Perfil.</p>
+      <div class="f-fila"><button type="button" class="f-boton f-boton--chico" data-a="sem-descartar" data-lunes="${r.id}">Ahora no</button><button type="button" class="f-boton f-boton--chico f-boton--azul" data-a="sem-aplicar" data-lunes="${r.id}" style="flex:1">Aplicar ${cifra}</button></div>
+    </div>`;
+  }
+
   function panelUltima() {
     const r = ultimo();
     if (!r) {
@@ -62,6 +76,7 @@ export function crearSemanas(ctx) {
       ${cabeceraPeso(m)}
       ${chips(m)}
       <p class="f-sem__texto">${escapar(r.texto)}</p>
+      ${bloquePropuesta(r)}
       <button type="button" class="f-boton" data-a="sem-ver" data-lunes="${r.id}">${ic('progreso', 16)}Ver el resumen completo</button>
     </section>`;
   }
@@ -204,6 +219,7 @@ export function crearSemanas(ctx) {
          ${h.conseguidos.map((x) => `<p class="f-sem__logro">🏆 Hito conseguido: <b>${P(x.valor, 1)} ${U()}</b>${x.recompensa ? ` → ${escapar(x.recompensa)}` : ''}</p>`).join('')}
          ${h.proximo ? fila('Te faltan', h.proximo.faltan !== null ? `${num(Math.max(0, deKg(h.proximo.faltan, u())), 1)} ${U()}` : '—', `para ${P(h.proximo.valor, 1)} ${U()}${h.proximo.recompensa ? ` · ${escapar(h.proximo.recompensa)}` : ''}`) : ''}
        </section>
+       ${m.propuesta ? `<section class="f-sem__bloque"><span class="f-etiqueta">Ajuste del objetivo</span>${bloquePropuesta(r)}</section>` : ''}
        <section class="f-sem__bloque"><span class="f-etiqueta">Resumen${r.origen === 'ia' ? ' · escrito por la IA con estas cifras' : ''}</span><p class="f-sem__texto">${escapar(r.texto)}</p>
          <p class="f-tenue">Generado el ${escapar(new Date(r.generado).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))}. Es una foto: si apuntas algo tarde, pulsa «Regenerar».</p></section>
        <button type="button" class="f-boton" data-a="sem-regenerar" data-lunes="${lunes}">${ic('chispa', 16)}Regenerar esta semana</button>`,
@@ -321,6 +337,17 @@ export function crearSemanas(ctx) {
 
   const acciones = {
     'sem-ver': (el) => hojaDetalle(el.dataset.lunes),
+    'sem-aplicar': (el) => {
+      const antes = ctx.datos;
+      const r = ctx.datos.resumenes.find((x) => x.id === el.dataset.lunes);
+      ctx.hojas.cerrarTodas();
+      ctx.guardar(aplicarPropuesta(ctx.datos, el.dataset.lunes, ctx.hoy()));
+      ctx.tostada(`Objetivo ajustado: ${r.datos.propuesta.delta > 0 ? '+' : '−'}${num(Math.abs(r.datos.propuesta.delta))} kcal al día.`, { accion: () => ctx.guardar(antes), ms: 7000 });
+    },
+    'sem-descartar': (el) => {
+      ctx.hojas.cerrarTodas();
+      ctx.guardar(descartarPropuesta(ctx.datos, el.dataset.lunes));
+    },
     'sem-regenerar': async (el) => {
       el.disabled = true;
       el.innerHTML = '<span class="f-cargando"></span>Regenerando…';

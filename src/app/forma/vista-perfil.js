@@ -5,6 +5,7 @@ import { calcularPlan, deKg, unidadPeso, OBJETIVOS, TRABAJOS } from '../../compa
 import { perfilActual } from '../../compartido/forma/diario.js';
 import { normalizarForma, id as nuevoId, ejercicio } from '../../compartido/forma/datos.js';
 import { edadEn, fechaLarga } from '../../compartido/forma/fechas.js';
+import { quitarAjuste } from '../../compartido/forma/semanas.js';
 import { ic, escapar, num } from './ui.js';
 import { listarFotos, borrarFoto } from './fotos.js';
 
@@ -53,6 +54,7 @@ export function vistaPerfil(ctx) {
           <div class="f-con-unidad" data-unidad="%" style="width:130px"><input class="f-entrada" type="number" inputmode="numeric" value="${p.grasaPct ?? 25}" data-cambio="perfil-num" data-k="grasaPct"></div></div>
         <div class="f-ajuste"><span class="f-ajuste__texto"><strong>Calorías</strong><small>${p.modoKcal === 'ciclo' ? 'Más los días de entreno' : 'Las mismas todos los días'}</small></span>
           <div class="f-segmento" style="width:170px"><button type="button" data-a="modo-kcal" data-v="fijas" aria-pressed="${p.modoKcal !== 'ciclo'}">Fijas</button><button type="button" data-a="modo-kcal" data-v="ciclo" aria-pressed="${p.modoKcal === 'ciclo'}">Ciclo</button></div></div>
+        ${p.ajusteKcal ? `<div class="f-ajuste" data-ajuste-kcal><span class="f-ajuste__texto"><strong>Ajuste por tu ritmo: ${p.ajusteKcal > 0 ? '+' : '−'}${num(Math.abs(p.ajusteKcal))} kcal/día</strong><small>${d.historialKcal.length ? `Último cambio el ${escapar(fechaLarga(d.historialKcal.at(-1).fecha))}, desde el resumen semanal` : 'Desde el resumen semanal'}</small></span><button type="button" class="f-boton f-boton--chico" data-a="quitar-ajuste">Quitar</button></div>` : ''}
         ${p.mantenimientoReal ? `<div class="f-ajuste"><span class="f-ajuste__texto"><strong>Mantenimiento ajustado</strong><small>${num(p.mantenimientoReal)} kcal, de tus datos reales</small></span><button type="button" class="f-boton f-boton--chico" data-a="quitar-real">Quitar</button></div>` : ''}
       </section>
 
@@ -219,6 +221,12 @@ export function vistaPerfil(ctx) {
     'modo-kcal': (el) => {
       cambiarPerfil({ modoKcal: el.dataset.v });
       ctx.repintar();
+    },
+    'quitar-ajuste': () => {
+      const antes = ctx.datos;
+      ctx.guardar(quitarAjuste(ctx.datos, ctx.hoy()), { pintar: false });
+      ctx.repintar();
+      ctx.tostada('Ajuste quitado: vuelves al objetivo calculado.', { accion: () => ctx.guardar(antes) });
     },
     'quitar-real': () => {
       const { mantenimientoReal: _m, ...resto } = ctx.datos.perfil;

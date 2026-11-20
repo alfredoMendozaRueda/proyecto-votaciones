@@ -198,3 +198,69 @@ test('texto: reglas con 1–2 recomendaciones y la IA solo recibe métricas', ()
   assert.equal(leerTextoIA('**Hola**'), null);
   assert.equal(leerTextoIA('**Buena semana**: has bajado 0,6 kg y cumplido la proteína casi todos los días.'), 'Buena semana: has bajado 0,6 kg y cumplido la proteína casi todos los días.');
 });
+
+// ---------- Ajuste automático del objetivo ----------
+import { aplicarPropuesta, descartarPropuesta, quitarAjuste, propuestaAjuste } from '../src/compartido/forma/semanas.js';
+import { calcularPlan } from '../src/compartido/forma/calculos.js';
+import { objetivoDelDia, planActual } from '../src/compartido/forma/diario.js';
+
+// Tres semanas con peso fijo por semana y la semana L3 comiendo «cumplidos» días en objetivo.
+function conRitmo(s1, s2, s3, { cumplidos = 7, objetivo = 'perder', apuntados = 7 } = {}) {
+  let datos = base({ perfil: { ...PERFIL, objetivo }, pesos: [...semana(L1, Array(7).fill(s1)), ...semana(L2, Array(7).fill(s2)), ...semana(L3, Array(7).fill(s3))] });
+  for (let i = 0; i < apuntados; i++) {
+    const f = sumarDias(L3, i);
+    const kcal = objetivoDelDia(datos, f, planActual(datos, f), sumarDias(L3, 7)).kcal * (i < cumplidos ? 1 : 1.3);
+    ({ datos } = apuntar(datos, { fecha: f, momento: 'comida', minuto: 800, items: [{ nombre: 'Día', kcal, proteina: 160, hidratos: 200, grasa: 60 }] }));
+  }
+  return datos;
+}
+
+test('ajuste: propone −120 si va lento dos semanas cumpliendo, +150 si va demasiado rápido', () => {
+  const lento = metricasSemana(conRitmo(80, 79.9, 79.8), L3);
+  assert.equal(lento.peso.ritmo.estado, 'amarillo');
+  assert.equal(lento.propuesta.delta, -120);
+  assert.match(lento.propuesta.texto, /bajar 120 kcal/);
+  assert.equal(recomendaciones(lento)[0], lento.propuesta.texto);
+  assert.equal(metricasSemana(conRitmo(80, 80, 78.8), L3).propuesta.delta, 150);
+  // Ganar músculo: al revés.
+  assert.equal(metricasSemana(conRitmo(80, 80, 81, { objetivo: 'volumen' }), L3).propuesta.delta, -150);
+  // Ritmo ideal o datos poco fiables: sin propuesta.
+  assert.equal(metricasSemana(conRitmo(80, 80, 79.4), L3).propuesta, null);
+  assert.equal(metricasSemana(conRitmo(80, 79.9, 79.8, { cumplidos: 3 }), L3).propuesta, null); // solo 3 días en objetivo
+  assert.equal(metricasSemana(conRitmo(80, 79.9, 79.8, { apuntados: 4, cumplidos: 4 }), L3).propuesta, null); // datos incompletos
+  // La semana en curso nunca propone.
+  assert.equal(metricasSemana(conRitmo(80, 79.9, 79.8), L3, { parcial: true }).propuesta, null);
+});
+
+test('ajuste: aplicar baja el objetivo, regenerar no lo deshace, espera 2 semanas y se puede quitar', () => {
+  let datos = normalizarForma(generarResumen(conRitmo(80, 79.9, 79.8), L3).datos);
+  const antes = calcularPlan(datos.perfil, { hoy: L3 }).descanso.kcal;
+  datos = normalizarForma(aplicarPropuesta(datos, L3, '2026-11-23'));
+  assert.equal(datos.perfil.ajusteKcal, -120);
+  assert.equal(calcularPlan(datos.perfil, { hoy: L3 }).descanso.kcal, antes - 120);
+  assert.deepEqual(datos.historialKcal.map((x) => x.delta), [-120]);
+  assert.equal(datos.resumenes.at(-1).decision, 'aplicada');
+  // Aplicar dos veces no suma dos veces.
+  assert.equal(normalizarForma(aplicarPropuesta(datos, L3, '2026-11-23')).perfil.ajusteKcal, -120);
+  // Regenerar conserva la decisión y la propuesta.
+  const regenerado = normalizarForma(generarResumen(datos, L3).datos).resumenes.at(-1);
+  assert.equal(regenerado.decision, 'aplicada');
+  assert.equal(regenerado.datos.propuesta.delta, -120);
+  // La semana siguiente, aunque siga lenta, espera a que el peso responda.
+  const siguiente = metricasSemana(datos, L3);
+  assert.equal(propuestaAjuste({ ...datos, historialKcal: [{ fecha: sumarDias(L3, 6), delta: -120 }] }, siguiente), null);
+  // Quitar el ajuste.
+  const sin = normalizarForma(quitarAjuste(datos, '2026-11-30'));
+  assert.equal(sin.perfil.ajusteKcal, undefined);
+  assert.equal(sin.historialKcal.at(-1).delta, 120);
+  // Descartar no cambia el objetivo.
+  const desc = normalizarForma(descartarPropuesta(normalizarForma(generarResumen(conRitmo(80, 79.9, 79.8), L3).datos), L3));
+  assert.equal(desc.resumenes.at(-1).decision, 'descartada');
+  assert.equal(desc.perfil.ajusteKcal, undefined);
+});
+
+test('ajuste: nunca propone bajar del metabolismo basal', () => {
+  const datos = conRitmo(80, 79.9, 79.8);
+  const enElLimite = { ...datos, perfil: { ...datos.perfil, ajusteKcal: -790 } };
+  assert.equal(propuestaAjuste(enElLimite, metricasSemana(datos, L3)), null);
+});

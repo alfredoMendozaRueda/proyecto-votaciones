@@ -423,7 +423,7 @@ export function coleccionBiblia({ leer, guardar, normalizar = (d) => d, despues 
 // comida, alimento, peso, medida, hito, rutina, entreno y día, por separado.
 // El entreno que tienes a medias se queda en este dispositivo.
 const LISTAS_FORMA = ['alimentos', 'registros', 'plantillas', 'pesos', 'medidas', 'hitos', 'rutinas', 'sesiones', 'ejercicios', 'resumenes'];
-const BASE_FORMA = ['perfil', 'bloqueados', 'ajustes', 'momentos', 'suplementos', 'tiposMedida', 'descartadas', 'descargas', 'descargaDescartada', 'usosIA', 'resumenVisto', 'avisosVistos', 'noDuplicados', 'celebrados', 'integracion'];
+const BASE_FORMA = ['perfil', 'bloqueados', 'ajustes', 'momentos', 'suplementos', 'tiposMedida', 'descartadas', 'descargas', 'descargaDescartada', 'usosIA', 'resumenVisto', 'avisosVistos', 'noDuplicados', 'celebrados', 'integracion', 'historialKcal'];
 
 export function coleccionForma({ leer, guardar, normalizar = (d) => d, despues }) {
   return {

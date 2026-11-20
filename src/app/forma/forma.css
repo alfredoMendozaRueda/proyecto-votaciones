@@ -3505,3 +3505,22 @@ p.f-sem__aviso {
   .f-celebra__peso,
   .f-celebra__premio { animation: none; }
 }
+
+.f-sem__propuesta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--f-linea-2);
+  border-radius: var(--f-r-s);
+  background: rgba(47, 125, 255, 0.1);
+}
+
+.f-sem__decision {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: #3ddc97;
+  font-size: 13px;
+}

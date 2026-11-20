@@ -9,6 +9,7 @@
 import { sumarDias, lunesDe, diasEntre, esFecha } from './fechas.js';
 import { pesosPorDia, mediasSemanales, serieComposicion, mejorMarca, revisarHitos } from './progreso.js';
 import { objetivoDelDia, planActual } from './diario.js';
+import { calcularPlan } from './calculos.js';
 import { volumenSerie, asesorDescarga } from './entreno.js';
 import { ejercicio } from './datos.js';
 import { desdeLocal, partesLocales } from '../horas.js';
@@ -317,6 +318,67 @@ function bloqueHitos(datos, lunes, mediaSemana, proy) {
   return { conseguidos, proximo: p, inicial };
 }
 
+// ---------- Ajuste automático del objetivo ----------
+// Si el ritmo real se sale del ideal, el resumen propone mover las kcal:
+// · perder grasa: lento dos semanas (amarillo) → −120 kcal; demasiado rápido (rojo) → +150.
+// · ganar músculo: demasiado rápido → −150; lento dos semanas → +120.
+// Solo con datos fiables (≥ 4 pesajes y ≥ 5 días apuntados) y si has cumplido
+// el objetivo de kcal al menos 4 días (si no, el problema no son las kcal). Tras
+// un ajuste se esperan 2 semanas a que el peso responda, y nunca baja del basal.
+export const AJUSTES_PROPUESTOS = { bajar: -120, subir: 150, bajarVolumen: -150, subirVolumen: 120 };
+export const ESPERA_AJUSTE_DIAS = 14;
+export const MAX_AJUSTE = 800;
+
+export function propuestaAjuste(datos, m) {
+  const p = datos.perfil;
+  if (!p || Number.isFinite(datos.bloqueados?.kcal)) return null;
+  const estado = m.peso.ritmo.estado;
+  if (!['amarillo', 'rojo'].includes(estado) || m.peso.n < MIN_PESAJES_RITMO || !m.nutricion.completo) return null;
+  if (m.nutricion.adherencia.dias < 4) return null;
+  const ultimo = datos.historialKcal?.at(-1);
+  if (ultimo && ultimo.fecha > sumarDias(m.domingo, -ESPERA_AJUSTE_DIAS)) return null;
+  let delta = null;
+  let motivo = '';
+  if (pierde(p)) {
+    delta = estado === 'amarillo' ? AJUSTES_PROPUESTOS.bajar : AJUSTES_PROPUESTOS.subir;
+    motivo = estado === 'amarillo' ? 'Llevas dos semanas bajando menos del 0,25 % a la semana pese a cumplir el objetivo.' : 'Bajas más del 1,25 % a la semana: conviene ir algo más despacio para no perder músculo.';
+  } else if (p.objetivo === 'volumen') {
+    delta = estado === 'rojo' ? AJUSTES_PROPUESTOS.bajarVolumen : AJUSTES_PROPUESTOS.subirVolumen;
+    motivo = estado === 'rojo' ? 'Subes más del 0,75 % a la semana: probablemente sea más grasa que músculo.' : 'Llevas dos semanas casi sin subir pese a cumplir el objetivo.';
+  } else return null;
+  const actual = Number.isFinite(p.ajusteKcal) ? p.ajusteKcal : 0;
+  const nuevo = Math.max(-MAX_AJUSTE, Math.min(MAX_AJUSTE, actual + delta));
+  if (nuevo === actual) return null;
+  // Nunca por debajo del metabolismo basal.
+  const plan = calcularPlan({ ...p, ajusteKcal: nuevo }, { bloqueados: datos.bloqueados, hoy: sumarDias(m.domingo, 1) });
+  if (delta < 0 && Math.min(plan.entreno.kcal, plan.descanso.kcal) < plan.basal) return null;
+  return { delta: nuevo - actual, motivo, texto: `${motivo} Te propongo ${nuevo - actual > 0 ? 'subir' : 'bajar'} ${Math.abs(nuevo - actual)} kcal al día tu objetivo.` };
+}
+
+// Aplicar / descartar la propuesta de una semana, y quitar el ajuste acumulado.
+export function aplicarPropuesta(datos, lunes, hoy) {
+  const r = datos.resumenes.find((x) => x.id === lunes);
+  const prop = r?.datos?.propuesta;
+  if (!prop || r.decision) return datos;
+  const actual = Number.isFinite(datos.perfil.ajusteKcal) ? datos.perfil.ajusteKcal : 0;
+  const ajusteKcal = Math.max(-MAX_AJUSTE, Math.min(MAX_AJUSTE, actual + prop.delta));
+  return {
+    ...datos,
+    perfil: { ...datos.perfil, ajusteKcal },
+    historialKcal: [...(datos.historialKcal ?? []), { fecha: hoy, delta: prop.delta, motivo: prop.motivo, semana: lunes }],
+    resumenes: datos.resumenes.map((x) => (x.id === lunes ? { ...x, decision: 'aplicada' } : x)),
+  };
+}
+
+export const descartarPropuesta = (datos, lunes) => ({ ...datos, resumenes: datos.resumenes.map((x) => (x.id === lunes ? { ...x, decision: 'descartada' } : x)) });
+
+export function quitarAjuste(datos, hoy) {
+  const actual = datos.perfil?.ajusteKcal;
+  if (!Number.isFinite(actual) || !actual) return datos;
+  const { ajusteKcal: _fuera, ...perfil } = datos.perfil;
+  return { ...datos, perfil, historialKcal: [...(datos.historialKcal ?? []), { fecha: hoy, delta: -actual, motivo: 'Quitaste el ajuste automático.' }] };
+}
+
 // ---------- Texto por reglas ----------
 
 const es = (n, d = 1) => (Number.isFinite(n) ? n.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: d }) : '—');
@@ -327,7 +389,8 @@ const plural = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
 export function recomendaciones(m) {
   const salida = [];
   const { peso, nutricion: n, entreno: e } = m;
-  if (peso.ritmo.estado === 'rojo') salida.push('El ritmo es más rápido de lo recomendado: sube unas 100–150 kcal al día (mejor en hidratos alrededor del entreno) para proteger el músculo.');
+  if (m.propuesta) salida.push(m.propuesta.texto);
+  if (peso.ritmo.estado === 'rojo' && !m.propuesta) salida.push('El ritmo es más rápido de lo recomendado: sube unas 100–150 kcal al día (mejor en hidratos alrededor del entreno) para proteger el músculo.');
   if (n.dias && n.proteina.dias < Math.ceil(n.dias / 2)) {
     salida.push(
       n.momentoMenosProteina
@@ -335,7 +398,7 @@ export function recomendaciones(m) {
         : `Te falta proteína: solo llegaste ${plural(n.proteina.dias, 'día', 'días')} de ${n.dias}. Añade una ración en la comida donde menos llevas.`,
     );
   }
-  if (peso.ritmo.estado === 'amarillo') salida.push('Llevas dos semanas casi sin bajar: quita unas 100–150 kcal al día o suma unos 2.000 pasos diarios.');
+  if (peso.ritmo.estado === 'amarillo' && !m.propuesta) salida.push('Llevas dos semanas casi sin bajar: quita unas 100–150 kcal al día o suma unos 2.000 pasos diarios.');
   if (e.descarga) salida.push(e.descarga.propuesta);
   if (e.planificadas && e.hechas < e.planificadas) salida.push(`Te ${e.planificadas - e.hechas === 1 ? 'faltó 1 sesión' : `faltaron ${e.planificadas - e.hechas} sesiones`}: si una semana se complica, prioriza los ejercicios principales.`);
   if (!n.completo) salida.push('Apunta al menos 5 días de comidas para que el resumen sea fiable.');
@@ -375,7 +438,10 @@ export function metricasSemana(datos, lunes, { parcial = false } = {}) {
   const proy = proyeccion(datos, domingo, { hito: siguiente?.valor, objetivo: datos.perfil?.pesoObjetivo });
   const hitos = bloqueHitos(datos, lunes, peso.media, proy);
   const estado = nutricion.completo && peso.n >= MIN_PESAJES_RITMO ? 'completo' : 'datos_incompletos';
-  return { version: VERSION_RESUMEN, lunes, domingo, parcial, objetivo: datos.perfil?.objetivo ?? null, peso, nutricion, entreno, proyeccion: proy, hitos, estado };
+  const m = { version: VERSION_RESUMEN, lunes, domingo, parcial, objetivo: datos.perfil?.objetivo ?? null, peso, nutricion, entreno, proyeccion: proy, hitos, estado };
+  // La propuesta de ajuste solo en semanas cerradas.
+  m.propuesta = parcial ? null : propuestaAjuste(datos, m);
+  return m;
 }
 
 // Genera (o regenera) la foto de una semana cerrada: desbloquea los hitos que
@@ -385,8 +451,12 @@ export function generarResumen(datos, lunes, { ahora = Date.now(), texto = null,
   if (!esFecha(lunes)) throw new Error('Semana no válida.');
   const { datos: conHitos } = revisarHitos(datos, sumarDias(lunes, 7));
   const m = metricasSemana(conHitos, lunes);
+  const anterior = conHitos.resumenes.find((x) => x.id === lunes);
+  if (anterior?.decision) m.propuesta = anterior.datos?.propuesta ?? null;
+  // Si ya decidiste sobre la propuesta de esa semana, regenerar no lo deshace.
   const resumen = {
     id: lunes,
+    ...(anterior?.decision ? { decision: anterior.decision } : {}),
     generado: ahora,
     texto: (texto && String(texto).trim()) || textoReglas(m),
     origen: texto ? origen : 'reglas',
@@ -417,6 +487,7 @@ export function peticionResumenIA(m) {
     },
     entreno: { sesiones: e.hechas, planificadas: e.planificadas, records: e.records.map((x) => x.nombre), minutos_cardio: e.cardioMin, pasos_media: e.pasos?.media ?? null, descarga_recomendada: Boolean(e.descarga) },
     hitos: { conseguidos: m.hitos.conseguidos.map((h) => ({ kg: h.valor, recompensa: h.recompensa })), proximo: m.hitos.proximo ? { kg: m.hitos.proximo.valor, faltan_kg: m.hitos.proximo.faltan, fecha_estimada: m.hitos.proximo.fecha } : null },
+    ajuste_propuesto_kcal: m.propuesta?.delta ?? null,
     recomendaciones_sugeridas: recomendaciones(m),
   };
   return {

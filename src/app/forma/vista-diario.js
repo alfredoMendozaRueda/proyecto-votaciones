@@ -68,7 +68,7 @@ export function vistaDiario(ctx) {
     const logro = ultimo.datos.hitos.conseguidos.length;
     return `<button type="button" class="f-panel f-panel--azul f-tarjeta-resumen" data-a="ver-resumen">
       <span class="f-tarjeta-resumen__icono">${ic(logro ? 'trofeo' : 'progreso', 20)}</span>
-      <span class="f-tarjeta-resumen__texto"><strong>${logro ? '¡Hito conseguido! ' : ''}Tu resumen semanal está listo</strong>
+      <span class="f-tarjeta-resumen__texto"><strong>${logro ? '¡Hito conseguido! ' : ''}Tu resumen semanal está listo${ultimo.datos.propuesta && !ultimo.decision ? ', con una propuesta de ajuste' : ''}</strong>
       <small>${p.media !== null ? `Media ${num(p.media, 1)} kg${p.cambioKg !== null ? ` (${p.cambioKg > 0 ? '+' : ''}${num(p.cambioKg, 2)})` : ''} · ` : ''}${ultimo.datos.entreno.hechas} entrenos · ${ultimo.datos.nutricion.dias}/7 días</small></span>
       ${ic('adelante', 16)}
     </button>`;

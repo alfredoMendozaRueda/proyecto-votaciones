@@ -221,6 +221,8 @@ export function normalizarPerfil(p) {
     proteinaPorKg: num(p.proteinaPorKg, 0.8, 3.5),
     grasaPct: num(p.grasaPct, 15, 45),
     mantenimientoReal: num(p.mantenimientoReal, 800, 8000),
+    // Ajuste automático por tu ritmo real (kcal al día, acumulado; ± 800 como mucho).
+    ajusteKcal: num(p.ajusteKcal, -800, 800) || undefined,
     creado: esFecha(p.creado) ? p.creado : undefined,
   };
   for (const k of Object.keys(perfil)) if (perfil[k] === undefined) delete perfil[k];
@@ -498,10 +500,17 @@ export function normalizarForma(d = {}) {
         texto: texto(r.texto, 2000),
         origen: r.origen === 'ia' ? 'ia' : 'reglas',
         estado: r.estado === 'datos_incompletos' ? 'datos_incompletos' : 'completo',
+        // Qué hiciste con la propuesta de ajuste de esa semana.
+        ...(['aplicada', 'descartada'].includes(r.decision) ? { decision: r.decision } : {}),
         datos: r.datos,
       }))
       .sort((a, b) => (a.id < b.id ? -1 : 1))
       .slice(-104),
+    // Cambios del objetivo por el ajuste automático (el más reciente, al final).
+    historialKcal: lista(d.historialKcal)
+      .filter((x) => esFecha(x.fecha) && num(x.delta, -800, 800) !== undefined)
+      .map((x) => sinVacios({ fecha: x.fecha, delta: x.delta, motivo: texto(x.motivo, 200), semana: esFecha(x.semana) ? x.semana : undefined }))
+      .slice(-50),
     // Hitos cuya celebración ya viste.
     celebrados: Array.isArray(d.celebrados) ? [...new Set(d.celebrados.filter((x) => typeof x === 'string'))].slice(-200) : [],
     // Parejas «idA|idB» que marcaste como «No son el mismo» en Posibles duplicados.
