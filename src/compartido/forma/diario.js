@@ -1,7 +1,7 @@
 // El diario de comidas: totales del día, objetivo según sea día de entreno o de
 // descanso, sugerencias de comidas habituales (Quick Meals), «Qué puedo comer»
 // sin IA y los avisos del día.
-import { calcularPlan } from './calculos.js';
+import { calcularPlan, kcalPasos, pasosDe } from './calculos.js';
 import { sumarDias, diasEntre, minutosDe, fechaISO } from './fechas.js';
 import { NUTRIENTES } from './datos.js';
 import { pesoDeReferencia } from './progreso.js';
@@ -58,14 +58,28 @@ export function cardioExtraDelDia(datos, fecha) {
   return Math.max(0, Math.round(netas - incluido));
 }
 
-export function objetivoDelDia(datos, fecha, plan = planActual(datos, fecha)) {
+// Pasos de Apple Salud: si ese día llegaron, cuentan los reales en vez de los
+// del perfil (la diferencia en kcal). Hoy el día va a medias: solo suma cuando
+// ya pasas de lo habitual, nunca resta.
+export function pasosExtraDelDia(datos, fecha, hoy = fechaISO()) {
+  const dia = datos.dias?.[fecha];
+  if (!Number.isFinite(dia?.pasos) || !datos.perfil) return { kcal: 0, pasos: null, fuente: null };
+  const peso = pesoDeReferencia(datos, fecha) ?? datos.perfil.peso ?? 75;
+  const kcal = Math.round(kcalPasos(dia.pasos, peso) - kcalPasos(pasosDe(datos.perfil), peso));
+  return { kcal: fecha >= hoy ? Math.max(0, kcal) : kcal, pasos: dia.pasos, fuente: dia.pasosFuente ?? 'apple_salud' };
+}
+
+export function objetivoDelDia(datos, fecha, plan = planActual(datos, fecha), hoy = fechaISO()) {
   if (!plan) return null;
   const entreno = esDiaEntreno(datos, fecha);
   const base = entreno ? plan.entreno : plan.descanso;
   const cardioExtra = cardioExtraDelDia(datos, fecha);
-  // Las kcal de más van a hidratos (el combustible del cardio).
-  if (cardioExtra) return { ...base, kcal: base.kcal + cardioExtra, hidratos: Math.round((base.hidratos ?? 0) + cardioExtra / 4), entreno, cardioExtra };
-  return { ...base, entreno, cardioExtra: 0 };
+  const pasos = pasosExtraDelDia(datos, fecha, hoy);
+  const extra = cardioExtra + pasos.kcal;
+  const info = { entreno, cardioExtra, pasosExtra: pasos.kcal, pasos: pasos.pasos, pasosFuente: pasos.fuente };
+  // Las kcal de más (o de menos) van a hidratos (el combustible de la actividad).
+  if (extra) return { ...base, kcal: base.kcal + extra, hidratos: Math.max(0, Math.round((base.hidratos ?? 0) + extra / 4)), ...info };
+  return { ...base, ...info };
 }
 
 export function resumenDia(datos, fecha) {

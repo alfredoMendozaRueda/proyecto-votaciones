@@ -16,6 +16,7 @@ import { crearImportador } from './importador.js';
 import { crearMisAlimentos } from './mis-alimentos.js';
 import { crearBiblioteca } from './biblioteca.js';
 import { crearEditorSesion } from './editor-sesion.js';
+import { crearIntegraciones } from './integraciones.js';
 import { aplicarImportacion } from '../../compartido/forma/importar.js';
 
 const VISTAS = [
@@ -92,7 +93,35 @@ export async function montarForma({ raiz, api, salir }) {
       estado.datos = normalizarForma(r.datos);
       return r.resumen;
     },
+    // Vuelve a leer lo guardado (lo que otra parte acaba de escribir), sin perder el entreno a medias.
+    async recargar() {
+      await guardando;
+      const nuevos = normalizarForma(await api.forma.leer());
+      estado.datos = { ...nuevos, activa: estado.datos.activa ?? nuevos.activa };
+    },
+    // Apple Salud: recoge del buzón del servidor lo que mandó el Atajo (como mucho
+    // cada 2 minutos, salvo «Recoger ahora»), lo aplica y repinta.
+    async recogerSalud({ avisar = false, siempre = false } = {}) {
+      if (!api.forma.salud || (!siempre && Date.now() - ultimaRecogida < 120_000)) return null;
+      ultimaRecogida = Date.now();
+      try {
+        await guardando;
+        const r = await api.forma.salud.recoger();
+        if (r?.recogidas) {
+          const nuevos = normalizarForma(r.datos ?? (await api.forma.leer()));
+          estado.datos = { ...nuevos, activa: estado.datos.activa ?? nuevos.activa };
+          const partes = [r.pasos ? `${r.pasos} día${r.pasos > 1 ? 's' : ''} de pasos` : '', r.pesajes ? `${r.pesajes} pesaje${r.pesajes > 1 ? 's' : ''}` : ''].filter(Boolean);
+          if (partes.length) tostada(`Apple Salud: ${partes.join(' y ')}.`);
+          if (!raiz.hidden && !hojas.abierta()) pintar();
+        }
+        return r;
+      } catch (e) {
+        if (avisar) tostada(`No se ha podido recoger: ${e.message}`);
+        return null;
+      }
+    },
   };
+  let ultimaRecogida = 0;
   const anadir = crearAnadir(ctx);
   const importador = crearImportador(ctx);
   const misAlimentos = crearMisAlimentos(ctx);
@@ -100,6 +129,8 @@ export async function montarForma({ raiz, api, salir }) {
   ctx.abrirBiblioteca = () => biblioteca.abrir();
   const editorSesion = crearEditorSesion(ctx);
   ctx.editarSesion = (sid) => editorSesion.abrir(sid);
+  const integraciones = crearIntegraciones(ctx);
+  ctx.panelIntegraciones = () => integraciones.panel();
 
   const vistas = { diario: vistaDiario(ctx), entreno: vistaEntreno(ctx), progreso: vistaProgreso(ctx), perfil: vistaPerfil(ctx) };
   const bienvenida = vistaBienvenida(ctx);
@@ -167,7 +198,7 @@ export async function montarForma({ raiz, api, salir }) {
     },
   };
 
-  const modulos = () => [...Object.values(vistas), bienvenida, anadir, importador, misAlimentos, biblioteca, editorSesion];
+  const modulos = () => [...Object.values(vistas), bienvenida, anadir, importador, misAlimentos, biblioteca, editorSesion, integraciones];
   const buscarAccion = (el) => {
     const a = el.dataset.a;
     if (acciones[a]) return acciones[a];
@@ -245,12 +276,18 @@ export async function montarForma({ raiz, api, salir }) {
   }, 60_000);
 
   pintar();
+  // Lo que haya mandado el Atajo de Apple Salud: al arrancar, al abrir Forma y al volver a la app.
+  if (!raiz.hidden) ctx.recogerSalud();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !raiz.hidden) ctx.recogerSalud();
+  });
 
   return {
     mostrar() {
       raiz.hidden = false;
       if (estado.fecha !== fechaISO() && estado.fecha === ultimoHoy) estado.fecha = fechaISO();
       pintar();
+      ctx.recogerSalud();
     },
     ocultar() {
       hojas.cerrarTodas();

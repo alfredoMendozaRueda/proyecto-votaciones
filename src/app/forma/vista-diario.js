@@ -1,6 +1,8 @@
 // Diario: el medidor de kcal, las barras de macros, las comidas del día por
 // momentos, el agua, los suplementos, las sugerencias de comidas habituales y
 // «Qué puedo comer».
+import { pasosDe } from '../../compartido/forma/calculos.js';
+import { nombreFuente } from '../../compartido/forma/salud.js';
 import { resumenDia, comidasHabituales, avisosDelDia, quePuedoComer, nutrientesDe, totales, esDiaEntreno } from '../../compartido/forma/diario.js';
 import { apuntar, editarRegistro, borrarRegistros, sumarAgua, alternarSuplemento, marcarEntreno, descartarSugerencia, verAviso, copiarDia, guardarPlantilla, contarUsoIA } from '../../compartido/forma/acciones.js';
 import { peticionIdeas, leerIdeas, puedeUsarIA } from '../../compartido/forma/ia.js';
@@ -48,7 +50,22 @@ export function vistaDiario(ctx) {
         <button type="button" class="f-tipo-dia" data-a="tipo-dia" aria-pressed="${o.entreno}" title="Cambiar el tipo de día"><i></i>${o.entreno ? 'Día de entreno' : 'Descanso'}</button>
         <div class="f-dato"><span>Objetivo</span><strong>${num(o.kcal)}</strong></div>
       </div>
+      ${lineaPasos(r)}
     </section>`;
+  }
+
+  // Pasos de Apple Salud: sustituyen la estimación del perfil en el objetivo.
+  function lineaPasos(r) {
+    const o = r.objetivo;
+    if (!Number.isFinite(o.pasos)) return '';
+    const habituales = pasosDe(ctx.datos.perfil);
+    const efecto = o.pasosExtra
+      ? `${o.pasosExtra > 0 ? '+' : '−'}${num(Math.abs(o.pasosExtra))} kcal al objetivo`
+      : r.fecha >= ctx.hoy() && o.pasos < habituales
+        ? `suma cuando pases de tus ${num(habituales)} habituales`
+        : 'como tus pasos habituales';
+    return `<p class="f-pasos" title="Los pasos reales de Apple Salud cuentan en vez de la estimación de tu perfil (${num(habituales)} al día).">
+      <span aria-hidden="true">👣</span> <b>${num(o.pasos)}</b> pasos · ${escapar(nombreFuente(o.pasosFuente))}<span class="f-pasos__efecto">${efecto}</span></p>`;
   }
 
   function comidas(r) {

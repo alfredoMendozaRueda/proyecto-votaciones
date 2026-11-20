@@ -2968,3 +2968,129 @@ html[data-transformacion='kitsune']::view-transition-new(root) {
 .f-ie__fila--editar {
   grid-template-columns: 16px minmax(0, 1.55fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 0.7fr) 22px 22px;
 }
+
+/* ---------- Apple Salud: pasos, origen de los pesajes e integraciones ---------- */
+
+.f-pasos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--f-linea);
+  color: var(--f-t2);
+  font-size: 13px;
+}
+
+.f-pasos b {
+  color: var(--f-texto);
+  font-variant-numeric: tabular-nums;
+}
+
+.f-pasos__efecto {
+  margin-left: auto;
+  color: var(--f-hielo);
+  font-size: 12px;
+}
+
+.f-origen {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--f-linea-2);
+  border-radius: 6px;
+  color: var(--f-t2);
+  font-size: 10.5px;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
+.f-item--secundario {
+  min-height: 44px;
+  padding-left: 30px;
+  opacity: 0.72;
+}
+
+.f-item--secundario .f-item__nombre {
+  font-size: 13.5px;
+}
+
+.f-codigo {
+  display: block;
+  flex: none;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--f-linea);
+  border-radius: var(--f-r-s);
+  background: var(--f-capa-2);
+  color: var(--f-texto);
+  font: 12.5px/1.5 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: all;
+  -webkit-user-select: all;
+}
+
+pre.f-codigo {
+  word-break: normal;
+}
+
+.f-guia {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.f-guia__paso {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.f-guia__n {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--f-capa-3);
+  color: var(--f-azul-2);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.f-guia code,
+.f-guia__notas code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--f-capa-2);
+  font: 12px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  word-break: break-all;
+}
+
+.f-guia__notas {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.f-etiqueta b .f-ic,
+.f-etiqueta b svg,
+.f-item__nombre > svg {
+  display: inline-block;
+  margin-right: 3px;
+  vertical-align: -1px;
+}

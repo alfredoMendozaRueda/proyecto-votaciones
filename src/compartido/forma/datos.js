@@ -398,11 +398,34 @@ export function normalizarForma(d = {}) {
     dias: Object.fromEntries(
       Object.entries(d.dias && typeof d.dias === 'object' ? d.dias : {})
         .filter(([f, v]) => esFecha(f) && v && typeof v === 'object')
-        .map(([f, v]) => [f, { agua: num(v.agua, 0, 20000) ?? 0, suplementos: Array.isArray(v.suplementos) ? v.suplementos.filter((x) => typeof x === 'string') : [], entreno: typeof v.entreno === 'boolean' ? v.entreno : undefined }]),
+        .map(([f, v]) => [
+          f,
+          sinVacios({
+            agua: num(v.agua, 0, 20000) ?? 0,
+            suplementos: Array.isArray(v.suplementos) ? v.suplementos.filter((x) => typeof x === 'string') : [],
+            entreno: typeof v.entreno === 'boolean' ? v.entreno : undefined,
+            // Pasos del día que mandó Apple Salud (el total; reemplaza la estimación del perfil).
+            pasos: num(v.pasos, 0, 100000),
+            pasosFuente: num(v.pasos, 0, 100000) !== undefined ? fuenteDe(v.pasosFuente) : undefined,
+          }),
+        ]),
     ),
+    // Pesos: los que apuntas (uno por día) y los pesajes de la báscula por Apple
+    // Salud (con su hora, % de grasa y masa magra; puede haber varios en un día).
     pesos: lista(d.pesos)
       .filter((p) => esFecha(p.fecha) && num(p.kg, 20, 400) !== undefined)
-      .map((p) => ({ id: conId(p, 'w'), fecha: p.fecha, kg: p.kg })),
+      .map((p) =>
+        sinVacios({
+          id: conId(p, 'w'),
+          fecha: p.fecha,
+          kg: p.kg,
+          hora: /^\d{2}:\d{2}$/.test(p.hora) ? p.hora : undefined,
+          momento: num(p.momento, 0),
+          fuente: p.fuente ? fuenteDe(p.fuente) : undefined,
+          grasa: num(p.grasa, 3, 70),
+          magra: num(p.magra, 5, 300),
+        }),
+      ),
     medidas: lista(d.medidas)
       .filter((m) => esFecha(m.fecha) && num(m.cm, 1, 400) !== undefined && texto(m.tipo, 30))
       .map((m) => ({ id: conId(m, 'v'), fecha: m.fecha, tipo: texto(m.tipo, 30), cm: m.cm })),
@@ -449,8 +472,41 @@ export function normalizarForma(d = {}) {
     resumenVisto: esFecha(d.resumenVisto) ? d.resumenVisto : null,
     // Parejas «idA|idB» que marcaste como «No son el mismo» en Posibles duplicados.
     noDuplicados: Array.isArray(d.noDuplicados) ? [...new Set(d.noDuplicados.filter((x) => typeof x === 'string' && x.includes('|')))].slice(-500) : [],
+    // Apple Salud: la llave del buzón (la privada no sale de tus dispositivos) y
+    // lo último que llegó del Atajo.
+    integracion: normalizarIntegracion(d.integracion),
     avisosVistos: Array.isArray(d.avisosVistos) ? d.avisosVistos.filter((x) => typeof x === 'string').slice(-100) : [],
   };
+}
+
+const fuenteDe = (f) => (typeof f === 'string' && /^[a-z0-9_]{1,30}$/.test(f) ? f : 'apple_salud');
+
+function normalizarIntegracion(x) {
+  if (!x || typeof x !== 'object') return {};
+  const salida = {};
+  const jwk = x.privada;
+  if (typeof x.publica === 'string' && /^[A-Za-z0-9_-]{80,100}$/.test(x.publica) && jwk && typeof jwk === 'object' && jwk.kty === 'EC' && typeof jwk.d === 'string') {
+    salida.publica = x.publica;
+    salida.privada = { kty: 'EC', crv: 'P-256', x: String(jwk.x), y: String(jwk.y), d: String(jwk.d), ext: true };
+  }
+  const u = x.ultima;
+  if (u && typeof u === 'object' && num(u.recibido, 0) !== undefined) {
+    salida.ultima = sinVacios({
+      recibido: u.recibido,
+      aplicado: num(u.aplicado, 0),
+      fuente: fuenteDe(u.fuente),
+      dias: lista(u.dias)
+        .filter((dd) => esFecha(dd.fecha) && num(dd.pasos, 0, 100000) !== undefined)
+        .map((dd) => ({ fecha: dd.fecha, pasos: dd.pasos }))
+        .slice(0, 31),
+      pesaje:
+        u.pesaje && esFecha(u.pesaje.fecha) && num(u.pesaje.kg, 20, 400) !== undefined
+          ? sinVacios({ fecha: u.pesaje.fecha, hora: /^\d{2}:\d{2}$/.test(u.pesaje.hora) ? u.pesaje.hora : undefined, momento: num(u.pesaje.momento, 0), kg: u.pesaje.kg, grasa: num(u.pesaje.grasa, 3, 70), magra: num(u.pesaje.magra, 5, 300) })
+          : undefined,
+      resultado: ['guardado', 'duplicado', 'no_enviado'].includes(u.resultado) ? u.resultado : undefined,
+    });
+  }
+  return salida;
 }
 
 export const ejercicio = (datos, eid) => datos.ejercicios.find((e) => e.id === eid) ?? { id: eid, nombre: 'Ejercicio', grupo: 'Otro', secundarios: [], equipo: 'otro', unilateral: false, principal: false, alias: [], oculto: false };

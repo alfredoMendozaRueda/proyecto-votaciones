@@ -53,6 +53,9 @@ const PASOS_BASE = 3000;
 const KCAL_POR_PASO_Y_KG = 0.0005;
 const MET_CARDIO_EXTRA = 7;
 
+// kcal que suman los pasos de un día (por encima de los ~3.000 que ya cuenta el trabajo).
+export const kcalPasos = (pasos, peso) => Math.max(0, pasos - PASOS_BASE) * peso * KCAL_POR_PASO_Y_KG;
+
 export const pasosDe = (perfil) => (Number.isFinite(perfil?.pasosExactos) && perfil.pasosExactos > 0 ? perfil.pasosExactos : (PASOS.find((p) => p.id === perfil?.pasos)?.pasos ?? 6500));
 
 // Metabolismo basal: Katch-McArdle si sabes tu % de grasa; si no, Mifflin-St Jeor.
@@ -74,7 +77,7 @@ export function gastoDiario(perfil, hoy = fechaISO()) {
   const edad = edadEn(perfil.nacimiento, hoy) ?? 30;
   const basal = metabolismoBasal({ sexo: perfil.sexo, peso, altura: perfil.altura, edad, grasa: perfil.grasa });
   const factor = TRABAJOS.find((t) => t.id === perfil.trabajo)?.factor ?? 1.2;
-  const pasos = Math.max(0, pasosDe(perfil) - PASOS_BASE) * peso * KCAL_POR_PASO_Y_KG;
+  const pasos = kcalPasos(pasosDe(perfil), peso);
   const cardioDiario = kcalEjercicio(MET_CARDIO_EXTRA, peso, (perfil.cardioSemana ?? 0) / 7);
   const descanso = basal.kcal * factor + pasos + cardioDiario;
   const met = TIPOS_ENTRENO.find((t) => t.id === perfil.tipoEntreno)?.met ?? 5;

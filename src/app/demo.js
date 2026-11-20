@@ -581,11 +581,77 @@ export function crearDemo() {
     // Forma de ejemplo: tres semanas y media de comidas, pesos y entrenos.
     forma: (() => {
       let guardado = null;
-      return {
-        leer: async () => (guardado ? JSON.parse(guardado) : (await import('./forma/demo-forma.js')).formaDemo()),
-        guardar: async (datos) => {
-          guardado = JSON.stringify(datos);
+      const leer = async () => (guardado ? JSON.parse(guardado) : (await import('./forma/demo-forma.js')).formaDemo());
+      const guardar = async (datos) => {
+        guardado = JSON.stringify(datos);
+      };
+      // Apple Salud en la demo: un «servidor» en memoria con el mismo cifrado.
+      const servidorSalud = { tokens: [], buzon: [], publica: null, vistos: new Set() };
+      const clienteDemo = {
+        url: 'https://kitsune.ejemplo.workers.dev',
+        urlSalud: () => 'https://kitsune.ejemplo.workers.dev/integraciones/salud',
+        saludTokens: async () => ({ tokens: servidorSalud.tokens.map((t) => ({ ...t, token: undefined })), llave: servidorSalud.publica, pendientes: servidorSalud.buzon.length }),
+        async crearTokenSalud(nombre, publica) {
+          servidorSalud.publica = publica;
+          const t = { id: `t${Date.now().toString(36)}`, nombre: nombre || 'Atajo iPhone', creado_en: Date.now(), ultimo_uso_en: null, revocado: false };
+          const token = `forma_${Array.from(crypto.getRandomValues(new Uint8Array(43)), (b) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'[b % 64]).join('').slice(0, 43)}`;
+          servidorSalud.tokens.unshift({ ...t, token });
+          return { token, ...t };
         },
+        async revocarTokenSalud(id) {
+          const t = servidorSalud.tokens.find((x) => x.id === id);
+          if (t) t.revocado = true;
+          return { ok: true };
+        },
+        saludBuzon: async () => ({ entregas: servidorSalud.buzon }),
+        async saludRecogidas(ids) {
+          servidorSalud.buzon = servidorSalud.buzon.filter((e) => !ids.includes(e.id));
+          return { ok: true };
+        },
+      };
+      return {
+        leer,
+        guardar,
+        salud: (() => {
+          let api = null;
+          const cargar = async () => {
+            if (!api) {
+              const { crearApiSalud } = await import('../compartido/forma/salud.js');
+              const { normalizarForma } = await import('../compartido/forma/datos.js');
+              api = crearApiSalud({ cliente: async () => clienteDemo, vinculado: async () => true, leer: async () => normalizarForma(await leer()), guardar });
+            }
+            return api;
+          };
+          return {
+            estado: async () => (await cargar()).estado(),
+            crearToken: async (nombre) => (await cargar()).crearToken(nombre),
+            revocar: async (id) => (await cargar()).revocar(id),
+            recoger: async () => (await cargar()).recoger(),
+            // Solo en la demo: hace lo mismo que el Atajo (POST /integraciones/salud).
+            async simularAtajo(cuerpo, ahora = Date.now()) {
+              const { validarSalud, cifrarParaBuzon } = await import('../compartido/forma/salud.js');
+              if (!servidorSalud.publica) throw new Error('Genera antes un token.');
+              servidorSalud.tokens.forEach((t) => !t.revocado && (t.ultimo_uso_en = ahora));
+              const v = validarSalud(cuerpo, { zona: 'Europe/Madrid', ahora });
+              if (v.errores.length) return { estado: 400, ...v.errores[0] };
+              const meter = async (contenido) => servidorSalud.buzon.push({ id: `s${Math.random().toString(36).slice(2, 10)}`, recibido: ahora, sobre: await cifrarParaBuzon(servidorSalud.publica, contenido) });
+              for (const d of v.dias) await meter({ fuente: v.fuente, dias: [d] });
+              let pesaje = 'no_enviado';
+              if (v.pesaje) {
+                const minuto = Math.floor(v.pesaje.momento / 60_000);
+                const clave = `${minuto}|${v.pesaje.kg}`;
+                if ([minuto - 1, minuto, minuto + 1].some((m) => servidorSalud.vistos.has(`${m}|${v.pesaje.kg}`))) pesaje = 'duplicado';
+                else {
+                  servidorSalud.vistos.add(clave);
+                  pesaje = 'guardado';
+                  await meter({ fuente: v.fuente, pesaje: v.pesaje });
+                }
+              }
+              await meter({ tipo: 'resumen', fuente: v.fuente, dias: v.dias, pesaje: v.pesaje, resultado: pesaje });
+              return { estado: 200, pasos_guardados: v.dias.length, pesaje };
+            },
+          };
+        })(),
         async importar(plan) {
           const [{ aplicarImportacion }, { normalizarForma }, { fechaISO }] = await Promise.all([import('../compartido/forma/importar.js'), import('../compartido/forma/datos.js'), import('../compartido/forma/fechas.js')]);
           const actual = normalizarForma(guardado ? JSON.parse(guardado) : (await import('./forma/demo-forma.js')).formaDemo());

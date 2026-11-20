@@ -1,12 +1,13 @@
 // Progreso: peso con la media de 7 días, ritmo real frente al previsto, fecha
 // estimada, resumen semanal, TDEE adaptativo, avisos, hitos, medidas y fotos.
-import { serieMedia, pesoDeReferencia, ritmoReal, avisosProgreso, estadoHito, hitosSugeridos, resumenSemanal, tdeeAdaptativo, serieMedida, pesosPorDia } from '../../compartido/forma/progreso.js';
+import { serieMedia, pesoDeReferencia, ritmoReal, avisosProgreso, estadoHito, hitosSugeridos, resumenSemanal, tdeeAdaptativo, serieMedida, pesosPorDia, serieComposicion, pesoDelDia, pesajesPorFecha } from '../../compartido/forma/progreso.js';
 import { apuntarPeso, apuntarMedida, anadirHito, borrarHito, verAviso, borrarPeso } from '../../compartido/forma/acciones.js';
 import { calcularPlan, fechaEstimada, deKg, aKg, unidadPeso, deCm, aCm, unidadLongitud, KCAL_POR_KG_GRASA } from '../../compartido/forma/calculos.js';
 import { objetivoDelDia, perfilActual } from '../../compartido/forma/diario.js';
 import { ejercicio } from '../../compartido/forma/datos.js';
 import { lunesDe, sumarDias, fechaLarga, fechaCorta, nombreDia, aDia } from '../../compartido/forma/fechas.js';
 import { ic, escapar, num, signo, grafica, minigrafica, fotoReducida } from './ui.js';
+import { nombreFuente } from '../../compartido/forma/salud.js';
 import { listarFotos, guardarFoto, borrarFoto } from './fotos.js';
 
 export function vistaProgreso(ctx) {
@@ -38,7 +39,7 @@ export function vistaProgreso(ctx) {
         <div class="f-con-unidad" data-unidad="${unidadPeso(u())}" style="flex:1"><input class="f-entrada" name="kg" type="text" inputmode="decimal" autocomplete="off" step="0.05" placeholder="${ultimo ? P(ultimo.kg) : 'Tu peso'}" aria-label="Peso de hoy" data-peso-hoy></div>
         <button type="submit" class="f-boton f-boton--azul">Apuntar hoy</button>
       </form>
-      <p class="f-tenue" style="margin-bottom:12px">Mejor por la mañana, en ayunas y después del baño.${ultimo?.fecha === hoy ? ` Hoy: ${P(ultimo.kg, 2)} ${unidadPeso(u())}.` : ''}</p>
+      <p class="f-tenue" style="margin-bottom:12px">Mejor por la mañana, en ayunas y después del baño.${ultimo?.fecha === hoy ? ` Hoy: ${P(ultimo.kg, 2)} ${unidadPeso(u())}${textoOrigen(pesoDelDia(pesajesPorFecha(d).get(hoy)))}.` : ''}</p>
       ${grafica({
         series: [
           { puntos: ultimos.map((p) => ({ x: p.fecha, y: deKg(p.kg, u()) })), sinLinea: true, puntosVisibles: true },
@@ -53,6 +54,32 @@ export function vistaProgreso(ctx) {
         <div class="f-kpi"><span>Previsto</span><b>${signo(deKg(previsto, u()), 2)}</b><small class="f-tenue">${unidadPeso(u())}/sem</small></div>
         <div class="f-kpi"><span>Llegarías</span><b style="font-size:14px">${real ? escapar(fechaCorta(real.fecha)) : plan.estimacion ? escapar(fechaCorta(plan.estimacion.fecha)) : '—'}</b><small class="f-tenue">${real ? 'a tu ritmo real' : 'según el plan'}</small></div>
       </div>
+    </section>`;
+  }
+
+  // «· Apple Salud 08:12» para los pesajes de la báscula.
+  const textoOrigen = (p) => (p?.fuente ? ` · ${nombreFuente(p.fuente)}${p.hora ? ` ${p.hora}` : ''}` : '');
+
+  // % de grasa y masa magra de la báscula (Apple Salud): la tendencia es lo que vale.
+  function panelComposicion() {
+    const d = ctx.datos;
+    const serie = serieComposicion(d).filter((p) => p.fecha >= sumarDias(ctx.hoy(), -90));
+    if (!serie.length) return '';
+    const ultima = serie.at(-1);
+    const primera = serie[0];
+    const grasa = serie.filter((p) => Number.isFinite(p.grasa));
+    const magra = serie.filter((p) => Number.isFinite(p.magra));
+    const dif = (k) => (serie.length > 1 && Number.isFinite(primera[k]) && Number.isFinite(ultima[k]) ? ultima[k] - primera[k] : null);
+    return `<section class="f-panel f-columna" data-panel="composicion">
+      <div class="f-etiqueta"><span>Composición · báscula</span><b>${escapar(fechaCorta(ultima.fecha))}</b></div>
+      <div class="f-kpis">
+        <div class="f-kpi"><span>% de grasa</span><b>${Number.isFinite(ultima.grasa) ? `${num(ultima.grasa, 1)} %` : '—'}</b><small class="f-tenue">${dif('grasa') !== null ? `${signo(dif('grasa'), 1)} puntos` : 'sin tendencia aún'}</small></div>
+        <div class="f-kpi"><span>Masa magra</span><b>${Number.isFinite(ultima.magra) ? `${P(ultima.magra)} ${unidadPeso(u())}` : '—'}</b><small class="f-tenue">${dif('magra') !== null ? `${signo(deKg(dif('magra'), u()), 1)} ${unidadPeso(u())}` : 'sin tendencia aún'}</small></div>
+      </div>
+      ${grasa.length > 1 ? `<span class="f-etiqueta" style="margin-top:6px">% de grasa</span>${grafica({ series: [{ puntos: grasa.map((p) => ({ x: p.fecha, y: p.grasa })), puntosVisibles: true }], alto: 120 })}` : ''}
+      ${magra.length > 1 ? `<span class="f-etiqueta" style="margin-top:6px">Masa magra (${unidadPeso(u())})</span>${grafica({ series: [{ puntos: magra.map((p) => ({ x: p.fecha, y: deKg(p.magra, u()) })), puntosVisibles: true, clase: 'hielo' }], alto: 120 })}` : ''}
+      ${grasa.length < 2 && magra.length < 2 ? '<p class="f-tenue">Con dos días de báscula verás aquí las gráficas de la tendencia.</p>' : ''}
+      <p class="f-tenue">El % de grasa de una báscula de bioimpedancia es orientativo: cambia con el agua, la hora o si acabas de entrenar. Fíjate en la tendencia de semanas, no en el dato de un día.</p>
     </section>`;
   }
 
@@ -189,6 +216,7 @@ export function vistaProgreso(ctx) {
     return `<div class="f-vista">
       <h1 class="f-titulo">Progreso</h1>
       ${panelPeso()}
+      ${panelComposicion()}
       ${panelAdaptativo()}
       ${panelAvisos()}
       ${panelResumen()}
@@ -295,10 +323,24 @@ export function vistaProgreso(ctx) {
       ctx.repintar();
     },
     'pesos-lista': () => {
-      const lista = [...ctx.datos.pesos].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).slice(0, 60);
+      // Por días; en cada día, primero el que cuenta y luego los secundarios.
+      const porDia = [...pesajesPorFecha(ctx.datos)].sort(([a], [b]) => (a < b ? 1 : -1)).slice(0, 60);
+      const fila = (p, principal) => {
+        const extra = [Number.isFinite(p.grasa) ? `${num(p.grasa, 1)} % grasa` : '', Number.isFinite(p.magra) ? `${P(p.magra)} ${unidadPeso(u())} magra` : ''].filter(Boolean).join(' · ');
+        return `<div class="f-item${principal ? '' : ' f-item--secundario'}">
+          <span class="f-item__texto"><span class="f-item__nombre">${P(p.kg, 2)} ${unidadPeso(u())}${p.fuente ? `<span class="f-origen" title="Llegó de ${escapar(nombreFuente(p.fuente))}">${ic('salud', 11)}${escapar(nombreFuente(p.fuente))}</span>` : ''}</span>
+          <span class="f-item__detalle">${principal ? escapar(nombreDia(p.fecha, ctx.hoy())) : 'Secundario'}${p.hora ? ` · ${p.hora}` : ''}${extra ? ` · ${extra}` : ''}</span></span>
+          <button type="button" class="f-icono-boton" style="border:0;background:none" data-a="peso-borrar" data-id="${p.id}" aria-label="Borrar">${ic('basura', 15)}</button></div>`;
+      };
       ctx.hojas.abrir(
         `<div class="f-hoja__titulo"><h2>Pesos apuntados</h2></div>
-         <div class="f-lista">${lista.map((p) => `<div class="f-item"><span class="f-item__texto"><span class="f-item__nombre">${P(p.kg, 2)} ${unidadPeso(u())}</span><span class="f-item__detalle">${escapar(nombreDia(p.fecha, ctx.hoy()))}</span></span><button type="button" class="f-icono-boton" style="border:0;background:none" data-a="peso-borrar" data-id="${p.id}" aria-label="Borrar">${ic('basura', 15)}</button></div>`).join('')}</div>`,
+         <p class="f-tenue">Si un día hay varios pesajes de la báscula, cuenta el primero antes de las 12:00 (o el primero del día). El que apuntas a mano manda siempre.</p>
+         <div class="f-lista">${porDia
+           .map(([, lista]) => {
+             const principal = pesoDelDia(lista);
+             return [principal, ...lista.filter((p) => p !== principal).sort((a, b) => (a.momento ?? 0) - (b.momento ?? 0))].map((p) => fila(p, p === principal)).join('');
+           })
+           .join('')}</div>`,
         { clase: 'f-hoja--alta', titulo: 'Pesos' },
       );
     },

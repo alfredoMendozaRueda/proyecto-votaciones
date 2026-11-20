@@ -28,6 +28,7 @@ import { crearAlmacenGastos, normalizarGastos } from '../src/compartido/gastos.j
 import { crearAlmacenBiblia, normalizarBiblia, avisosBiblia } from '../src/compartido/biblia.js';
 import { normalizarForma } from '../src/compartido/forma/datos.js';
 import { aplicarImportacion } from '../src/compartido/forma/importar.js';
+import { crearApiSalud } from '../src/compartido/forma/salud.js';
 import { fechaISO as fechaHoy } from '../src/compartido/forma/fechas.js';
 import { hablarVoiceStudio, vocesVoiceStudio } from './voicestudio.js';
 import { transcribirGroq } from '../src/compartido/dictado.js';
@@ -561,6 +562,20 @@ function registrarCanales() {
   manejar('forma:guardar', async (datos) => {
     await guardarForma(normalizarForma(datos));
     tocado();
+  });
+  // Apple Salud: tokens del Atajo y el buzón cifrado del servidor.
+  const salud = crearApiSalud({
+    cliente: async () => clienteServidor(),
+    vinculado: async () => Boolean(leerSecreto('servidorToken')),
+    leer: async () => normalizarForma((await leerForma()) ?? {}),
+    guardar: async (datos) => {
+      await guardarForma(normalizarForma(datos));
+      tocado();
+    },
+  });
+  manejar('forma:salud', async (metodo, ...args) => {
+    if (!['estado', 'crearToken', 'revocar', 'recoger'].includes(metodo)) throw new Error('Acción no válida.');
+    return salud[metodo](...args);
   });
   // Importar desde JSON: se vuelve a validar aquí, con los datos guardados, y se
   // escribe de una vez (si algo no vale, no se guarda nada).

@@ -1,6 +1,6 @@
 // Perfil: tu plan explicado, editar los datos (con recálculo), fijar objetivos
 // a mano, momentos del día, suplementos, medidas, gimnasio (barra, discos,
-// descanso), IA, atajos del iPhone, exportar y borrar.
+// descanso), IA, integraciones (Apple Salud), atajos del iPhone, exportar y borrar.
 import { calcularPlan, deKg, unidadPeso, OBJETIVOS, TRABAJOS } from '../../compartido/forma/calculos.js';
 import { perfilActual } from '../../compartido/forma/diario.js';
 import { normalizarForma, id as nuevoId, ejercicio } from '../../compartido/forma/datos.js';
@@ -109,6 +109,8 @@ export function vistaPerfil(ctx) {
         </div>
       </section>
 
+      ${ctx.panelIntegraciones?.() ?? ''}
+
       <section class="f-panel f-columna">
         <div class="f-etiqueta"><span>Atajos en el iPhone</span></div>
         <p class="f-explica">En la app <b style="color:var(--f-texto)">Atajos</b> → Nuevo atajo → «Abrir URL» con una de estas direcciones, y añádelo a la pantalla de inicio. En Android, mantén pulsado el icono de Kitsune.</p>
@@ -156,9 +158,11 @@ export function vistaPerfil(ctx) {
     const { zipSync, strToU8 } = await import('fflate');
     const nombreEj = (eid) => ejercicio(d, eid).nombre;
     const archivos = {
-      'forma.json': strToU8(JSON.stringify({ ...d, activa: undefined }, null, 2)),
+      // Sin la llave privada del buzón de Apple Salud: no sale de tus dispositivos.
+      'forma.json': strToU8(JSON.stringify({ ...d, activa: undefined, integracion: { ultima: d.integracion?.ultima } }, null, 2)),
       'comidas.csv': strToU8(csv([['fecha', 'momento', 'alimento', 'gramos', 'kcal', 'proteina', 'hidratos', 'grasa', 'fibra', 'estimado'], ...d.registros.map((r) => [r.fecha, r.momento, r.nombre, r.gramos, r.kcal, r.proteina, r.hidratos, r.grasa, r.fibra, r.estimado ? 'sí' : ''])])),
-      'pesos.csv': strToU8(csv([['fecha', 'kg'], ...d.pesos.map((p) => [p.fecha, p.kg])])),
+      'pesos.csv': strToU8(csv([['fecha', 'hora', 'kg', 'grasa_pct', 'masa_magra_kg', 'origen'], ...d.pesos.map((p) => [p.fecha, p.hora, p.kg, p.grasa, p.magra, p.fuente ?? 'manual'])])),
+      'pasos.csv': strToU8(csv([['fecha', 'pasos', 'origen'], ...Object.entries(d.dias).filter(([, v]) => Number.isFinite(v.pasos)).sort(([a], [b]) => (a < b ? -1 : 1)).map(([f, v]) => [f, v.pasos, v.pasosFuente])])),
       'medidas.csv': strToU8(csv([['fecha', 'medida', 'cm'], ...d.medidas.map((m) => [m.fecha, m.tipo, m.cm])])),
       'entrenos.csv': strToU8(csv([['fecha', 'sesion', 'ejercicio', 'kg', 'reps', 'rir', 'calentamiento'], ...d.sesiones.flatMap((s) => s.series.map((x) => [s.fecha, s.nombre, nombreEj(x.ejercicioId), x.kg, x.reps, x.rir, x.calentamiento ? 'sí' : '']))])),
       'alimentos.csv': strToU8(csv([['nombre', 'marca', 'unidad', 'racion', 'kcal_100', 'proteina_100', 'hidratos_100', 'grasa_100', 'fibra_100', 'codigo', 'origen'], ...d.alimentos.map((a) => [a.nombre, a.marca, a.unidad, a.racion, a.por100.kcal, a.por100.proteina, a.por100.hidratos, a.por100.grasa, a.por100.fibra, a.codigo, a.origen])])),

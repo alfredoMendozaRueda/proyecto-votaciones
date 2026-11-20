@@ -298,3 +298,36 @@ export async function recogerBuzonSalud({ cliente, leer, guardar, ahora = () => 
   }
   return { recogidas: hechas.length, pasos, pesajes, datos };
 }
+
+// ---------- API para la pantalla (igual en la web y en Windows) ----------
+// cliente(): ClienteServidor con el token del dispositivo. leer/guardar: Forma.
+export function crearApiSalud({ cliente, vinculado, leer, guardar }) {
+  // La llave del buzón: se crea la primera vez y viaja (cifrada) con tus datos.
+  async function llavePublica() {
+    const datos = await leer();
+    if (datos.integracion?.publica && datos.integracion?.privada) return datos.integracion.publica;
+    const par = await crearLlaveBuzon();
+    await guardar({ ...datos, integracion: { ...datos.integracion, ...par } });
+    return par.publica;
+  }
+  return {
+    async estado() {
+      if (!(await vinculado())) return { vinculado: false };
+      const c = await cliente();
+      const r = await c.saludTokens();
+      const propia = (await leer()).integracion?.publica ?? null;
+      return { vinculado: true, url: c.urlSalud(), tokens: r.tokens ?? [], pendientes: r.pendientes ?? 0, llaveDistinta: Boolean(r.llave && propia && r.llave !== propia) };
+    },
+    async crearToken(nombre) {
+      const c = await cliente();
+      return c.crearTokenSalud(nombre, await llavePublica());
+    },
+    async revocar(idToken) {
+      return (await cliente()).revocarTokenSalud(idToken);
+    },
+    async recoger() {
+      if (!(await vinculado())) return { recogidas: 0, pasos: 0, pesajes: 0, vinculado: false };
+      return recogerBuzonSalud({ cliente: await cliente(), leer, guardar });
+    },
+  };
+}

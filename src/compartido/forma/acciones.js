@@ -71,9 +71,10 @@ export const alternarSuplemento = (datos, fecha, sid) =>
 
 export const marcarEntreno = (datos, fecha, valor) => conDia(datos, fecha, () => ({ entreno: valor }));
 
-// Un peso por día: si ya había uno ese día, se cambia.
+// Un peso a mano por día: si ya habías apuntado uno ese día, se cambia (los
+// pesajes de la báscula se quedan, pero manda el tuyo).
 export function apuntarPeso(datos, fecha, kg) {
-  const pesos = [...datos.pesos.filter((p) => p.fecha !== fecha), { id: id('w'), fecha, kg: Math.round(kg * 100) / 100 }];
+  const pesos = [...datos.pesos.filter((p) => p.fecha !== fecha || p.fuente), { id: id('w'), fecha, kg: Math.round(kg * 100) / 100 }];
   return revisarHitos({ ...datos, pesos }, fechaISO()).datos;
 }
 export const borrarPeso = (datos, pid) => ({ ...datos, pesos: datos.pesos.filter((p) => p.id !== pid) });

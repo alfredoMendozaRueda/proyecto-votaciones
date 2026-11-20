@@ -16,6 +16,7 @@ import { crearAlmacenGastos, normalizarGastos } from '../../compartido/gastos.js
 import { crearAlmacenBiblia, normalizarBiblia, avisosBiblia } from '../../compartido/biblia.js';
 import { normalizarForma } from '../../compartido/forma/datos.js';
 import { aplicarImportacion } from '../../compartido/forma/importar.js';
+import { crearApiSalud } from '../../compartido/forma/salud.js';
 import { fechaISO as fechaHoy } from '../../compartido/forma/fechas.js';
 import {
   Sincronizador,
@@ -677,6 +678,16 @@ export function crearBackendWeb() {
         await guardarForma(normalizarForma(datos));
         tocado();
       },
+      // Apple Salud: tokens del Atajo y el buzón cifrado del servidor.
+      salud: crearApiSalud({
+        cliente: () => avisos.cliente(),
+        vinculado: () => avisos.vinculado().catch(() => false),
+        leer: async () => normalizarForma((await leerForma()) ?? {}),
+        guardar: async (datos) => {
+          await guardarForma(normalizarForma(datos));
+          tocado();
+        },
+      }),
       // Importar desde JSON: se revalida con lo guardado y se escribe de una vez.
       importar: async (plan) => {
         const actual = normalizarForma((await leerForma()) ?? {});

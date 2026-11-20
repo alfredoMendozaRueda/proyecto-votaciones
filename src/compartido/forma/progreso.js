@@ -5,11 +5,48 @@ import { esEfectiva, carga } from './entreno.js';
 
 const r = (n, d = 1) => Math.round(n * 10 ** d) / 10 ** d;
 
-// Un peso por día (el último que apuntaste ese día), ordenado.
-export function pesosPorDia(datos) {
+// Orden de los pesajes de un día por la hora (los que no la tienen, al final).
+const porHora = (a, b) => (a.momento ?? Infinity) - (b.momento ?? Infinity) || String(a.hora ?? '99').localeCompare(String(b.hora ?? '99'));
+
+// El peso que cuenta para un día. Si lo apuntaste a mano, ese (el último).
+// Si viene de la báscula: el primer pesaje antes de las 12:00 y, si no hay,
+// el primero del día. Los demás se guardan pero son secundarios.
+export function pesoDelDia(lista) {
+  if (!lista?.length) return null;
+  const manuales = lista.filter((p) => !p.fuente);
+  if (manuales.length) return manuales.at(-1);
+  const ordenados = [...lista].sort(porHora);
+  return ordenados.find((p) => p.hora && p.hora < '12:00') ?? ordenados[0];
+}
+
+// Pesajes agrupados por día: { fecha → [pesajes] }.
+export function pesajesPorFecha(datos) {
   const mapa = new Map();
-  for (const p of datos.pesos) mapa.set(p.fecha, p.kg);
-  return [...mapa].sort(([a], [b]) => (a < b ? -1 : 1)).map(([fecha, kg]) => ({ fecha, kg }));
+  for (const p of datos.pesos) mapa.set(p.fecha, [...(mapa.get(p.fecha) ?? []), p]);
+  return mapa;
+}
+
+// Un peso por día (el que cuenta, ver pesoDelDia), ordenado.
+export function pesosPorDia(datos) {
+  return [...pesajesPorFecha(datos)]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([fecha, lista]) => {
+      const p = pesoDelDia(lista);
+      return { fecha, kg: p.kg, ...(p.fuente ? { fuente: p.fuente } : {}) };
+    });
+}
+
+// % de grasa y masa magra de la báscula, uno por día (del pesaje que cuenta o,
+// si ese no los trae, del primero que sí).
+export function serieComposicion(datos) {
+  return [...pesajesPorFecha(datos)]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([fecha, lista]) => {
+      const principal = pesoDelDia(lista);
+      const conDatos = [principal, ...[...lista].sort(porHora)].find((p) => Number.isFinite(p.grasa) || Number.isFinite(p.magra));
+      return conDatos ? { fecha, grasa: conDatos.grasa ?? null, magra: conDatos.magra ?? null } : null;
+    })
+    .filter(Boolean);
 }
 
 // Media de los últimos 7 días naturales que acaban en «fecha», ignorando los días sin dato.
