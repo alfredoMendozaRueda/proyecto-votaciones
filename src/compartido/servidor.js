@@ -222,6 +222,32 @@ export class ClienteServidor {
   }
 
   // Dictado: el audio grabado → texto (Whisper en Workers AI).
+  // Apple Salud: tokens del Atajo (el token en claro solo llega al crearlo) y el buzón cifrado.
+  saludTokens() {
+    return this.pedir('/salud/tokens');
+  }
+
+  crearTokenSalud(nombre, publica) {
+    return this.pedir('/salud/tokens', { metodo: 'POST', cuerpo: { nombre, publica } });
+  }
+
+  revocarTokenSalud(id) {
+    return this.pedir(`/salud/tokens/${encodeURIComponent(id)}`, { metodo: 'DELETE' });
+  }
+
+  saludBuzon() {
+    return this.pedir('/salud/buzon');
+  }
+
+  saludRecogidas(ids) {
+    return this.pedir('/salud/buzon/recoger', { metodo: 'POST', cuerpo: { ids } });
+  }
+
+  // La dirección que llama el Atajo.
+  urlSalud() {
+    return `${this.url}/integraciones/salud`;
+  }
+
   async transcribir(audio, tipo) {
     let respuesta;
     try {

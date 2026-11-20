@@ -15,6 +15,7 @@ import { limpiarTranscripcion, MAX_AUDIO } from '../../src/compartido/dictado.js
 import { buscarEnPortales, detalleOferta, leerModalidades } from '../../src/compartido/portales.js';
 import { guardarAlerta, alertaPublica, alertaEmpleo, preparadas, recogerPreparadas } from './empleo.js';
 import { rutaSincro } from './sincro.js';
+import { rutaIntegraciones, rutaSaludDispositivo } from './salud.js';
 import { mesDe } from '../../src/compartido/consumo.js';
 
 const CORS = {
@@ -332,7 +333,9 @@ async function desvincular(n) {
     if (refresco) await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(refresco)}`, { method: 'POST' }).catch(() => {});
   }
   await n.db.batch(
-    ['dispositivos', 'recordatorios', 'automatizaciones', 'avisados', 'registro', 'pendientes', 'codigos', 'sincro', 'sincro_solicitudes'].map((t) => n.db.prepare(`DELETE FROM ${t}`)),
+    ['dispositivos', 'recordatorios', 'automatizaciones', 'avisados', 'registro', 'pendientes', 'codigos', 'sincro', 'sincro_solicitudes', 'token_integracion', 'buzon_salud', 'salud_vistos'].map((t) =>
+      n.db.prepare(`DELETE FROM ${t}`),
+    ),
   );
   // Las claves VAPID se quedan: así los navegadores no tienen que volver a suscribirse con otra.
   await n.db.prepare("DELETE FROM ajustes WHERE clave <> 'vapid'").run();
@@ -354,6 +357,9 @@ async function atender(peticion, env) {
   if (m === 'GET' && ruta === '/google/vuelta') return vueltaDeGoogle(n, url);
   if (m === 'POST' && ruta === '/vincular/recoger') return recoger(n, peticion);
   if (m === 'POST' && ruta === '/canjear') return canjearCodigo(n, peticion);
+
+  // Integraciones (el Atajo de Apple Salud): con su propio token, que no vale para nada más.
+  if (ruta === '/integraciones' || ruta.startsWith('/integraciones/')) return rutaIntegraciones(n, peticion, ruta, { json, ErrorHttp, cuerpo, CORS });
 
   // Todo lo demás, solo para dispositivos vinculados.
   const d = await dispositivo(n, peticion);
@@ -449,6 +455,10 @@ async function atender(peticion, env) {
     return json({ ok: true });
   }
   if (m === 'POST' && ruta === '/desvincular') return desvincular(n);
+  if (ruta.startsWith('/salud/')) {
+    const respuesta = await rutaSaludDispositivo(n, m, ruta, { json, ErrorHttp, cuerpo, peticion });
+    if (respuesta) return respuesta;
+  }
   if (ruta === '/sincro' || ruta.startsWith('/sincro/')) {
     const respuesta = await rutaSincro(n, d, m, ruta, { json, ErrorHttp, cuerpo: () => cuerpo(peticion), url });
     if (respuesta) return respuesta;

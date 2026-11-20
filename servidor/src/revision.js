@@ -3,6 +3,7 @@
 // las citas que se acercan. Cada paso falla por separado: si Google no
 // responde, los recordatorios llegan igual.
 import { Nucleo } from './nucleo.js';
+import { limpiezaSalud } from './salud.js';
 import { partesLocales, desdeLocal, horaLocal, fechaLegible, enSilencio, aMinutos } from './tiempo.js';
 import { coincideCorreo, coincideCita, duracion } from '../../src/compartido/automatizaciones.js';
 import { extraerEvento } from './ia.js';
@@ -64,6 +65,7 @@ export async function revisar(env, ahora = Date.now()) {
       n.db.prepare('DELETE FROM registro WHERE id <= (SELECT id FROM registro ORDER BY id DESC LIMIT 1 OFFSET 200)'),
       n.db.prepare('DELETE FROM registro_ia WHERE cuando < ?').bind(ahora - 14 * 86_400_000),
       n.db.prepare('DELETE FROM registro_ia WHERE id <= (SELECT id FROM registro_ia ORDER BY id DESC LIMIT 1 OFFSET 500)'),
+      ...limpiezaSalud(n, ahora),
     ]);
   }
 }

@@ -56,3 +56,27 @@ CREATE TABLE IF NOT EXISTS registro_ia (
   datos TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS registro_ia_cuando ON registro_ia (cuando);
+-- Apple Salud: tokens personales para el Atajo del iPhone (solo valen para
+-- /integraciones/…). Se guarda la huella SHA-256, nunca el token en claro.
+CREATE TABLE IF NOT EXISTS token_integracion (
+  id TEXT PRIMARY KEY,
+  nombre TEXT NOT NULL,
+  hash_token TEXT NOT NULL UNIQUE,
+  creado_en INTEGER NOT NULL,
+  ultimo_uso_en INTEGER,
+  revocado INTEGER NOT NULL DEFAULT 0,
+  ventana INTEGER NOT NULL DEFAULT 0,
+  peticiones INTEGER NOT NULL DEFAULT 0
+);
+-- Lo que manda el Atajo, cifrado hacia la llave pública del buzón (el servidor
+-- no puede leerlo). Se borra cuando un dispositivo lo recoge. Los pasos de un
+-- día pendientes se reemplazan («clave» = huella del día).
+CREATE TABLE IF NOT EXISTS buzon_salud (
+  id TEXT PRIMARY KEY,
+  clave TEXT UNIQUE,
+  recibido INTEGER NOT NULL,
+  sobre TEXT NOT NULL
+);
+-- Huellas (HMAC con un secreto del servidor) de los pesajes ya recibidos, para
+-- responder «duplicado» sin guardar el peso en claro. Se borran a los 120 días.
+CREATE TABLE IF NOT EXISTS salud_vistos (clave TEXT PRIMARY KEY, cuando INTEGER NOT NULL);
