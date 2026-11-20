@@ -58,7 +58,7 @@ export async function rutaIntegraciones(n, peticion, ruta, { json, ErrorHttp, cu
   const v = validarSalud(await cuerpo(peticion), { zona, ahora: n.ahora });
   if (v.errores.length) {
     const [primero] = v.errores;
-    return json({ error: `${primero.campo ? `${primero.campo}: ` : ''}${primero.motivo}`, campo: primero.campo, motivo: primero.motivo, errores: v.errores }, 400);
+    return json({ ...(v.avisos?.length ? { avisos: v.avisos } : {}), error: `${primero.campo ? `${primero.campo}: ` : ''}${primero.motivo}`, campo: primero.campo, motivo: primero.motivo, errores: v.errores }, 400);
   }
 
   const sentencias = [];
@@ -95,7 +95,8 @@ export async function rutaIntegraciones(n, peticion, ruta, { json, ErrorHttp, cu
   );
   sentencias.push(n.db.prepare('UPDATE token_integracion SET ultimo_uso_en = ? WHERE id = ?').bind(n.ahora, fila.id));
   await n.db.batch(sentencias);
-  return json({ pasos_guardados: v.dias.length, pesaje });
+  // Avisos (claves que no se reconocen, campos vacíos): ayudan a arreglar el Atajo.
+  return json({ pasos_guardados: v.dias.length, pesaje, ...(v.avisos?.length ? { avisos: v.avisos } : {}) });
 }
 
 // ---------- Los dispositivos: tokens y buzón ----------

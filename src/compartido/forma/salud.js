@@ -95,12 +95,42 @@ function momentoEspanol(texto, zona) {
 // Formato plano, más fácil de montar en Atajos (sin listas ni fechas de los días):
 // { pasos_hoy, pasos_ayer, peso_kg, grasa_pct, masa_magra_kg, fecha_peso }.
 // Lo vacío se ignora: sin peso no hay pesaje, pero los pasos se guardan igual.
-const PLANOS = ['pasos_hoy', 'pasos_ayer', 'peso_kg', 'grasa_pct', 'masa_magra_kg', 'fecha_peso'];
-const CAMPO_PLANO = { 'pesaje.fecha_hora': 'fecha_peso', 'pesaje.peso_kg': 'peso_kg', 'pesaje.grasa_pct': 'grasa_pct', 'pesaje.masa_magra_kg': 'masa_magra_kg' };
+// Acepta también los nombres que suele poner Siri («peso», «grasa_corporal»,
+// «masa_magra»…), y avisa de lo que llega vacío o no reconoce.
+const ALIAS = {
+  pasos_hoy: ['pasos_hoy', 'pasoshoy', 'pasos_de_hoy', 'steps_today'],
+  pasos_ayer: ['pasos_ayer', 'pasosayer', 'pasos_de_ayer', 'steps_yesterday'],
+  peso_kg: ['peso_kg', 'pesokg', 'peso', 'peso_corporal', 'weight', 'weight_kg'],
+  grasa_pct: ['grasa_pct', 'grasa', 'grasa_corporal', 'grasa_corporal_pct', 'porcentaje_grasa', 'porcentaje_de_grasa', 'porcentaje_grasa_corporal', 'porcentaje_de_grasa_corporal', 'body_fat', 'body_fat_pct'],
+  masa_magra_kg: ['masa_magra_kg', 'masa_magra', 'magra', 'masa_corporal_magra', 'masa_corporal_magra_kg', 'lean_body_mass', 'lean_mass_kg'],
+  fecha_peso: ['fecha_peso', 'fecha_pesaje', 'fecha_del_peso', 'fecha_hora', 'fecha_hora_peso', 'fecha'],
+};
+const CANONICA = new Map(Object.entries(ALIAS).flatMap(([k, lista]) => lista.map((a) => [a, k])));
+const claveLimpia = (k) =>
+  String(k)
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
 const vacio = (v) => v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
-export const esPlano = (c) => Boolean(c) && typeof c === 'object' && !Array.isArray(c) && c.dias === undefined && c.pesaje === undefined && PLANOS.some((k) => k in c);
+export const esPlano = (c) => Boolean(c) && typeof c === 'object' && !Array.isArray(c) && c.dias === undefined && c.pesaje === undefined && Object.keys(c).some((k) => CANONICA.has(claveLimpia(k)));
 
-export function desdePlano(c, { zona = 'Europe/Madrid', ahora = Date.now() } = {}) {
+export function desdePlano(entrada, { zona = 'Europe/Madrid', ahora = Date.now() } = {}) {
+  // Nombres de Siri → los nuestros (recordando cómo los mandaste, para los mensajes).
+  const c = {};
+  const nombre = {};
+  const avisos = [];
+  for (const [k, v] of Object.entries(entrada)) {
+    if (k === 'fuente') continue;
+    const canonica = CANONICA.get(claveLimpia(k));
+    if (!canonica) avisos.push(`«${k}» no se reconoce: se ignora`);
+    else if (!(canonica in c) || (vacio(c[canonica]) && !vacio(v))) {
+      c[canonica] = v;
+      nombre[canonica] = k;
+    }
+  }
+  const llamado = (k) => nombre[k] ?? k;
   const hoy = partesLocales(ahora, zona).fecha;
   const dias = [];
   const origen = [];
@@ -108,29 +138,34 @@ export function desdePlano(c, { zona = 'Europe/Madrid', ahora = Date.now() } = {
     ['pasos_ayer', sumarDias(hoy, -1)],
     ['pasos_hoy', hoy],
   ]) {
-    if (vacio(c[clave])) continue;
+    if (vacio(c[clave])) {
+      avisos.push(clave in c ? `«${llamado(clave)}» llegó vacío` : `no ha llegado «${clave}»`);
+      continue;
+    }
     dias.push({ fecha, pasos: c[clave] });
-    origen.push(clave);
+    origen.push(llamado(clave));
   }
-  const cuerpo = { fuente: c.fuente };
+  const cuerpo = { fuente: entrada.fuente };
   if (dias.length) cuerpo.dias = dias;
   if (!vacio(c.peso_kg)) {
     cuerpo.pesaje = { fecha_hora: vacio(c.fecha_peso) ? undefined : c.fecha_peso, peso_kg: c.peso_kg };
     if (!vacio(c.grasa_pct)) cuerpo.pesaje.grasa_pct = c.grasa_pct;
     if (!vacio(c.masa_magra_kg)) cuerpo.pesaje.masa_magra_kg = c.masa_magra_kg;
-  }
+  } else if ('peso_kg' in c) avisos.push(`«${llamado('peso_kg')}» llegó vacío: sin peso en las últimas 24 h no se guarda pesaje`);
+  else if (!vacio(c.grasa_pct) || !vacio(c.masa_magra_kg)) avisos.push('falta el peso («peso_kg»): sin él no se guarda el pesaje');
   // Para que los errores digan el nombre del campo que mandaste.
-  const campo = (x) => CAMPO_PLANO[x] ?? x.replace(/^dias\[(\d+)\]\.(pasos|fecha)$/, (_, i) => origen[Number(i)] ?? x);
-  return { cuerpo, campo };
+  const CAMPO = { 'pesaje.fecha_hora': 'fecha_peso', 'pesaje.peso_kg': 'peso_kg', 'pesaje.grasa_pct': 'grasa_pct', 'pesaje.masa_magra_kg': 'masa_magra_kg' };
+  const campo = (x) => (CAMPO[x] ? llamado(CAMPO[x]) : x.replace(/^dias\[(\d+)\]\.(pasos|fecha)$/, (_, i) => origen[Number(i)] ?? x));
+  return { cuerpo, campo, avisos };
 }
 
 // Valida lo que manda el Atajo. Todo o nada: con un solo error no se guarda nada.
 // Devuelve { dias, pesaje, fuente, errores: [{ campo, motivo }] }.
 export function validarSalud(cuerpo, { zona = 'Europe/Madrid', ahora = Date.now() } = {}) {
   if (esPlano(cuerpo)) {
-    const { cuerpo: completo, campo } = desdePlano(cuerpo, { zona, ahora });
+    const { cuerpo: completo, campo, avisos } = desdePlano(cuerpo, { zona, ahora });
     const v = validarSalud(completo, { zona, ahora });
-    return { ...v, errores: v.errores.map((e) => ({ ...e, campo: campo(e.campo) })) };
+    return { ...v, avisos, errores: v.errores.map((e) => ({ ...e, campo: campo(e.campo) })) };
   }
   const errores = [];
   const mal = (campo, motivo) => errores.push({ campo, motivo });

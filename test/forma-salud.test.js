@@ -163,3 +163,14 @@ test('fechas del iPhone en español sin formatear', () => {
   assert.equal(momentoDe('31/02/2026 8:12', Z), null);
   assert.equal(momentoDe('20 brumario 2026 8:12', Z), null);
 });
+
+test('formato plano con los nombres que pone Siri y avisos de lo vacío o desconocido', () => {
+  const v = validarSalud({ pasos_hoy: 4321, pasos_ayer: '', peso: '77,5 kg', fecha_peso: '20 nov 2026, 8:12', grasa_corporal: 0.229, masa_magra: '59,8 kg', 'Pasos de ayer': '' }, { zona: Z, ahora: AHORA });
+  assert.deepEqual(v.errores, []);
+  assert.deepEqual(v.pesaje && [v.pesaje.kg, v.pesaje.grasa, v.pesaje.magra], [77.5, 22.9, 59.8]);
+  assert.deepEqual(v.avisos, ['«pasos_ayer» llegó vacío']);
+  const otros = validarSalud({ pasos_hoy: 4321, peso: '', otra: 1 }, { zona: Z, ahora: AHORA });
+  assert.deepEqual(otros.avisos, ['«otra» no se reconoce: se ignora', 'no ha llegado «pasos_ayer»', '«peso» llegó vacío: sin peso en las últimas 24 h no se guarda pesaje']);
+  // Los errores usan el nombre que mandaste.
+  assert.equal(validarSalud({ pasos_hoy: 1, peso: 500, fecha_peso: '20 nov 2026, 8:12' }, { zona: Z, ahora: AHORA }).errores[0].campo, 'peso');
+});

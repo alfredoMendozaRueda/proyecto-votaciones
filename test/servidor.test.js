@@ -1259,7 +1259,7 @@ test('salud: el formato plano del Atajo llega igual (y sin peso no rechaza los p
   const { enviar, buzon, llave, hoy, ayer } = await preparadoSalud();
   const r = await enviar({ pasos_hoy: 4321, pasos_ayer: '11.234', peso_kg: '', grasa_pct: '', masa_magra_kg: '', fecha_peso: '' });
   assert.equal(r.status, 200);
-  assert.deepEqual(await r.json(), { pasos_guardados: 2, pesaje: 'no_enviado' });
+  assert.deepEqual(await r.json(), { pasos_guardados: 2, pesaje: 'no_enviado', avisos: ['«peso_kg» llegó vacío: sin peso en las últimas 24 h no se guarda pesaje'] });
   const dias = (await Promise.all((await buzon()).map((e) => descifrarDelBuzon(llave.privada, e.sobre)))).filter((c) => c.tipo !== 'resumen').flatMap((c) => c.dias ?? []);
   assert.deepEqual(dias.sort((a, b) => (a.fecha < b.fecha ? -1 : 1)), [
     { fecha: ayer, pasos: 11234 },
@@ -1267,4 +1267,12 @@ test('salud: el formato plano del Atajo llega igual (y sin peso no rechaza los p
   ]);
   const mal = await (await enviar({ pasos_hoy: 4321, peso_kg: 77.5 })).json();
   assert.equal(mal.campo, 'fecha_peso');
+});
+
+test('salud: con los nombres de Siri guarda el pesaje y avisa de lo que llega vacío', async () => {
+  const { enviar, ayer } = await preparadoSalud();
+  const r = await (await enviar({ pasos_hoy: 4321, pasos_ayer: '', peso: '77,5', fecha_peso: `${ayer}T08:12:00+01:00`, grasa_corporal: 0.229, masa_magra: 59.8 })).json();
+  assert.deepEqual(r, { pasos_guardados: 1, pesaje: 'guardado', avisos: ['«pasos_ayer» llegó vacío'] });
+  const sinAvisos = await (await enviar({ pasos_hoy: 4321, pasos_ayer: 9000 })).json();
+  assert.deepEqual(sinAvisos, { pasos_guardados: 2, pesaje: 'no_enviado' });
 });
