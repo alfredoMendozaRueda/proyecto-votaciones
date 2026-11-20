@@ -1098,3 +1098,159 @@ test('sincronización de la lectura bíblica: marcar en el móvil y en el ordena
   const visibles = await (await pedir(env, '/recordatorios', { token })).json();
   assert.ok(!visibles.some((r) => r.id.startsWith('b2099')), 'no salen en tu lista de recordatorios');
 });
+
+// ---------- Apple Salud: tokens del Atajo y POST /integraciones/salud ----------
+
+import { crearLlaveBuzon, descifrarDelBuzon, recogerBuzonSalud } from '../src/compartido/forma/salud.js';
+import { partesLocales as partesSalud } from '../src/compartido/horas.js';
+import { normalizarForma } from '../src/compartido/forma/datos.js';
+import { pesosPorDia, serieComposicion } from '../src/compartido/forma/progreso.js';
+
+async function preparadoSalud() {
+  const env = entorno();
+  const { token: dispositivo } = await vincular(env);
+  const llave = await crearLlaveBuzon();
+  const creado = await (await pedir(env, '/salud/tokens', { metodo: 'POST', token: dispositivo, cuerpo: { nombre: 'Atajo iPhone', publica: llave.publica } })).json();
+  const hoy = partesSalud(Date.now(), 'Europe/Madrid').fecha;
+  const ayer = partesSalud(Date.now() - 86_400_000, 'Europe/Madrid').fecha;
+  const enviar = (cuerpo, token = creado.token) => pedir(env, '/integraciones/salud', { metodo: 'POST', token, cuerpo });
+  const buzon = async () => (await (await pedir(env, '/salud/buzon', { token: dispositivo })).json()).entregas;
+  return { env, dispositivo, llave, creado, hoy, ayer, enviar, buzon };
+}
+
+test('salud: el token se enseña una vez, se guarda solo su huella y no vale para nada más', async () => {
+  const { env, dispositivo, creado, enviar, hoy } = await preparadoSalud();
+  assert.match(creado.token, /^forma_[A-Za-z0-9_-]{43}$/);
+  assert.equal(creado.nombre, 'Atajo iPhone');
+  const fila = await env.DB.prepare('SELECT * FROM token_integracion').first();
+  assert.notEqual(fila.hash_token, creado.token);
+  assert.doesNotMatch(JSON.stringify(fila), new RegExp(creado.token));
+  const lista = await (await pedir(env, '/salud/tokens', { token: dispositivo })).json();
+  assert.equal(lista.tokens.length, 1);
+  assert.equal(lista.tokens[0].token, undefined);
+  assert.equal(lista.tokens[0].ultimo_uso_en, null);
+  // Solo /integraciones/…: el token no abre las rutas de los dispositivos.
+  assert.equal((await pedir(env, '/estado', { token: creado.token })).status, 401);
+  assert.equal((await pedir(env, '/salud/buzon', { token: creado.token })).status, 401);
+  // Sin token, con uno inventado o con el de un dispositivo: 401.
+  assert.equal((await enviar({ dias: [{ fecha: hoy, pasos: 10 }] }, null)).status, 401);
+  assert.equal((await enviar({ dias: [{ fecha: hoy, pasos: 10 }] }, 'forma_inventado')).status, 401);
+  assert.equal((await enviar({ dias: [{ fecha: hoy, pasos: 10 }] }, dispositivo)).status, 401);
+  // Funciona y apunta el último uso.
+  assert.equal((await enviar({ dias: [{ fecha: hoy, pasos: 10 }] })).status, 200);
+  const usado = await (await pedir(env, '/salud/tokens', { token: dispositivo })).json();
+  assert.ok(usado.tokens[0].ultimo_uso_en > Date.now() - 60_000);
+  // Revocado: deja de valer.
+  await pedir(env, `/salud/tokens/${creado.id}`, { metodo: 'DELETE', token: dispositivo });
+  const revocado = await enviar({ dias: [{ fecha: hoy, pasos: 10 }] });
+  assert.equal(revocado.status, 401);
+  assert.match((await revocado.json()).error, /revocado/);
+});
+
+test('salud: pasos idempotentes, pesaje duplicado, grasa en fracción, coma decimal y todo cifrado en el buzón', async () => {
+  const { env, dispositivo, llave, enviar, buzon, hoy, ayer } = await preparadoSalud();
+  const cuerpo = {
+    fuente: 'apple_salud',
+    dias: [
+      { fecha: ayer, pasos: '11.234' },
+      { fecha: hoy, pasos: 4321 },
+    ],
+    pesaje: { fecha_hora: `${hoy}T08:12:00+01:00`, peso_kg: '77,55', grasa_pct: 0.229, masa_magra_kg: '59,8' },
+  };
+  // Si el pesaje de hoy aún no ha pasado (de madrugada), se manda el de ayer.
+  const ahoraMadrid = partesSalud(Date.now(), 'Europe/Madrid');
+  if (ahoraMadrid.minutos < 8 * 60 + 30) cuerpo.pesaje.fecha_hora = `${ayer}T08:12:00+01:00`;
+  const r1 = await enviar(cuerpo);
+  assert.equal(r1.status, 200);
+  assert.deepEqual(await r1.json(), { pasos_guardados: 2, pesaje: 'guardado' });
+  // Lo mismo otra vez: los pasos se reemplazan y el pesaje es duplicado (también a 40 s).
+  const r2 = await enviar({ ...cuerpo, pesaje: { ...cuerpo.pesaje, fecha_hora: cuerpo.pesaje.fecha_hora.replace(':12:00', ':12:40') } });
+  assert.deepEqual(await r2.json(), { pasos_guardados: 2, pesaje: 'duplicado' });
+  const entregas = await buzon();
+  assert.equal(entregas.length, 4); // 2 días + 1 pesaje + el resumen del último envío
+  // El servidor no puede leerlo: nada de pesos ni pasos en claro.
+  const crudo = JSON.stringify((await env.DB.prepare('SELECT * FROM buzon_salud').all()).results) + JSON.stringify((await env.DB.prepare('SELECT * FROM salud_vistos').all()).results);
+  assert.doesNotMatch(crudo, /77[.,]55|11234|4321|59[.,]8/);
+  const todos = await Promise.all(entregas.map((e) => descifrarDelBuzon(llave.privada, e.sobre)));
+  const resumen = todos.find((c) => c.tipo === 'resumen');
+  assert.equal(resumen.resultado, 'duplicado');
+  const contenidos = todos.filter((c) => c.tipo !== 'resumen');
+  const pesaje = contenidos.find((c) => c.pesaje).pesaje;
+  assert.equal(pesaje.kg, 77.55);
+  assert.equal(pesaje.grasa, 22.9);
+  assert.equal(pesaje.magra, 59.8);
+  assert.equal(pesaje.hora, '08:12');
+  assert.deepEqual(contenidos.filter((c) => c.dias).flatMap((c) => c.dias).sort((a, b) => (a.fecha < b.fecha ? -1 : 1)), [
+    { fecha: ayer, pasos: 11234 },
+    { fecha: hoy, pasos: 4321 },
+  ]);
+
+  // La app recoge: aplica, guarda y vacía el buzón. Otra recogida no duplica nada.
+  let datos = normalizarForma({ perfil: { peso: 78 }, integracion: llave });
+  const cliente = new ClienteServidor({ url: 'https://kitsune.ejemplo.workers.dev', token: dispositivo, fetch: (url, init) => servidor.fetch(new Request(url, init), env) });
+  const leer = async () => datos;
+  const guardar = async (d) => {
+    datos = normalizarForma(d);
+  };
+  const r = await recogerBuzonSalud({ cliente, leer, guardar });
+  assert.equal(r.recogidas, 4);
+  assert.equal(r.pesajes, 1);
+  assert.equal(datos.dias[ayer].pasos, 11234);
+  assert.equal(datos.dias[hoy].pasos, 4321);
+  assert.equal(datos.dias[hoy].pasosFuente, 'apple_salud');
+  assert.equal(datos.pesos.filter((p) => p.fuente === 'apple_salud').length, 1);
+  // «Última sincronización»: el segundo envío (pesaje repetido) con sus pasos.
+  assert.equal(datos.integracion.ultima.resultado, 'duplicado');
+  assert.equal(datos.integracion.ultima.dias.length, 2);
+  assert.equal(datos.integracion.ultima.pesaje.kg, 77.55);
+  assert.equal((await buzon()).length, 0);
+  // Mañana el Atajo vuelve a mandar los pasos de ayer (ya completos): se reemplazan.
+  await enviar({ dias: [{ fecha: ayer, pasos: 12000 }] });
+  await recogerBuzonSalud({ cliente, leer, guardar });
+  assert.equal(datos.dias[ayer].pasos, 12000);
+  assert.equal(Object.values(datos.dias).filter((d) => d.pasos).length, 2);
+  assert.ok(serieComposicion(datos).length === 1 && pesosPorDia(datos).length >= 1);
+});
+
+test('salud: errores 400 con el campo y el motivo, y nada se guarda', async () => {
+  const { enviar, buzon, hoy } = await preparadoSalud();
+  const casos = [
+    [{ dias: [{ fecha: hoy, pasos: -5 }] }, 'dias[0].pasos', /entre 0 y 100\.000/],
+    [{ dias: [{ fecha: hoy, pasos: 100001 }] }, 'dias[0].pasos', /entre 0 y 100\.000/],
+    [{ dias: [{ fecha: '2026-02-30', pasos: 10 }] }, 'dias[0].fecha', /fecha real/],
+    [{ dias: [{ fecha: '2999-01-01', pasos: 10 }] }, 'dias[0].fecha', /futura/],
+    [{ pesaje: { fecha_hora: `${hoy}T07:00:00+01:00`, peso_kg: 29 } }, 'pesaje.peso_kg', /entre 30 y 300/],
+    [{ pesaje: { fecha_hora: `${hoy}T07:00:00+01:00`, peso_kg: 301 } }, 'pesaje.peso_kg', /entre 30 y 300/],
+    [{ pesaje: { fecha_hora: `${hoy}T07:00:00+01:00`, peso_kg: 77, grasa_pct: 75 } }, 'pesaje.grasa_pct', /entre 3 y 60/],
+    [{ pesaje: { fecha_hora: 'ayer por la mañana', peso_kg: 77 } }, 'pesaje.fecha_hora', /ISO 8601/],
+    [{ pesaje: { fecha_hora: `${hoy}T07:00:00+01:00`, peso_kg: 'mucho' } }, 'pesaje.peso_kg', /número/],
+    [{}, '', /nada que guardar/],
+  ];
+  for (const [cuerpo, campo, motivo] of casos) {
+    const r = await enviar(cuerpo);
+    assert.equal(r.status, 400, JSON.stringify(cuerpo));
+    const e = await r.json();
+    assert.equal(e.campo, campo);
+    assert.match(e.motivo, motivo);
+    assert.match(e.error, motivo);
+  }
+  assert.equal((await buzon()).length, 0);
+});
+
+test('salud: zona horaria (sin zona = la del usuario) y límite de 60 peticiones por hora', async () => {
+  const { enviar, buzon, llave, ayer } = await preparadoSalud();
+  // Invierno en Madrid es UTC+1: «07:30» sin zona y «06:30Z» son el mismo momento.
+  const r1 = await (await enviar({ pesaje: { fecha_hora: `${ayer}T07:30:00`, peso_kg: 80 } })).json();
+  const r2 = await (await enviar({ pesaje: { fecha_hora: `${ayer}T06:30:00Z`, peso_kg: 80 } })).json();
+  assert.equal(r1.pesaje, 'guardado');
+  const contenidos = await Promise.all((await buzon()).map((e) => descifrarDelBuzon(llave.privada, e.sobre)));
+  assert.equal(contenidos.find((c) => c.tipo !== 'resumen' && c.pesaje).pesaje.hora, '07:30');
+  // Si en esa fecha Madrid estaba en UTC+1, el segundo es el mismo pesaje.
+  const desfase = partesSalud(Date.parse(`${ayer}T06:30:00Z`), 'Europe/Madrid').hora;
+  assert.equal(r2.pesaje, desfase === '07:30' ? 'duplicado' : 'guardado');
+  // Límite: 60 por hora y token (ya van 2).
+  let ultima;
+  for (let i = 0; i < 59; i++) ultima = await enviar({ dias: [{ fecha: ayer, pasos: i }] });
+  assert.equal(ultima.status, 429);
+  assert.ok(Number(ultima.headers.get('Retry-After')) > 0);
+});
