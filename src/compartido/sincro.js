@@ -422,8 +422,8 @@ export function coleccionBiblia({ leer, guardar, normalizar = (d) => d, despues 
 // Forma (dieta y gimnasio): el perfil y los ajustes van juntos («base»); cada
 // comida, alimento, peso, medida, hito, rutina, entreno y día, por separado.
 // El entreno que tienes a medias se queda en este dispositivo.
-const LISTAS_FORMA = ['alimentos', 'registros', 'plantillas', 'pesos', 'medidas', 'hitos', 'rutinas', 'sesiones', 'ejercicios'];
-const BASE_FORMA = ['perfil', 'bloqueados', 'ajustes', 'momentos', 'suplementos', 'tiposMedida', 'descartadas', 'descargas', 'descargaDescartada', 'usosIA', 'resumenVisto', 'avisosVistos', 'noDuplicados'];
+const LISTAS_FORMA = ['alimentos', 'registros', 'plantillas', 'pesos', 'medidas', 'hitos', 'rutinas', 'sesiones', 'ejercicios', 'resumenes'];
+const BASE_FORMA = ['perfil', 'bloqueados', 'ajustes', 'momentos', 'suplementos', 'tiposMedida', 'descartadas', 'descargas', 'descargaDescartada', 'usosIA', 'resumenVisto', 'avisosVistos', 'noDuplicados', 'celebrados', 'integracion'];
 
 export function coleccionForma({ leer, guardar, normalizar = (d) => d, despues }) {
   return {

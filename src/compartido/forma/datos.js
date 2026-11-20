@@ -168,6 +168,14 @@ export const AJUSTES_POR_DEFECTO = {
   limiteIA: 30,
   avisoProteina: '18:00',
   momentoAuto: true,
+  // Resumen semanal: día (1 = lunes … 7 = domingo) y hora en que se genera, si
+  // avisa con una notificación y si el texto lo escribe la IA.
+  resumenDia: 7,
+  resumenHora: '23:30',
+  resumenAviso: true,
+  resumenIA: true,
+  // Días de la semana en que entrenas (1 = lunes … 7 = domingo). Vacío: los del perfil.
+  diasEntrenoSemana: [],
 };
 
 const num = (v, min = -Infinity, max = Infinity) => (typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : undefined);
@@ -363,6 +371,11 @@ export function normalizarForma(d = {}) {
   ajustes.discos = (Array.isArray(ajustes.discos) ? ajustes.discos : AJUSTES_POR_DEFECTO.discos).filter((x) => num(x, 0.1, 100) !== undefined);
   ajustes.descanso = num(ajustes.descanso, 10, 900) ?? 120;
   ajustes.limiteIA = num(ajustes.limiteIA, 0, 500) ?? 30;
+  ajustes.resumenDia = num(ajustes.resumenDia, 1, 7) !== undefined ? Math.round(ajustes.resumenDia) : 7;
+  ajustes.resumenHora = /^([01]\d|2[0-3]):[0-5]\d$/.test(ajustes.resumenHora) ? ajustes.resumenHora : '23:30';
+  ajustes.resumenAviso = ajustes.resumenAviso !== false;
+  ajustes.resumenIA = ajustes.resumenIA !== false;
+  ajustes.diasEntrenoSemana = [...new Set((Array.isArray(ajustes.diasEntrenoSemana) ? ajustes.diasEntrenoSemana : []).filter((x) => Number.isInteger(x) && x >= 1 && x <= 7))].sort();
   // Los de serie se rehacen siempre (con tus cambios encima); los tuyos, tal cual.
   const guardados = new Map(lista(d.ejercicios).filter((e) => typeof e.id === 'string').map((e) => [e.id, e]));
   const propios = lista(d.ejercicios).filter((e) => e.propio && texto(e.nombre, 80));
@@ -407,6 +420,8 @@ export function normalizarForma(d = {}) {
             // Pasos del día que mandó Apple Salud (el total; reemplaza la estimación del perfil).
             pasos: num(v.pasos, 0, 100000),
             pasosFuente: num(v.pasos, 0, 100000) !== undefined ? fuenteDe(v.pasosFuente) : undefined,
+            // Nota del día («cumpleaños»): sale en el resumen semanal.
+            nota: texto(v.nota, 80) || undefined,
           }),
         ]),
     ),
@@ -441,7 +456,11 @@ export function normalizarForma(d = {}) {
         recompensa: texto(h.recompensa, 200),
         cumplido: esFecha(h.cumplido) ? h.cumplido : null,
         automatico: h.automatico === true,
-      })),
+        // Orden en tu lista de hitos y semana (su lunes) en que se consiguió.
+        orden: num(h.orden, 0, 1000),
+        semana: esFecha(h.semana) ? h.semana : undefined,
+      }))
+      .map(sinVacios),
     ejercicios,
     rutinas: lista(d.rutinas)
       .map((r) => ({
@@ -470,6 +489,21 @@ export function normalizarForma(d = {}) {
     descargaDescartada: esFecha(d.descargaDescartada) ? d.descargaDescartada : null,
     usosIA: Object.fromEntries(Object.entries(d.usosIA ?? {}).filter(([f, n]) => esFecha(f) && num(n, 0) !== undefined)),
     resumenVisto: esFecha(d.resumenVisto) ? d.resumenVisto : null,
+    // Resúmenes semanales guardados (una foto por semana; id = su lunes).
+    resumenes: lista(d.resumenes)
+      .filter((r) => esFecha(r.id) && r.datos && typeof r.datos === 'object')
+      .map((r) => ({
+        id: r.id,
+        generado: num(r.generado, 0) ?? 0,
+        texto: texto(r.texto, 2000),
+        origen: r.origen === 'ia' ? 'ia' : 'reglas',
+        estado: r.estado === 'datos_incompletos' ? 'datos_incompletos' : 'completo',
+        datos: r.datos,
+      }))
+      .sort((a, b) => (a.id < b.id ? -1 : 1))
+      .slice(-104),
+    // Hitos cuya celebración ya viste.
+    celebrados: Array.isArray(d.celebrados) ? [...new Set(d.celebrados.filter((x) => typeof x === 'string'))].slice(-200) : [],
     // Parejas «idA|idB» que marcaste como «No son el mismo» en Posibles duplicados.
     noDuplicados: Array.isArray(d.noDuplicados) ? [...new Set(d.noDuplicados.filter((x) => typeof x === 'string' && x.includes('|')))].slice(-500) : [],
     // Apple Salud: la llave del buzón (la privada no sale de tus dispositivos) y

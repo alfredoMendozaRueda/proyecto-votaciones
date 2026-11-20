@@ -133,26 +133,54 @@ export const mejorPeso = (datos, ejercicioId, hasta = '9999-12-31') =>
   Math.max(0, ...datos.sesiones.filter((s) => s.fecha <= hasta).flatMap((s) => s.series.filter((x) => x.ejercicioId === ejercicioId && esEfectiva(x)).map(carga)));
 
 // ---------- Hitos ----------
-export function estadoHito(datos, hito, hoy = fechaISO()) {
-  let actual = null;
-  if (hito.tipo === 'peso') {
-    const pesos = pesosPorDia(datos).filter((p) => p.fecha <= hoy);
-    // Se cumple con la media de 7 días, no con un día suelto.
-    actual = pesos.length ? media7(pesos, pesos.at(-1).fecha) : null;
-  } else if (hito.tipo === 'medida') actual = ultimaMedida(datos, hito.medida)?.cm ?? null;
-  else if (hito.tipo === 'fuerza') actual = mejorPeso(datos, hito.ejercicioId) || null;
-  const cumple = actual !== null && (hito.comparador === '>' ? actual >= hito.valor : actual < hito.valor);
-  return { actual: actual === null ? null : r(actual, 1), cumple };
+// Media de peso de cada semana (lunes a domingo) con el peso de cada día.
+export function mediasSemanales(datos) {
+  const mapa = new Map();
+  for (const p of pesosPorDia(datos)) {
+    const l = lunesDe(p.fecha);
+    const s = mapa.get(l) ?? { lunes: l, suma: 0, n: 0 };
+    s.suma += p.kg;
+    s.n++;
+    mapa.set(l, s);
+  }
+  return [...mapa.values()].sort((a, b) => (a.lunes < b.lunes ? -1 : 1)).map((s) => ({ lunes: s.lunes, media: r(s.suma / s.n, 2), n: s.n }));
 }
 
-// Hitos que se acaban de cumplir: se marcan con la fecha de hoy.
+const alcanza = (hito, valor) => (hito.comparador === '>' ? valor >= hito.valor : valor <= hito.valor);
+
+// Hitos de peso: se consiguen con la MEDIA de una semana ya cerrada (nunca por un
+// pesaje suelto) y, una vez conseguidos, no se pierden. Los de medida y fuerza,
+// con su último dato.
+export function estadoHito(datos, hito, hoy = fechaISO()) {
+  let actual = null;
+  let semana = null;
+  let cumple = false;
+  if (hito.tipo === 'peso') {
+    const semanas = mediasSemanales(datos).filter((s) => s.lunes <= lunesDe(hoy));
+    actual = semanas.at(-1)?.media ?? null;
+    const cerradas = semanas.filter((s) => s.lunes < lunesDe(hoy));
+    const lograda = cerradas.find((s) => alcanza(hito, s.media));
+    if (lograda) {
+      cumple = true;
+      semana = lograda.lunes;
+    }
+  } else {
+    if (hito.tipo === 'medida') actual = ultimaMedida(datos, hito.medida)?.cm ?? null;
+    else if (hito.tipo === 'fuerza') actual = mejorPeso(datos, hito.ejercicioId) || null;
+    cumple = actual !== null && (hito.comparador === '>' ? actual >= hito.valor : actual < hito.valor);
+  }
+  return { actual: actual === null ? null : r(actual, 1), cumple, semana };
+}
+
+// Hitos que se acaban de cumplir. Los de peso llevan la semana en que la media
+// lo consiguió (y la fecha de su domingo); el resto, la fecha de hoy.
 export function revisarHitos(datos, hoy = fechaISO()) {
   const nuevos = [];
   const hitos = datos.hitos.map((h) => {
     if (h.cumplido) return h;
-    const { cumple } = estadoHito(datos, h, hoy);
+    const { cumple, semana } = estadoHito(datos, h, hoy);
     if (!cumple) return h;
-    const hecho = { ...h, cumplido: hoy };
+    const hecho = semana ? { ...h, cumplido: sumarDias(semana, 6), semana } : { ...h, cumplido: hoy };
     nuevos.push(hecho);
     return hecho;
   });

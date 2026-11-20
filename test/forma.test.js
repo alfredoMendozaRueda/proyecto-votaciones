@@ -172,7 +172,7 @@ test('Ritmo real y avisos: bajar demasiado rápido o estancarse', () => {
   assert.deepEqual(avisosProgreso(bien, '2026-11-09'), []);
 });
 
-test('Hitos: el de peso se cumple con la media de 7 días, no con un día suelto', () => {
+test('Hitos: el de peso se cumple con la media de una semana cerrada, no con un día suelto', () => {
   let datos = datosCon({
     pesos: [
       { id: 'a', fecha: '2026-11-08', kg: 75 },
@@ -185,7 +185,14 @@ test('Hitos: el de peso se cumple con la media de 7 días, no con un día suelto
   datos = apuntarPeso(datos, '2026-11-11', 73);
   datos = apuntarPeso(datos, '2026-11-12', 73);
   datos = apuntarPeso(datos, '2026-11-13', 73);
-  assert.equal(estadoHito(datos, hito, '2026-11-13').cumple, true);
+  // La semana del 9 al 15 aún no ha terminado: no cuenta aunque su media ya baje de 74.
+  assert.equal(estadoHito(datos, hito, '2026-11-13').cumple, false);
+  const lunes = estadoHito(datos, hito, '2026-11-16');
+  assert.equal(lunes.cumple, true);
+  assert.equal(lunes.semana, '2026-11-09');
+  // Un solo pesaje bajo (73) en una semana con media de 75 no lo consigue.
+  const suelto = datosCon({ pesos: [{ id: 'a', fecha: '2026-11-02', kg: 76 }, { id: 'b', fecha: '2026-11-03', kg: 73 }, { id: 'c', fecha: '2026-11-04', kg: 76 }] });
+  assert.equal(estadoHito(suelto, hito, '2026-11-16').cumple, false);
   // Sugerencias automáticas cada 2,5 % del peso inicial hasta el objetivo.
   const sug = hitosSugeridos(datosCon({ pesos: [{ id: 'x', fecha: '2026-11-01', kg: 80 }] }));
   assert.deepEqual(
