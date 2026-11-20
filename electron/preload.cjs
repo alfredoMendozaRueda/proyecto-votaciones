@@ -78,6 +78,8 @@ contextBridge.exposeInMainWorld('asistente', {
       crearToken: (nombre) => invocar('forma:salud', 'crearToken', nombre),
       revocar: (id) => invocar('forma:salud', 'revocar', id),
       recoger: () => invocar('forma:salud', 'recoger'),
+      exportar: (opciones) => invocar('forma:salud', 'exportar', opciones),
+      vaciarSalida: () => invocar('forma:salud', 'vaciarSalida'),
     },
   },
   consumo: {

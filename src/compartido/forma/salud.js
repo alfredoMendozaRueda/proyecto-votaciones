@@ -6,7 +6,10 @@
 import { esFecha, sumarDias } from './fechas.js';
 import { partesLocales, desdeLocal } from '../horas.js';
 import { id } from './datos.js';
-import { revisarHitos } from './progreso.js';
+import { revisarHitos, pesoDeReferencia } from './progreso.js';
+import { registrosDelDia, totales } from './diario.js';
+import { kcalEjercicio, TIPOS_ENTRENO } from './calculos.js';
+import { duracionSesion, kcalNetasCardio } from './entreno.js';
 
 export const FUENTE_SALUD = 'apple_salud';
 export const MAX_PASOS = 100_000;
@@ -367,6 +370,60 @@ export function mediaPasos(datos, hoy, dias = 7) {
 export const NOMBRE_FUENTE = { apple_salud: 'Apple Salud' };
 export const nombreFuente = (f) => NOMBRE_FUENTE[f] ?? (f ? String(f).replace(/_/g, ' ') : 'Manual');
 
+// ---------- Forma → Apple Salud ----------
+// Si lo activas, la app manda al servidor (sin cifrar: el Atajo no sabe
+// descifrar) los días ya cerrados de comida y los entrenos terminados de los
+// últimos 7 días, cada uno una sola vez; el Atajo los recoge y los escribe en Salud.
+export const DIAS_EXPORTAR = 7;
+const r1 = (n) => Math.round(n * 10) / 10;
+
+export function itemsParaSalud(datos, { hoy, zona = datos.perfil?.zona ?? 'Europe/Madrid' } = {}) {
+  const ya = new Set(datos.integracion?.subidos ?? []);
+  const items = [];
+  // Comidas: el total de cada día cerrado (hoy aún puede cambiar).
+  for (let i = DIAS_EXPORTAR; i >= 1; i--) {
+    const fecha = sumarDias(hoy, -i);
+    const id = `comida:${fecha}`;
+    const regs = registrosDelDia(datos, fecha);
+    if (ya.has(id) || !regs.length) continue;
+    const t = totales(regs);
+    items.push({
+      id,
+      tipo: 'comida',
+      datos: { fecha, fecha_hora: new Date(desdeLocal(fecha, '21:00', zona)).toISOString(), kcal: Math.round(t.kcal), proteina_g: r1(t.proteina), hidratos_g: r1(t.hidratos), grasa_g: r1(t.grasa), fibra_g: r1(t.fibra) },
+    });
+  }
+  // Entrenos terminados (no el que está en marcha).
+  const peso = pesoDeReferencia(datos, hoy) ?? datos.perfil?.peso ?? 75;
+  for (const s of datos.sesiones) {
+    const id = `entreno:${s.id}`;
+    if (ya.has(id) || s.fecha < sumarDias(hoy, -DIAS_EXPORTAR) || s.fecha > hoy || datos.activa?.id === s.id) continue;
+    const cardio = s.cardio ?? [];
+    const minCardio = cardio.reduce((t, c) => t + (c.minutos ?? 0), 0);
+    const minutos = duracionSesion(s) ?? Math.max(minCardio, s.series.length ? 60 : 0);
+    if (!minutos) continue;
+    const inicio = s.inicio || desdeLocal(s.fecha, '18:00', zona);
+    const met = TIPOS_ENTRENO.find((t) => t.id === 'pesas')?.met ?? 5;
+    const kcal = kcalEjercicio(met, peso, Math.max(0, minutos - minCardio)) + cardio.reduce((t, c) => t + kcalNetasCardio(c, peso), 0);
+    items.push({
+      id,
+      tipo: 'entreno',
+      datos: {
+        nombre: s.nombre || 'Entreno',
+        tipo: s.series.length ? 'fuerza' : 'cardio',
+        inicio: new Date(inicio).toISOString(),
+        fin: new Date(s.fin || inicio + minutos * 60_000).toISOString(),
+        minutos,
+        kcal: Math.round(kcal),
+      },
+    });
+  }
+  return items.slice(0, 60);
+}
+
+// Marca como enviados (para no repetirlos; se recuerdan los 300 últimos).
+export const marcarSubidos = (datos, ids) => ({ ...datos, integracion: { ...datos.integracion, subidos: [...new Set([...(datos.integracion?.subidos ?? []), ...ids])].slice(-300) } });
+
 // ---------- Buzón cifrado ----------
 // El servidor cifra cada entrega con ECDH P-256 (una llave efímera por entrega)
 // + HKDF-SHA256 + AES-GCM hacia la llave pública del buzón. La privada vive en
@@ -492,6 +549,22 @@ export function crearApiSalud({ cliente, vinculado, leer, guardar }) {
     async recoger() {
       if (!(await vinculado())) return { recogidas: 0, pasos: 0, pesajes: 0, vinculado: false };
       return recogerBuzonSalud({ cliente: await cliente(), leer, guardar });
+    },
+    // Forma → Apple Salud: sube lo nuevo (si está activado) y lo marca como enviado.
+    async exportar({ hoy } = {}) {
+      if (!(await vinculado())) return { enviados: 0, vinculado: false };
+      let datos = await leer();
+      if (!datos.integracion?.exportar) return { enviados: 0 };
+      const items = itemsParaSalud(datos, { hoy });
+      if (!items.length) return { enviados: 0 };
+      const r = await (await cliente()).saludSalida(items);
+      datos = marcarSubidos(await leer(), items.map((x) => x.id));
+      await guardar(datos);
+      return { enviados: items.length, pendientes: r.pendientes ?? null, datos };
+    },
+    async vaciarSalida() {
+      if (!(await vinculado())) return { ok: true };
+      return (await cliente()).vaciarSaludSalida();
     },
   };
 }

@@ -126,6 +126,25 @@ export async function montarForma({ raiz, api, salir }) {
   };
   let ultimaRecogida = 0;
 
+  // Forma → Apple Salud: sube los días cerrados y los entrenos nuevos (si lo activaste).
+  let ultimaExportacion = 0;
+  ctx.exportarSalud = async ({ siempre = false } = {}) => {
+    if (!api.forma.salud?.exportar || !estado.datos.integracion?.exportar) return null;
+    if (!siempre && Date.now() - ultimaExportacion < 120_000) return null;
+    ultimaExportacion = Date.now();
+    try {
+      await guardando;
+      const r = await api.forma.salud.exportar({ hoy: fechaISO() });
+      if (r?.datos) {
+        const nuevos = normalizarForma(r.datos);
+        estado.datos = { ...nuevos, activa: estado.datos.activa ?? nuevos.activa };
+      }
+      return r;
+    } catch {
+      return null;
+    }
+  };
+
   // ---------- Resumen semanal ----------
   // El texto lo escribe la IA (si está activada y quedan usos) solo con las
   // métricas ya calculadas; si no hay IA o falla, el de reglas.
@@ -343,7 +362,10 @@ export async function montarForma({ raiz, api, salir }) {
   pintar();
   // Lo que haya mandado el Atajo de Apple Salud: al arrancar, al abrir Forma y al volver a la app.
   // Y los resúmenes semanales pendientes, después de recoger lo de Salud.
-  const ponerseAlDia = () => Promise.resolve(ctx.recogerSalud()).finally(() => ctx.generarResumenes());
+  const ponerseAlDia = () =>
+    Promise.resolve(ctx.recogerSalud())
+      .finally(() => ctx.generarResumenes())
+      .finally(() => ctx.exportarSalud());
   if (!raiz.hidden) ponerseAlDia();
   ctx.sincronizarAvisoResumen();
   document.addEventListener('visibilitychange', () => {

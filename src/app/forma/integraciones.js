@@ -81,6 +81,54 @@ export function crearIntegraciones(ctx) {
     </div>`;
   }
 
+  // Forma → Apple Salud: interruptor (apagado por defecto) con su aviso de privacidad.
+  function bloqueExportar() {
+    const int = ctx.datos.integracion ?? {};
+    const on = Boolean(int.exportar);
+    const subidos = int.subidos ?? [];
+    const dias = subidos.filter((x) => x.startsWith('comida:')).length;
+    const entrenos = subidos.filter((x) => x.startsWith('entreno:')).length;
+    return `<div class="f-int-exportar" data-exportar>
+      <label class="f-check"><input type="checkbox" data-cambio="int-exportar" ${on ? 'checked' : ''}><span><b style="color:var(--f-texto)">Escribir en Apple Salud</b> mis comidas (kcal y macros de cada día ya cerrado) y mis entrenos terminados.</span></label>
+      <p class="f-tenue">${ic('info', 12)} Para que el Atajo pueda leerlos, esos totales viajan <b>sin cifrar</b> a tu servidor y se borran en cuanto los recoge (o a los 30 días). El resto de Forma sigue cifrado.</p>
+      ${on ? `<p class="f-tenue">Enviados hasta ahora: ${dias} día${dias === 1 ? '' : 's'} de comida y ${entrenos} entreno${entrenos === 1 ? '' : 's'}.</p><button type="button" class="f-boton f-boton--fantasma" data-a="int-guia-salida">${ic('info', 16)}Cómo configurar el Atajo «Forma → Salud»</button>` : ''}
+    </div>`;
+  }
+
+  function hojaGuiaSalida() {
+    const base = (local().estado?.url ?? 'https://<tu-servidor>.workers.dev/integraciones/salud').replace(/\/salud$/, '/salud/salida');
+    const ejemplo = JSON.stringify(
+      {
+        comidas: [{ fecha: '2026-11-19', fecha_hora: '2026-11-19T20:00:00.000Z', kcal: 2150, proteina_g: 162, hidratos_g: 210, grasa_g: 68, fibra_g: 31 }],
+        entrenos: [{ nombre: 'Pecho y tríceps', tipo: 'fuerza', inicio: '2026-11-19T17:05:00.000Z', fin: '2026-11-19T18:10:00.000Z', minutos: 65, kcal: 310 }],
+        total: 2,
+      },
+      null,
+      2,
+    );
+    const paso = (n, html) => `<li class="f-guia__paso"><span class="f-guia__n">${n}</span><div>${html}</div></li>`;
+    ctx.hojas.abrir(
+      `<div class="f-hoja__titulo"><h2>Atajo «Forma → Salud»</h2></div>
+       <p class="f-explica">Lee lo que Forma ha dejado listo y lo escribe en Salud. Cada día y cada entreno se entrega <b style="color:var(--f-texto)">una sola vez</b>: aunque lo ejecutes muchas veces, no se duplica nada.</p>
+       <span class="f-etiqueta">Dirección (GET)</span>
+       <code class="f-codigo">${escapar(base)}</code>
+       <button type="button" class="f-boton" data-a="int-copiar" data-texto="${escapar(base)}" data-que="Dirección copiada">${ic('copiar', 16)}Copiar dirección</button>
+       <span class="f-etiqueta">Respuesta</span>
+       <pre class="f-codigo">${escapar(ejemplo)}</pre>
+       <span class="f-etiqueta">Pasos en Atajos</span>
+       <ol class="f-guia">
+         ${paso(1, `<b>Obtener contenido de URL</b>: la dirección de arriba, método <i>GET</i>, cabecera <code>Authorization</code> = <code>Bearer forma_…</code> (el mismo token).`)}
+         ${paso(2, '<b>Obtener valor del diccionario</b> <code>comidas</code> → <b>Repetir con cada elemento</b>:')}
+         ${paso('2a', '<b>Registrar muestra de salud</b>: <i>Energía alimentaria</i> = <code>kcal</code> (kcal), fecha = <code>fecha_hora</code>.')}
+         ${paso('2b', 'Igual con <i>Proteína</i> = <code>proteina_g</code>, <i>Hidratos de carbono</i> = <code>hidratos_g</code>, <i>Grasa total</i> = <code>grasa_g</code> y <i>Fibra</i> = <code>fibra_g</code> (en gramos).')}
+         ${paso(3, '<b>Obtener valor del diccionario</b> <code>entrenos</code> → <b>Repetir con cada elemento</b>: <b>Registrar entrenamiento</b> si tu iPhone tiene esa acción (tipo «Entrenamiento de fuerza» o «Cardio», inicio = <code>inicio</code>, fin = <code>fin</code>, energía = <code>kcal</code>). Si no la tiene, <b>Registrar muestra de salud</b> → <i>Energía activa</i> = <code>kcal</code> con fecha = <code>inicio</code>.')}
+         ${paso(4, 'Ponlo al final de «Sincronizar Forma» o como atajo aparte con su automatización a las 22:30.')}
+       </ol>
+       <p class="f-tenue">Lo de cada día se manda cuando el día ya ha terminado (al abrir Forma al día siguiente); lo que corrijas después de enviarlo ya no se actualiza en Salud.</p>`,
+      { clase: 'f-hoja--alta', titulo: 'Forma → Salud' },
+    );
+  }
+
   function panel({ cargar: debeCargar = true } = {}) {
     const s = local();
     if (debeCargar && !s.estado && !s.cargando && !s.error) setTimeout(cargar, 0);
@@ -98,6 +146,7 @@ export function crearIntegraciones(ctx) {
       cuerpo = `${textoUltima(u, uso)}
         ${e.llaveDistinta ? '<p class="f-tenue">Ojo: el último token se generó en otro dispositivo con otra llave. Si no te llegan datos, genera un token nuevo aquí.</p>' : ''}
         <div class="f-lista" style="margin:0 -16px">${e.tokens.length ? e.tokens.map(filaToken).join('') : '<p class="f-tenue" style="padding:0 16px">Todavía no tienes ningún token.</p>'}</div>
+        ${bloqueExportar()}
         <div class="f-rejilla-2">
           <button type="button" class="f-boton f-boton--azul" data-a="int-generar">${ic('llave', 16)}Generar token</button>
           <button type="button" class="f-boton" data-a="int-recoger" ${activos.length ? '' : 'disabled'}>${ic('descargar', 16)}Recoger ahora</button>
@@ -194,6 +243,7 @@ Content-Type: application/json</code>
     },
     'int-generar': () => hojaGenerar(),
     'int-guia': () => hojaGuia(),
+    'int-guia-salida': () => hojaGuiaSalida(),
     'int-recoger': async (el) => {
       el.disabled = true;
       const r = await ctx.recogerSalud({ avisar: true, siempre: true });
@@ -234,6 +284,24 @@ Content-Type: application/json</code>
     },
   };
 
+  const cambios = {
+    'int-exportar': async (el) => {
+      const exportar = el.checked;
+      const integracion = { ...ctx.datos.integracion };
+      if (exportar) integracion.exportar = true;
+      else delete integracion.exportar;
+      await ctx.guardar({ ...ctx.datos, integracion }, { pintar: false });
+      if (exportar) {
+        const r = await ctx.exportarSalud({ siempre: true });
+        ctx.tostada(r?.enviados ? `Listo: ${r.enviados} cosas esperan al Atajo «Forma → Salud».` : 'Activado: lo nuevo irá saliendo hacia Apple Salud.');
+      } else {
+        await ctx.api.forma.salud?.vaciarSalida?.().catch(() => {});
+        ctx.tostada('Desactivado: lo que no había recogido el Atajo se ha borrado del servidor.');
+      }
+      repintarPanel();
+    },
+  };
+
   const formularios = {
     'int-generar': async (form) => {
       const boton = form.querySelector('[type="submit"]');
@@ -252,5 +320,5 @@ Content-Type: application/json</code>
     },
   };
 
-  return { panel, acciones, formularios };
+  return { panel, acciones, cambios, formularios };
 }

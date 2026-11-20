@@ -48,6 +48,15 @@ export async function rutaIntegraciones(n, peticion, ruta, { json, ErrorHttp, cu
   }
   await n.db.prepare('UPDATE token_integracion SET ventana = ?, peticiones = ? WHERE id = ?').bind(hora, usadas + 1, fila.id).run();
 
+  // Forma → Apple Salud: lo pendiente de escribir en Salud (se entrega una vez).
+  if (ruta === '/integraciones/salud/salida') {
+    if (peticion.method !== 'GET') throw new ErrorHttp(405, 'Usa GET.');
+    const { results } = await n.db.prepare('SELECT id, tipo, datos FROM salud_salida WHERE entregado IS NULL ORDER BY creado LIMIT 60').all();
+    if (results.length) await n.db.batch(results.map((r) => n.db.prepare('UPDATE salud_salida SET entregado = ? WHERE id = ?').bind(n.ahora, r.id)));
+    await n.db.prepare('UPDATE token_integracion SET ultimo_uso_en = ? WHERE id = ?').bind(n.ahora, fila.id).run();
+    const de = (tipo) => results.filter((r) => r.tipo === tipo).map((r) => JSON.parse(r.datos));
+    return json({ comidas: de('comida'), entrenos: de('entreno'), total: results.length });
+  }
   if (ruta !== '/integraciones/salud') throw new ErrorHttp(404, 'No existe.');
   if (peticion.method !== 'POST') throw new ErrorHttp(405, 'Usa POST.');
 
@@ -147,6 +156,31 @@ export async function rutaSaludDispositivo(n, m, ruta, { json, ErrorHttp, cuerpo
     if (lista.length) await n.db.batch(lista.map((id) => n.db.prepare('DELETE FROM buzon_salud WHERE id = ?').bind(id)));
     return json({ ok: true, borradas: lista.length });
   }
+  // Lo que la app quiere escribir en Apple Salud. Lo ya entregado no se toca;
+  // lo pendiente se actualiza (por si corregiste algo antes de que llegara).
+  if (m === 'POST' && ruta === '/salud/salida') {
+    const { items } = await cuerpo(peticion);
+    if (!Array.isArray(items) || items.length > 60) throw new ErrorHttp(400, 'Lista no válida.');
+    const validos = items.filter(
+      (x) => x && /^(comida|entreno):[A-Za-z0-9_-]{1,60}$/.test(x.id) && ['comida', 'entreno'].includes(x.tipo) && x.id.startsWith(`${x.tipo}:`) && x.datos && typeof x.datos === 'object' && JSON.stringify(x.datos).length <= 2000,
+    );
+    if (validos.length) {
+      await n.db.batch(
+        validos.map((x) =>
+          n.db
+            .prepare('INSERT INTO salud_salida (id, tipo, datos, creado, entregado) VALUES (?, ?, ?, ?, NULL) ON CONFLICT(id) DO UPDATE SET datos = excluded.datos WHERE salud_salida.entregado IS NULL')
+            .bind(x.id, x.tipo, JSON.stringify(x.datos), n.ahora),
+        ),
+      );
+    }
+    const pendientes = await n.db.prepare('SELECT COUNT(*) AS total FROM salud_salida WHERE entregado IS NULL').first();
+    return json({ ok: true, guardados: validos.length, pendientes: pendientes?.total ?? 0 });
+  }
+  // Al desactivarlo en la app: se borra lo que no se haya entregado.
+  if (m === 'DELETE' && ruta === '/salud/salida') {
+    await n.db.prepare('DELETE FROM salud_salida WHERE entregado IS NULL').run();
+    return json({ ok: true });
+  }
   return null;
 }
 
@@ -154,4 +188,5 @@ export async function rutaSaludDispositivo(n, m, ruta, { json, ErrorHttp, cuerpo
 export const limpiezaSalud = (n, ahora) => [
   n.db.prepare('DELETE FROM salud_vistos WHERE cuando < ?').bind(ahora - DIAS_VISTOS * 86_400_000),
   n.db.prepare('DELETE FROM buzon_salud WHERE recibido < ?').bind(ahora - DIAS_BUZON * 86_400_000),
+  n.db.prepare('DELETE FROM salud_salida WHERE creado < ?').bind(ahora - 30 * 86_400_000),
 ];

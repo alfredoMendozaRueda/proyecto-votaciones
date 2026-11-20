@@ -333,7 +333,7 @@ async function desvincular(n) {
     if (refresco) await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(refresco)}`, { method: 'POST' }).catch(() => {});
   }
   await n.db.batch(
-    ['dispositivos', 'recordatorios', 'automatizaciones', 'avisados', 'registro', 'pendientes', 'codigos', 'sincro', 'sincro_solicitudes', 'token_integracion', 'buzon_salud', 'salud_vistos'].map((t) =>
+    ['dispositivos', 'recordatorios', 'automatizaciones', 'avisados', 'registro', 'pendientes', 'codigos', 'sincro', 'sincro_solicitudes', 'token_integracion', 'buzon_salud', 'salud_vistos', 'salud_salida'].map((t) =>
       n.db.prepare(`DELETE FROM ${t}`),
     ),
   );

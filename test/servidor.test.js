@@ -1325,3 +1325,40 @@ test('salud: el sueño viaja aparte de los pasos y no los pisa en el buzón', as
   assert.equal(datos.dias[hoy].pasos, 5000);
   assert.equal(datos.dias[hoy].sueno, 450);
 });
+
+test('Forma → Salud: el Atajo recoge lo pendiente una sola vez; lo pendiente se corrige y se borra al desactivar', async () => {
+  const { env, dispositivo, creado, llave } = await preparadoSalud();
+  const subir = (items) => pedir(env, '/salud/salida', { metodo: 'POST', token: dispositivo, cuerpo: { items } });
+  const leerSalida = (token = creado.token) => pedir(env, '/integraciones/salud/salida', { token });
+  const comida = (kcal) => ({ id: 'comida:2026-01-05', tipo: 'comida', datos: { fecha: '2026-01-05', kcal } });
+  // Sin token o con el de un dispositivo: no.
+  assert.equal((await leerSalida(null)).status, 401);
+  assert.equal((await leerSalida(dispositivo)).status, 401);
+  assert.equal((await (await subir([comida(2000), { id: 'malo', tipo: 'comida', datos: {} }])).json()).guardados, 1);
+  // Antes de entregarse, se puede corregir.
+  await subir([comida(2100), { id: 'entreno:s1', tipo: 'entreno', datos: { nombre: 'Pierna', kcal: 320 } }]);
+  const r1 = await (await leerSalida()).json();
+  assert.deepEqual(r1, { comidas: [{ fecha: '2026-01-05', kcal: 2100 }], entrenos: [{ nombre: 'Pierna', kcal: 320 }], total: 2 });
+  // Una sola vez: la segunda lectura llega vacía y lo entregado ya no cambia.
+  assert.deepEqual(await (await leerSalida()).json(), { comidas: [], entrenos: [], total: 0 });
+  await subir([comida(9999)]);
+  assert.equal((await (await leerSalida()).json()).total, 0);
+  // Desactivar borra lo pendiente.
+  await subir([{ id: 'comida:2026-01-06', tipo: 'comida', datos: { fecha: '2026-01-06', kcal: 1800 } }]);
+  await pedir(env, '/salud/salida', { metodo: 'DELETE', token: dispositivo });
+  assert.equal((await (await leerSalida()).json()).total, 0);
+  // La app lo hace sola con crearApiSalud.exportar (solo si está activado).
+  const { crearApiSalud } = await import('../src/compartido/forma/salud.js');
+  const { apuntar } = await import('../src/compartido/forma/acciones.js');
+  const hoy = partesSalud(Date.now(), 'Europe/Madrid').fecha;
+  const ayer = partesSalud(Date.now() - 86_400_000, 'Europe/Madrid').fecha;
+  let datos = normalizarForma({ perfil: { peso: 80 }, integracion: { ...llave } });
+  ({ datos } = apuntar(datos, { fecha: ayer, momento: 'comida', minuto: 800, items: [{ nombre: 'Día', kcal: 2000, proteina: 150 }] }));
+  const cliente = new ClienteServidor({ url: 'https://kitsune.ejemplo.workers.dev', token: dispositivo, fetch: (url, init) => servidor.fetch(new Request(url, init), env) });
+  const api = crearApiSalud({ cliente: async () => cliente, vinculado: async () => true, leer: async () => datos, guardar: async (d) => (datos = normalizarForma(d)) });
+  assert.equal((await api.exportar({ hoy })).enviados, 0); // apagado
+  datos = normalizarForma({ ...datos, integracion: { ...datos.integracion, exportar: true } });
+  assert.equal((await api.exportar({ hoy })).enviados, 1);
+  assert.equal((await api.exportar({ hoy })).enviados, 0); // ya enviado
+  assert.equal((await (await leerSalida()).json()).comidas[0].kcal, 2000);
+});

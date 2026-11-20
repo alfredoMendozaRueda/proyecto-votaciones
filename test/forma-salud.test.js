@@ -204,3 +204,31 @@ test('sueño: horas, minutos, segundos y «7 h 20 min»; va a la noche que acaba
   assert.equal(datos.dias['2026-11-20'].sueno, 450);
   assert.equal(datos.dias['2026-11-20'].suenoFuente, 'apple_salud');
 });
+
+test('Forma → Salud: días cerrados y entrenos terminados, cada uno una sola vez', async () => {
+  const { itemsParaSalud, marcarSubidos } = await import('../src/compartido/forma/salud.js');
+  const { apuntar } = await import('../src/compartido/forma/acciones.js');
+  let datos = normalizarForma({ perfil: { peso: 80 }, integracion: { exportar: true } });
+  for (const f of ['2026-11-18', '2026-11-19', '2026-11-20']) ({ datos } = apuntar(datos, { fecha: f, momento: 'comida', minuto: 800, items: [{ nombre: 'Día', kcal: 2000, proteina: 150, hidratos: 200, grasa: 60, fibra: 30 }] }));
+  datos = normalizarForma({
+    ...datos,
+    sesiones: [
+      { id: 's1', fecha: '2026-11-19', nombre: 'Pierna', inicio: Date.parse('2026-11-19T17:00:00Z'), fin: Date.parse('2026-11-19T18:00:00Z'), series: [{ ejercicioId: 'x-sentadilla', kg: 100, reps: 5 }] },
+      { id: 's0', fecha: '2026-11-01', nombre: 'Vieja', series: [{ ejercicioId: 'x-sentadilla', kg: 100, reps: 5 }] },
+    ],
+  });
+  const items = itemsParaSalud(datos, { hoy: '2026-11-20', zona: Z });
+  // Hoy no (aún puede cambiar) ni el entreno de hace más de 7 días.
+  assert.deepEqual(items.map((x) => x.id), ['comida:2026-11-18', 'comida:2026-11-19', 'entreno:s1']);
+  const comida = items[1].datos;
+  assert.deepEqual(comida, { fecha: '2026-11-19', fecha_hora: '2026-11-19T20:00:00.000Z', kcal: 2000, proteina_g: 150, hidratos_g: 200, grasa_g: 60, fibra_g: 30 });
+  const e = items[2].datos;
+  assert.equal(e.tipo, 'fuerza');
+  assert.equal(e.minutos, 60);
+  assert.equal(e.kcal, 320); // (MET 5 − 1) × 80 kg × 1 h
+  // Ya enviados: no se repiten (y viaja con la sincronización).
+  const marcados = normalizarForma(marcarSubidos(datos, items.map((x) => x.id)));
+  assert.deepEqual(itemsParaSalud(marcados, { hoy: '2026-11-20', zona: Z }), []);
+  assert.equal(marcados.integracion.exportar, true);
+  assert.equal(marcados.integracion.subidos.length, 3);
+});

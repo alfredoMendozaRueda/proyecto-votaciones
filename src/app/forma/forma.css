@@ -3524,3 +3524,16 @@ p.f-sem__aviso {
   color: #3ddc97;
   font-size: 13px;
 }
+
+.f-int-exportar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--f-linea);
+}
+
+.f-int-exportar .f-tenue .f-ic {
+  display: inline-block;
+  vertical-align: -1px;
+}

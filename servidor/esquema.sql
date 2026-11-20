@@ -80,3 +80,13 @@ CREATE TABLE IF NOT EXISTS buzon_salud (
 -- Huellas (HMAC con un secreto del servidor) de los pesajes ya recibidos, para
 -- responder «duplicado» sin guardar el peso en claro. Se borran a los 120 días.
 CREATE TABLE IF NOT EXISTS salud_vistos (clave TEXT PRIMARY KEY, cuando INTEGER NOT NULL);
+-- Forma → Apple Salud (solo si lo activas en la app): días cerrados de comida y
+-- entrenos terminados, que el Atajo lee con su token y escribe en Salud. Van sin
+-- cifrar (el Atajo no sabe descifrar); se entregan una sola vez y se borran a los 30 días.
+CREATE TABLE IF NOT EXISTS salud_salida (
+  id TEXT PRIMARY KEY,
+  tipo TEXT NOT NULL,
+  datos TEXT NOT NULL,
+  creado INTEGER NOT NULL,
+  entregado INTEGER
+);

@@ -248,6 +248,15 @@ export class ClienteServidor {
     return this.pedir('/forma/resumen', { metodo: 'PUT', cuerpo: { activo, dia, hora } });
   }
 
+  // Forma → Apple Salud: lo que el Atajo escribirá en Salud.
+  saludSalida(items) {
+    return this.pedir('/salud/salida', { metodo: 'POST', cuerpo: { items } });
+  }
+
+  vaciarSaludSalida() {
+    return this.pedir('/salud/salida', { metodo: 'DELETE' });
+  }
+
   // La dirección que llama el Atajo.
   urlSalud() {
     return `${this.url}/integraciones/salud`;

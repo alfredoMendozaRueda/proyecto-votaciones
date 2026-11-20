@@ -591,7 +591,7 @@ export function crearDemo() {
         guardado = JSON.stringify(datos);
       };
       // Apple Salud en la demo: un «servidor» en memoria con el mismo cifrado.
-      const servidorSalud = { tokens: [], buzon: [], publica: null, vistos: new Set() };
+      const servidorSalud = { tokens: [], buzon: [], publica: null, vistos: new Set(), salida: [] };
       const clienteDemo = {
         url: 'https://kitsune.ejemplo.workers.dev',
         urlSalud: () => 'https://kitsune.ejemplo.workers.dev/integraciones/salud',
@@ -609,6 +609,18 @@ export function crearDemo() {
           return { ok: true };
         },
         saludBuzon: async () => ({ entregas: servidorSalud.buzon }),
+        async saludSalida(items) {
+          for (const x of items) {
+            const previo = servidorSalud.salida.find((y) => y.id === x.id);
+            if (!previo) servidorSalud.salida.push({ ...x, entregado: false });
+            else if (!previo.entregado) previo.datos = x.datos;
+          }
+          return { ok: true, guardados: items.length, pendientes: servidorSalud.salida.filter((x) => !x.entregado).length };
+        },
+        async vaciarSaludSalida() {
+          servidorSalud.salida = servidorSalud.salida.filter((x) => x.entregado);
+          return { ok: true };
+        },
         async saludRecogidas(ids) {
           servidorSalud.buzon = servidorSalud.buzon.filter((e) => !ids.includes(e.id));
           return { ok: true };
@@ -633,6 +645,14 @@ export function crearDemo() {
             crearToken: async (nombre) => (await cargar()).crearToken(nombre),
             revocar: async (id) => (await cargar()).revocar(id),
             recoger: async () => (await cargar()).recoger(),
+            exportar: async (o) => (await cargar()).exportar(o),
+            vaciarSalida: async () => (await cargar()).vaciarSalida(),
+            // Solo en la demo: lo que leería el segundo Atajo (GET /integraciones/salud/salida).
+            leerSalida() {
+              const pendientes = servidorSalud.salida.filter((x) => !x.entregado);
+              pendientes.forEach((x) => (x.entregado = true));
+              return { comidas: pendientes.filter((x) => x.tipo === 'comida').map((x) => x.datos), entrenos: pendientes.filter((x) => x.tipo === 'entreno').map((x) => x.datos) };
+            },
             // Solo en la demo: hace lo mismo que el Atajo (POST /integraciones/salud).
             async simularAtajo(cuerpo, ahora = Date.now()) {
               const { validarSalud, cifrarParaBuzon } = await import('../compartido/forma/salud.js');
