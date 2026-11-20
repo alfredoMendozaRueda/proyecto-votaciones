@@ -86,12 +86,12 @@ export function crearIntegraciones(ctx) {
     const int = ctx.datos.integracion ?? {};
     const on = Boolean(int.exportar);
     const subidos = int.subidos ?? [];
-    const dias = subidos.filter((x) => x.startsWith('comida:')).length;
+    const comidas = subidos.filter((x) => x.startsWith('comida:')).length;
     const entrenos = subidos.filter((x) => x.startsWith('entreno:')).length;
     return `<div class="f-int-exportar" data-exportar>
-      <label class="f-check"><input type="checkbox" data-cambio="int-exportar" ${on ? 'checked' : ''}><span><b style="color:var(--f-texto)">Escribir en Apple Salud</b> mis comidas (kcal y macros de cada día ya cerrado) y mis entrenos terminados.</span></label>
-      <p class="f-tenue">${ic('info', 12)} Para que el Atajo pueda leerlos, esos totales viajan <b>sin cifrar</b> a tu servidor y se borran en cuanto los recoge (o a los 30 días). El resto de Forma sigue cifrado.</p>
-      ${on ? `<p class="f-tenue">Enviados hasta ahora: ${dias} día${dias === 1 ? '' : 's'} de comida y ${entrenos} entreno${entrenos === 1 ? '' : 's'}.</p><button type="button" class="f-boton f-boton--fantasma" data-a="int-guia-salida">${ic('info', 16)}Cómo configurar el Atajo «Forma → Salud»</button>` : ''}
+      <label class="f-check"><input type="checkbox" data-cambio="int-exportar" ${on ? 'checked' : ''}><span><b style="color:var(--f-texto)">Escribir en Apple Salud</b> cada comida que apuntas (kcal y macros, con su hora) y cada entreno que terminas.</span></label>
+      <p class="f-tenue">${ic('info', 12)} Salen solas en cuanto las guardas; el Atajo las recoge por la noche y las escribe en Salud. Para que pueda leerlas viajan <b>sin cifrar</b> a tu servidor y se borran en cuanto las recoge (o a los 30 días). El resto de Forma sigue cifrado.</p>
+      ${on ? `<p class="f-tenue">Enviados (últimos 7 días): ${comidas} comida${comidas === 1 ? '' : 's'} y ${entrenos} entreno${entrenos === 1 ? '' : 's'}. Si corriges o borras algo antes de que el Atajo lo recoja, se actualiza.</p><button type="button" class="f-boton f-boton--fantasma" data-a="int-guia-salida">${ic('info', 16)}Cómo configurar el Atajo «Forma → Salud»</button>` : ''}
     </div>`;
   }
 
@@ -99,7 +99,7 @@ export function crearIntegraciones(ctx) {
     const base = (local().estado?.url ?? 'https://<tu-servidor>.workers.dev/integraciones/salud').replace(/\/salud$/, '/salud/salida');
     const ejemplo = JSON.stringify(
       {
-        comidas: [{ fecha: '2026-11-19', fecha_hora: '2026-11-19T20:00:00.000Z', kcal: 2150, proteina_g: 162, hidratos_g: 210, grasa_g: 68, fibra_g: 31 }],
+        comidas: [{ fecha: '2026-11-19', fecha_hora: '2026-11-19T13:30:00.000Z', nombre: 'Pechuga de pollo', kcal: 248, proteina_g: 46.5, hidratos_g: 0, grasa_g: 5.4, fibra_g: 0 }],
         entrenos: [{ nombre: 'Pecho y tríceps', tipo: 'fuerza', inicio: '2026-11-19T17:05:00.000Z', fin: '2026-11-19T18:10:00.000Z', minutos: 65, kcal: 310 }],
         total: 2,
       },
@@ -109,7 +109,7 @@ export function crearIntegraciones(ctx) {
     const paso = (n, html) => `<li class="f-guia__paso"><span class="f-guia__n">${n}</span><div>${html}</div></li>`;
     ctx.hojas.abrir(
       `<div class="f-hoja__titulo"><h2>Atajo «Forma → Salud»</h2></div>
-       <p class="f-explica">Lee lo que Forma ha dejado listo y lo escribe en Salud. Cada día y cada entreno se entrega <b style="color:var(--f-texto)">una sola vez</b>: aunque lo ejecutes muchas veces, no se duplica nada.</p>
+       <p class="f-explica">Lee lo que Forma ha dejado listo y lo escribe en Salud. Cada comida y cada entreno se entrega <b style="color:var(--f-texto)">una sola vez</b>: aunque lo ejecutes muchas veces, no se duplica nada.</p>
        <span class="f-etiqueta">Dirección (GET)</span>
        <code class="f-codigo">${escapar(base)}</code>
        <button type="button" class="f-boton" data-a="int-copiar" data-texto="${escapar(base)}" data-que="Dirección copiada">${ic('copiar', 16)}Copiar dirección</button>
@@ -124,7 +124,7 @@ export function crearIntegraciones(ctx) {
          ${paso(3, '<b>Obtener valor del diccionario</b> <code>entrenos</code> → <b>Repetir con cada elemento</b>: <b>Registrar entrenamiento</b> si tu iPhone tiene esa acción (tipo «Entrenamiento de fuerza» o «Cardio», inicio = <code>inicio</code>, fin = <code>fin</code>, energía = <code>kcal</code>). Si no la tiene, <b>Registrar muestra de salud</b> → <i>Energía activa</i> = <code>kcal</code> con fecha = <code>inicio</code>.')}
          ${paso(4, 'Ponlo al final de «Sincronizar Forma» o como atajo aparte con su automatización a las 22:30.')}
        </ol>
-       <p class="f-tenue">Lo de cada día se manda cuando el día ya ha terminado (al abrir Forma al día siguiente); lo que corrijas después de enviarlo ya no se actualiza en Salud.</p>`,
+       <p class="f-tenue">Cada comida y cada entreno salen de Forma en cuanto los guardas, así que la automatización de la noche los encuentra sin que abras nada. Lo que corrijas o borres después de que el Atajo lo haya recogido ya no cambia en Salud.</p>`,
       { clase: 'f-hoja--alta', titulo: 'Forma → Salud' },
     );
   }

@@ -205,11 +205,12 @@ test('sueño: horas, minutos, segundos y «7 h 20 min»; va a la noche que acaba
   assert.equal(datos.dias['2026-11-20'].suenoFuente, 'apple_salud');
 });
 
-test('Forma → Salud: días cerrados y entrenos terminados, cada uno una sola vez', async () => {
-  const { itemsParaSalud, marcarSubidos } = await import('../src/compartido/forma/salud.js');
-  const { apuntar } = await import('../src/compartido/forma/acciones.js');
+test('Forma → Salud: cada comida y entreno al guardarse, reenvío si cambia y aviso si se borra', async () => {
+  const { itemsParaSalud, borradosParaSalud, marcarSubidos } = await import('../src/compartido/forma/salud.js');
+  const { apuntar, editarRegistro, borrarRegistros } = await import('../src/compartido/forma/acciones.js');
   let datos = normalizarForma({ perfil: { peso: 80 }, integracion: { exportar: true } });
-  for (const f of ['2026-11-18', '2026-11-19', '2026-11-20']) ({ datos } = apuntar(datos, { fecha: f, momento: 'comida', minuto: 800, items: [{ nombre: 'Día', kcal: 2000, proteina: 150, hidratos: 200, grasa: 60, fibra: 30 }] }));
+  ({ datos } = apuntar(datos, { fecha: '2026-11-19', momento: 'comida', minuto: 870, items: [{ nombre: 'Pechuga', kcal: 248, proteina: 46.5, hidratos: 0, grasa: 5.4 }] }));
+  ({ datos } = apuntar(datos, { fecha: '2026-11-20', momento: 'desayuno', minuto: 480, items: [{ nombre: 'Avena', kcal: 380, proteina: 13, hidratos: 60, grasa: 7, fibra: 10 }] }));
   datos = normalizarForma({
     ...datos,
     sesiones: [
@@ -217,18 +218,29 @@ test('Forma → Salud: días cerrados y entrenos terminados, cada uno una sola v
       { id: 's0', fecha: '2026-11-01', nombre: 'Vieja', series: [{ ejercicioId: 'x-sentadilla', kg: 100, reps: 5 }] },
     ],
   });
-  const items = itemsParaSalud(datos, { hoy: '2026-11-20', zona: Z });
-  // Hoy no (aún puede cambiar) ni el entreno de hace más de 7 días.
-  assert.deepEqual(items.map((x) => x.id), ['comida:2026-11-18', 'comida:2026-11-19', 'entreno:s1']);
-  const comida = items[1].datos;
-  assert.deepEqual(comida, { fecha: '2026-11-19', fecha_hora: '2026-11-19T20:00:00.000Z', kcal: 2000, proteina_g: 150, hidratos_g: 200, grasa_g: 60, fibra_g: 30 });
-  const e = items[2].datos;
-  assert.equal(e.tipo, 'fuerza');
-  assert.equal(e.minutos, 60);
-  assert.equal(e.kcal, 320); // (MET 5 − 1) × 80 kg × 1 h
-  // Ya enviados: no se repiten (y viaja con la sincronización).
-  const marcados = normalizarForma(marcarSubidos(datos, items.map((x) => x.id)));
-  assert.deepEqual(itemsParaSalud(marcados, { hoy: '2026-11-20', zona: Z }), []);
-  assert.equal(marcados.integracion.exportar, true);
-  assert.equal(marcados.integracion.subidos.length, 3);
+  const op = { hoy: '2026-11-20', zona: Z };
+  const items = itemsParaSalud(datos, op);
+  // También lo de hoy, cada comida con su hora; no el entreno de hace más de 7 días.
+  assert.deepEqual(items.map((x) => x.tipo), ['comida', 'comida', 'entreno']);
+  const pechuga = items.find((x) => x.datos.nombre === 'Pechuga').datos;
+  assert.deepEqual(pechuga, { fecha: '2026-11-19', fecha_hora: '2026-11-19T13:30:00.000Z', nombre: 'Pechuga', kcal: 248, proteina_g: 46.5, hidratos_g: 0, grasa_g: 5.4, fibra_g: 0 });
+  assert.equal(items.find((x) => x.tipo === 'entreno').datos.kcal, 320); // (MET 5 − 1) × 80 kg × 1 h
+  // Ya enviados: no se repiten.
+  datos = normalizarForma(marcarSubidos(datos, items));
+  assert.deepEqual(itemsParaSalud(datos, op), []);
+  assert.deepEqual(borradosParaSalud(datos, op), []);
+  // Corriges una comida: vuelve a salir (el servidor la actualiza si aún no se recogió).
+  const avena = datos.registros.find((r) => r.nombre === 'Avena');
+  datos = normalizarForma(editarRegistro(datos, avena.id, { kcal: 420 }));
+  assert.deepEqual(itemsParaSalud(datos, op).map((x) => x.datos.kcal), [420]);
+  datos = normalizarForma(marcarSubidos(datos, itemsParaSalud(datos, op)));
+  // La borras: se avisa para quitarla y se olvida.
+  datos = normalizarForma(borrarRegistros(datos, [avena.id]));
+  const borrados = borradosParaSalud(datos, op);
+  assert.deepEqual(borrados, [`comida:${avena.id}`]);
+  datos = normalizarForma(marcarSubidos(datos, [], borrados));
+  assert.deepEqual(borradosParaSalud(datos, op), []);
+  assert.equal(datos.integracion.subidos.length, 2);
+  // Lo que solo ha salido de los 7 días no cuenta como borrado.
+  assert.deepEqual(borradosParaSalud(datos, { hoy: '2026-12-20', zona: Z }), []);
 });

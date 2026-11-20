@@ -1360,5 +1360,12 @@ test('Forma → Salud: el Atajo recoge lo pendiente una sola vez; lo pendiente s
   datos = normalizarForma({ ...datos, integracion: { ...datos.integracion, exportar: true } });
   assert.equal((await api.exportar({ hoy })).enviados, 1);
   assert.equal((await api.exportar({ hoy })).enviados, 0); // ya enviado
-  assert.equal((await (await leerSalida()).json()).comidas[0].kcal, 2000);
+  // Lo de hoy también sale (al guardarlo), y si lo borras antes de que el Atajo lo recoja, se quita.
+  ({ datos } = apuntar(datos, { fecha: hoy, momento: 'cena', minuto: 1260, items: [{ nombre: 'Tortilla', kcal: 500 }] }));
+  ({ datos } = apuntar(datos, { fecha: hoy, momento: 'cena', minuto: 1265, items: [{ nombre: 'Error', kcal: 999 }] }));
+  assert.equal((await api.exportar({ hoy })).enviados, 2);
+  datos = normalizarForma({ ...datos, registros: datos.registros.filter((r) => r.nombre !== 'Error') });
+  assert.equal((await api.exportar({ hoy })).borrados, 1);
+  const recogido = await (await leerSalida()).json();
+  assert.deepEqual(recogido.comidas.map((c) => c.kcal).sort(), [2000, 500]);
 });

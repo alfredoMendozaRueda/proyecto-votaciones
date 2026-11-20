@@ -51,7 +51,7 @@ export async function rutaIntegraciones(n, peticion, ruta, { json, ErrorHttp, cu
   // Forma → Apple Salud: lo pendiente de escribir en Salud (se entrega una vez).
   if (ruta === '/integraciones/salud/salida') {
     if (peticion.method !== 'GET') throw new ErrorHttp(405, 'Usa GET.');
-    const { results } = await n.db.prepare('SELECT id, tipo, datos FROM salud_salida WHERE entregado IS NULL ORDER BY creado LIMIT 60').all();
+    const { results } = await n.db.prepare('SELECT id, tipo, datos FROM salud_salida WHERE entregado IS NULL ORDER BY creado LIMIT 200').all();
     if (results.length) await n.db.batch(results.map((r) => n.db.prepare('UPDATE salud_salida SET entregado = ? WHERE id = ?').bind(n.ahora, r.id)));
     await n.db.prepare('UPDATE token_integracion SET ultimo_uso_en = ? WHERE id = ?').bind(n.ahora, fila.id).run();
     const de = (tipo) => results.filter((r) => r.tipo === tipo).map((r) => JSON.parse(r.datos));
@@ -160,7 +160,7 @@ export async function rutaSaludDispositivo(n, m, ruta, { json, ErrorHttp, cuerpo
   // lo pendiente se actualiza (por si corregiste algo antes de que llegara).
   if (m === 'POST' && ruta === '/salud/salida') {
     const { items } = await cuerpo(peticion);
-    if (!Array.isArray(items) || items.length > 60) throw new ErrorHttp(400, 'Lista no válida.');
+    if (!Array.isArray(items) || items.length > 200) throw new ErrorHttp(400, 'Lista no válida.');
     const validos = items.filter(
       (x) => x && /^(comida|entreno):[A-Za-z0-9_-]{1,60}$/.test(x.id) && ['comida', 'entreno'].includes(x.tipo) && x.id.startsWith(`${x.tipo}:`) && x.datos && typeof x.datos === 'object' && JSON.stringify(x.datos).length <= 2000,
     );
@@ -175,6 +175,13 @@ export async function rutaSaludDispositivo(n, m, ruta, { json, ErrorHttp, cuerpo
     }
     const pendientes = await n.db.prepare('SELECT COUNT(*) AS total FROM salud_salida WHERE entregado IS NULL').first();
     return json({ ok: true, guardados: validos.length, pendientes: pendientes?.total ?? 0 });
+  }
+  // Lo que borraste en la app: se quita si el Atajo aún no lo había recogido.
+  if (m === 'POST' && ruta === '/salud/salida/borrar') {
+    const { ids } = await cuerpo(peticion);
+    const lista = Array.isArray(ids) ? ids.filter((x) => typeof x === 'string' && /^(comida|entreno):[A-Za-z0-9_-]{1,60}$/.test(x)).slice(0, 200) : [];
+    if (lista.length) await n.db.batch(lista.map((idItem) => n.db.prepare('DELETE FROM salud_salida WHERE id = ? AND entregado IS NULL').bind(idItem)));
+    return json({ ok: true, borrados: lista.length });
   }
   // Al desactivarlo en la app: se borra lo que no se haya entregado.
   if (m === 'DELETE' && ruta === '/salud/salida') {

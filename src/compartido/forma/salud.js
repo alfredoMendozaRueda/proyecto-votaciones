@@ -7,7 +7,6 @@ import { esFecha, sumarDias } from './fechas.js';
 import { partesLocales, desdeLocal } from '../horas.js';
 import { id } from './datos.js';
 import { revisarHitos, pesoDeReferencia } from './progreso.js';
-import { registrosDelDia, totales } from './diario.js';
 import { kcalEjercicio, TIPOS_ENTRENO } from './calculos.js';
 import { duracionSesion, kcalNetasCardio } from './entreno.js';
 
@@ -371,33 +370,55 @@ export const NOMBRE_FUENTE = { apple_salud: 'Apple Salud' };
 export const nombreFuente = (f) => NOMBRE_FUENTE[f] ?? (f ? String(f).replace(/_/g, ' ') : 'Manual');
 
 // ---------- Forma → Apple Salud ----------
-// Si lo activas, la app manda al servidor (sin cifrar: el Atajo no sabe
-// descifrar) los días ya cerrados de comida y los entrenos terminados de los
-// últimos 7 días, cada uno una sola vez; el Atajo los recoge y los escribe en Salud.
+// Si lo activas, cada comida que apuntas y cada entreno que terminas salen hacia
+// tu servidor (sin cifrar: el Atajo no sabe descifrar) en cuanto se guardan; el
+// Atajo los recoge (de noche, con su automatización) y los escribe en Salud.
+// Si los corriges o borras antes de que el Atajo los recoja, se actualizan o se
+// quitan; lo ya recogido no cambia. Se miran los últimos 7 días.
 export const DIAS_EXPORTAR = 7;
 const r1 = (n) => Math.round(n * 10) / 10;
+const idSeguro = (x) => String(x).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 50);
+// Firma corta del contenido: si cambia, se vuelve a mandar (si aún no se recogió).
+export function firma(objeto) {
+  let h = 5381;
+  for (const c of JSON.stringify(objeto)) h = ((h << 5) + h + c.charCodeAt(0)) >>> 0;
+  return h.toString(36);
+}
+const enviados = (datos) => {
+  const mapa = new Map();
+  for (const x of datos.integracion?.subidos ?? []) {
+    const [idItem, f = ''] = x.split('#');
+    mapa.set(idItem, f);
+  }
+  return mapa;
+};
 
-export function itemsParaSalud(datos, { hoy, zona = datos.perfil?.zona ?? 'Europe/Madrid' } = {}) {
-  const ya = new Set(datos.integracion?.subidos ?? []);
+function todosParaSalud(datos, { hoy, zona = datos.perfil?.zona ?? 'Europe/Madrid' }) {
+  const desde = sumarDias(hoy, -DIAS_EXPORTAR);
   const items = [];
-  // Comidas: el total de cada día cerrado (hoy aún puede cambiar).
-  for (let i = DIAS_EXPORTAR; i >= 1; i--) {
-    const fecha = sumarDias(hoy, -i);
-    const id = `comida:${fecha}`;
-    const regs = registrosDelDia(datos, fecha);
-    if (ya.has(id) || !regs.length) continue;
-    const t = totales(regs);
+  // Cada comida apuntada, con su hora.
+  for (const reg of datos.registros) {
+    if (reg.fecha < desde || reg.fecha > hoy || !idSeguro(reg.id)) continue;
+    const hora = `${String(Math.floor((reg.minuto ?? 720) / 60)).padStart(2, '0')}:${String((reg.minuto ?? 720) % 60).padStart(2, '0')}`;
     items.push({
-      id,
+      id: `comida:${idSeguro(reg.id)}`,
       tipo: 'comida',
-      datos: { fecha, fecha_hora: new Date(desdeLocal(fecha, '21:00', zona)).toISOString(), kcal: Math.round(t.kcal), proteina_g: r1(t.proteina), hidratos_g: r1(t.hidratos), grasa_g: r1(t.grasa), fibra_g: r1(t.fibra) },
+      datos: {
+        fecha: reg.fecha,
+        fecha_hora: new Date(desdeLocal(reg.fecha, hora, zona)).toISOString(),
+        nombre: String(reg.nombre ?? 'Comida').slice(0, 80),
+        kcal: Math.round(reg.kcal ?? 0),
+        proteina_g: r1(reg.proteina ?? 0),
+        hidratos_g: r1(reg.hidratos ?? 0),
+        grasa_g: r1(reg.grasa ?? 0),
+        fibra_g: r1(reg.fibra ?? 0),
+      },
     });
   }
   // Entrenos terminados (no el que está en marcha).
   const peso = pesoDeReferencia(datos, hoy) ?? datos.perfil?.peso ?? 75;
   for (const s of datos.sesiones) {
-    const id = `entreno:${s.id}`;
-    if (ya.has(id) || s.fecha < sumarDias(hoy, -DIAS_EXPORTAR) || s.fecha > hoy || datos.activa?.id === s.id) continue;
+    if (s.fecha < desde || s.fecha > hoy || datos.activa?.id === s.id || !idSeguro(s.id)) continue;
     const cardio = s.cardio ?? [];
     const minCardio = cardio.reduce((t, c) => t + (c.minutos ?? 0), 0);
     const minutos = duracionSesion(s) ?? Math.max(minCardio, s.series.length ? 60 : 0);
@@ -406,7 +427,7 @@ export function itemsParaSalud(datos, { hoy, zona = datos.perfil?.zona ?? 'Europ
     const met = TIPOS_ENTRENO.find((t) => t.id === 'pesas')?.met ?? 5;
     const kcal = kcalEjercicio(met, peso, Math.max(0, minutos - minCardio)) + cardio.reduce((t, c) => t + kcalNetasCardio(c, peso), 0);
     items.push({
-      id,
+      id: `entreno:${idSeguro(s.id)}`,
       tipo: 'entreno',
       datos: {
         nombre: s.nombre || 'Entreno',
@@ -418,11 +439,39 @@ export function itemsParaSalud(datos, { hoy, zona = datos.perfil?.zona ?? 'Europ
       },
     });
   }
-  return items.slice(0, 60);
+  return items;
 }
 
-// Marca como enviados (para no repetirlos; se recuerdan los 300 últimos).
-export const marcarSubidos = (datos, ids) => ({ ...datos, integracion: { ...datos.integracion, subidos: [...new Set([...(datos.integracion?.subidos ?? []), ...ids])].slice(-300) } });
+// Lo nuevo o cambiado desde el último envío, y lo enviado que ya no existe.
+export function itemsParaSalud(datos, opciones) {
+  const ya = enviados(datos);
+  return todosParaSalud(datos, opciones)
+    .filter((x) => ya.get(x.id) !== firma(x.datos))
+    .slice(0, 200);
+}
+
+export function borradosParaSalud(datos, opciones) {
+  const vivos = new Set(todosParaSalud(datos, opciones).map((x) => x.id));
+  const ya = enviados(datos);
+  const existe = (idItem) => {
+    const [tipo, id] = idItem.split(':');
+    return tipo === 'comida' ? datos.registros.some((r) => idSeguro(r.id) === id) : datos.sesiones.some((x) => idSeguro(x.id) === id);
+  };
+  // Solo lo que ya no existe (no lo que simplemente ha salido de los 7 días).
+  return [...ya.keys()].filter((idItem) => !vivos.has(idItem) && !existe(idItem));
+}
+
+// Anota lo enviado (con su firma) y olvida lo borrado; se recuerdan los 600 últimos.
+export function marcarSubidos(datos, items = [], borrados = []) {
+  const ya = enviados(datos);
+  for (const idItem of borrados) ya.delete(idItem);
+  for (const x of items) {
+    ya.delete(x.id);
+    ya.set(x.id, x.datos ? firma(x.datos) : '');
+  }
+  const subidos = [...ya].map(([idItem, f]) => (f ? `${idItem}#${f}` : idItem)).slice(-600);
+  return { ...datos, integracion: { ...datos.integracion, subidos } };
+}
 
 // ---------- Buzón cifrado ----------
 // El servidor cifra cada entrega con ECDH P-256 (una llave efímera por entrega)
@@ -556,11 +605,15 @@ export function crearApiSalud({ cliente, vinculado, leer, guardar }) {
       let datos = await leer();
       if (!datos.integracion?.exportar) return { enviados: 0 };
       const items = itemsParaSalud(datos, { hoy });
-      if (!items.length) return { enviados: 0 };
-      const r = await (await cliente()).saludSalida(items);
-      datos = marcarSubidos(await leer(), items.map((x) => x.id));
+      const borrados = borradosParaSalud(datos, { hoy });
+      if (!items.length && !borrados.length) return { enviados: 0, borrados: 0 };
+      const c = await cliente();
+      let r = {};
+      if (items.length) r = await c.saludSalida(items);
+      if (borrados.length) await c.borrarSaludSalida(borrados);
+      datos = marcarSubidos(await leer(), items, borrados);
       await guardar(datos);
-      return { enviados: items.length, pendientes: r.pendientes ?? null, datos };
+      return { enviados: items.length, borrados: borrados.length, pendientes: r.pendientes ?? null, subidos: datos.integracion.subidos, datos };
     },
     async vaciarSalida() {
       if (!(await vinculado())) return { ok: true };

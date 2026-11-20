@@ -158,9 +158,9 @@ Si todo va bien, responde `{"pasos_guardados": 2, "pesaje": "guardado" | "duplic
 Con **Forma → Perfil → Integraciones → «Escribir en Apple Salud»** activado,
 la app deja en el servidor dos cosas:
 
-- los totales de cada día de comida **ya cerrado**: kcal, proteína, hidratos,
-  grasa y fibra;
-- los entrenos **terminados**: inicio, fin, minutos y kcal estimadas.
+- **cada comida** que apuntas, en cuanto la guardas: hora, nombre, kcal,
+  proteína, hidratos, grasa y fibra;
+- **cada entreno** que terminas: inicio, fin, minutos y kcal estimadas.
 
 Un segundo Atajo los recoge con el mismo token, con
 `GET https://<tu-servidor>.workers.dev/integraciones/salud/salida`, y los
@@ -168,8 +168,8 @@ escribe en Salud con «Registrar muestra de salud» y, si tu iPhone la tiene,
 «Registrar entrenamiento».
 
 - **Una sola vez:** cada cosa se entrega una vez, así que no se duplica en Salud.
-- **Correcciones:** lo que está pendiente se actualiza si lo corriges antes de
-  que llegue; lo ya entregado ya no cambia.
+- **Correcciones:** lo que está pendiente se actualiza si lo corriges, o se
+  quita si lo borras, antes de que llegue; lo ya entregado ya no cambia.
 - **Desactivar:** borra lo pendiente.
 - **Privacidad:** estos totales van sin cifrar, porque los Atajos no saben
   descifrar. Se borran a los 30 días; el resto de Forma sigue cifrado.

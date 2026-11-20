@@ -63,6 +63,7 @@ export async function montarForma({ raiz, api, salir }) {
   };
 
   let guardando = Promise.resolve();
+  let temporizadorSalida = null;
   const ctx = {
     api,
     hojas,
@@ -78,6 +79,11 @@ export async function montarForma({ raiz, api, salir }) {
       const copia = estado.datos;
       guardando = guardando.then(() => api.forma.guardar(copia)).catch((e) => tostada(`No se ha podido guardar: ${e.message}`));
       if (repintar) pintar();
+      // Forma → Apple Salud: lo que acabas de apuntar sale solo unos segundos después.
+      if (copia.integracion?.exportar) {
+        clearTimeout(temporizadorSalida);
+        temporizadorSalida = setTimeout(() => ctx.exportarSalud({ siempre: true }), 6000);
+      }
       return guardando;
     },
     pintar: () => pintar(),
@@ -135,9 +141,10 @@ export async function montarForma({ raiz, api, salir }) {
     try {
       await guardando;
       const r = await api.forma.salud.exportar({ hoy: fechaISO() });
-      if (r?.datos) {
-        const nuevos = normalizarForma(r.datos);
-        estado.datos = { ...nuevos, activa: estado.datos.activa ?? nuevos.activa };
+      // Solo se toma la lista de lo enviado: lo que hayas tocado mientras tanto se queda.
+      if (r?.subidos && (r.enviados || r.borrados)) {
+        await ctx.guardar({ ...estado.datos, integracion: { ...estado.datos.integracion, subidos: r.subidos } }, { pintar: false });
+        clearTimeout(temporizadorSalida);
       }
       return r;
     } catch {

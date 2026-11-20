@@ -617,6 +617,10 @@ export function crearDemo() {
           }
           return { ok: true, guardados: items.length, pendientes: servidorSalud.salida.filter((x) => !x.entregado).length };
         },
+        async borrarSaludSalida(ids) {
+          servidorSalud.salida = servidorSalud.salida.filter((x) => x.entregado || !ids.includes(x.id));
+          return { ok: true };
+        },
         async vaciarSaludSalida() {
           servidorSalud.salida = servidorSalud.salida.filter((x) => x.entregado);
           return { ok: true };

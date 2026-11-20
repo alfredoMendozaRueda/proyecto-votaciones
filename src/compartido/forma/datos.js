@@ -537,7 +537,7 @@ function normalizarIntegracion(x) {
   }
   // Forma → Apple Salud: si está activado y lo que ya se envió (para no repetirlo).
   if (x.exportar === true) salida.exportar = true;
-  if (Array.isArray(x.subidos)) salida.subidos = [...new Set(x.subidos.filter((v) => typeof v === 'string' && /^(comida|entreno):[A-Za-z0-9_-]{1,60}$/.test(v)))].slice(-300);
+  if (Array.isArray(x.subidos)) salida.subidos = [...new Set(x.subidos.filter((v) => typeof v === 'string' && /^(comida|entreno):[A-Za-z0-9_-]{1,60}(#[a-z0-9]{1,12})?$/.test(v)))].slice(-600);
   const u = x.ultima;
   if (u && typeof u === 'object' && num(u.recibido, 0) !== undefined) {
     salida.ultima = sinVacios({
