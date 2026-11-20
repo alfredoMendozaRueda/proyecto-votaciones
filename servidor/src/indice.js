@@ -382,6 +382,15 @@ async function atender(peticion, env) {
   }
   if (m === 'PUT' && ruta === '/recordatorios') return sincronizarRecordatorios(n, peticion);
   if (m === 'PUT' && ruta === '/biblia/avisos') return avisosBiblia(n, peticion);
+  // Forma: cuándo avisar de que el resumen semanal está listo (día 1–7 y hora).
+  if (m === 'PUT' && ruta === '/forma/resumen') {
+    const { activo, dia, hora } = await cuerpo(peticion);
+    if (typeof activo !== 'boolean' || !Number.isInteger(dia) || dia < 1 || dia > 7 || typeof hora !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) {
+      throw new ErrorHttp(400, 'Aviso del resumen no válido.');
+    }
+    await n.poner('formaResumen', { activo, dia, hora });
+    return json({ ok: true });
+  }
   if (m === 'GET' && ruta === '/recordatorios') {
     const { results } = await n.db.prepare("SELECT id, texto, cuando, origen FROM recordatorios WHERE avisado = 0 AND origen != 'biblia' ORDER BY cuando").all();
     return json(results);

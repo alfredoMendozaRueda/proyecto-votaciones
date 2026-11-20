@@ -243,6 +243,11 @@ export class ClienteServidor {
     return this.pedir('/salud/buzon/recoger', { metodo: 'POST', cuerpo: { ids } });
   }
 
+  // Forma: a qué hora avisar de que el resumen semanal está listo.
+  formaResumen({ activo, dia, hora }) {
+    return this.pedir('/forma/resumen', { metodo: 'PUT', cuerpo: { activo, dia, hora } });
+  }
+
   // La dirección que llama el Atajo.
   urlSalud() {
     return `${this.url}/integraciones/salud`;

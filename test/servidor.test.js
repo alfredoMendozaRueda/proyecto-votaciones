@@ -1276,3 +1276,35 @@ test('salud: con los nombres de Siri guarda el pesaje y avisa de lo que llega va
   const sinAvisos = await (await enviar({ pasos_hoy: 4321, pasos_ayer: 9000 })).json();
   assert.deepEqual(sinAvisos, { pasos_guardados: 2, pesaje: 'no_enviado' });
 });
+
+test('Forma: el aviso del resumen semanal llega una vez a la hora elegida (y nunca con datos)', async () => {
+  const env = entorno();
+  const { token } = await vincular(env);
+  const nav = await navegador();
+  await pedir(env, '/suscripcion', { metodo: 'PUT', token, cuerpo: { suscripcion: nav.suscripcion } });
+  assert.equal((await pedir(env, '/forma/resumen', { metodo: 'PUT', token, cuerpo: { activo: true, dia: 9, hora: '23:30' } })).status, 400);
+  assert.equal((await pedir(env, '/forma/resumen', { metodo: 'PUT', token, cuerpo: { activo: true, dia: 7, hora: '23:30' } })).status, 200);
+  const enviados = [];
+  const antes = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).startsWith('https://push.ejemplo.com')) {
+      enviados.push(JSON.parse(await nav.descifrar(new Uint8Array(init.body))));
+      return new Response(null, { status: 201 });
+    }
+    return antes(url, init);
+  };
+  try {
+    // Domingo 22 nov 2026, 23:30 en Madrid = 22:30 UTC.
+    const domingo = Date.parse('2026-11-22T22:30:00Z');
+    await revisar(env, domingo - 60_000);
+    assert.equal(enviados.filter((a) => a.etiqueta === 'forma-resumen').length, 0);
+    await revisar(env, domingo);
+    await revisar(env, domingo + 60_000);
+    const avisos = enviados.filter((a) => a.etiqueta === 'forma-resumen');
+    assert.equal(avisos.length, 1);
+    assert.match(avisos[0].titulo, /resumen semanal/);
+    assert.equal(avisos[0].url, './?forma=semanas');
+  } finally {
+    globalThis.fetch = antes;
+  }
+});

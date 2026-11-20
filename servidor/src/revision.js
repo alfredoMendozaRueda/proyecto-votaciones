@@ -33,7 +33,7 @@ export async function revisar(env, ahora = Date.now()) {
     }
     return;
   }
-  const pasos = [() => recordatorios(n), () => horarios(n, activas, local, zona, conGoogle)];
+  const pasos = [() => recordatorios(n), () => horarios(n, activas, local, zona, conGoogle), () => resumenForma(n, local)];
   if (conGoogle) {
     if (!a.ultimoCorreo || ahora - a.ultimoCorreo >= avisos.correoCadaMin * 60_000 - 5_000) {
       pasos.push(() => correos(n, activas, local, avisos, zona));
@@ -95,6 +95,20 @@ async function recordatorios(n) {
     } else await n.notificar({ ...aviso(r.texto), url: './?recordatorios', etiqueta: `r-${r.id}` });
     await n.db.prepare('UPDATE recordatorios SET avisado = 1 WHERE id = ?').bind(r.id).run();
   }
+}
+
+// ---------- Forma: «tu resumen semanal está listo» ----------
+// El servidor no puede leer tus datos de Forma (van cifrados): solo avisa a la
+// hora que elegiste; el resumen lo calcula la app al abrirla.
+async function resumenForma(n, local) {
+  const c = (await n.ajustes()).formaResumen;
+  if (!c?.activo) return;
+  const objetivo = aMinutos(c.hora);
+  if (local.dia !== c.dia || local.minutos < objetivo || local.minutos - objetivo > 20) return;
+  const clave = `forma-resumen:${local.fecha}`;
+  if ((await n.avisados([clave])).has(clave)) return;
+  await n.marcar([clave]);
+  await n.notificar({ ...aviso('tu resumen semanal de Forma está listo', 'Peso, comidas, entrenos y tus hitos de la semana.'), url: './?forma=semanas', etiqueta: 'forma-resumen' });
 }
 
 // ---------- Por horario ----------
