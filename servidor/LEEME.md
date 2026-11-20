@@ -11,6 +11,8 @@ no puede hacer cuando está cerrada:
   - «el resumen del día a las 8»;
   - «archiva los boletines».
 - **Revisión cada minuto**: recordatorios, correo, citas y automatizaciones.
+- **Apple Salud → Forma**: un Atajo del iPhone manda tus pasos y los pesajes
+  de la báscula (ver más abajo).
 - **Voz natural** para que Kitsune lea sus respuestas: voces en español de Aura-2
   (Deepgram) con Workers AI. El plan gratuito da para unas 3.500 letras al día;
   después usa MeloTTS, más sencilla y casi sin límite.
@@ -87,6 +89,53 @@ En **Avisos → Automatizaciones** tienes plantillas para empezar.
 
 Así el ordenador manda sus recordatorios al servidor y puede gestionar las
 automatizaciones.
+
+## Apple Salud (pasos y báscula) para Forma
+
+Un Atajo del iPhone llama a `POST https://<tu-servidor>.workers.dev/integraciones/salud`
+con un token personal. Todo se gestiona desde la app, en **Forma → Perfil →
+Integraciones**:
+
+1. **Generar token.** El token (`forma_…`) se enseña una sola vez. El servidor
+   solo guarda su huella SHA-256. Solo vale para `/integraciones/…` y admite
+   60 envíos por hora. Se puede revocar desde la misma pantalla.
+2. **Cómo configurar el Atajo.** La guía trae la dirección, las cabeceras, el
+   JSON y los pasos en iOS.
+
+Cabeceras: `Authorization: Bearer forma_…` y `Content-Type: application/json`.
+
+```json
+{
+  "fuente": "apple_salud",
+  "dias": [{ "fecha": "2026-11-19", "pasos": 11234 }, { "fecha": "2026-11-20", "pasos": 4321 }],
+  "pesaje": { "fecha_hora": "2026-11-20T08:12:00+01:00", "peso_kg": 77.55, "grasa_pct": 22.9, "masa_magra_kg": 59.8 }
+}
+```
+
+Reglas del envío:
+
+- **Pasos:** son el total de cada día y se reemplazan; repetir un envío no
+  duplica nada. Valen de 0 a 100.000.
+- **Peso:** de 30 a 300 kg.
+- **% de grasa:** de 3 a 60. Si llega como fracción (0,229), se multiplica por 100.
+- **Números:** pueden ir como número o como texto, con coma decimal («77,55»).
+- **Fecha y hora:** sin zona se entiende en la de Ajustes (Europe/Madrid).
+- **Pesaje repetido:** el mismo peso con menos de un minuto de diferencia no se
+  vuelve a guardar.
+- **Todo o nada:** si un dato no vale, responde 400 con el campo y el motivo, y
+  no guarda nada.
+
+Si todo va bien, responde `{"pasos_guardados": 2, "pesaje": "guardado" | "duplicado" | "no_enviado"}`.
+
+**Privacidad.** El servidor no puede leer tus datos de salud:
+
+- Cifra cada envío (ECDH P-256 + HKDF + AES-GCM) con la llave pública del buzón.
+- La llave privada solo está en tus dispositivos, dentro de los datos de Forma,
+  que viajan cifrados al sincronizar.
+- Los envíos esperan en la tabla `buzon_salud` hasta que la app los recoge, al
+  abrir Forma o al volver a ella. Si nadie los recoge, se borran a los 60 días.
+- Para responder «duplicado» guarda solo una huella HMAC de cada pesaje, que se
+  borra a los 120 días.
 
 ## Coste
 
