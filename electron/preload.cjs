@@ -79,6 +79,7 @@ contextBridge.exposeInMainWorld('asistente', {
       revocar: (id) => invocar('forma:salud', 'revocar', id),
       recoger: () => invocar('forma:salud', 'recoger'),
       exportar: (opciones) => invocar('forma:salud', 'exportar', opciones),
+      reenviar: (opciones) => invocar('forma:salud', 'reenviar', opciones),
       vaciarSalida: () => invocar('forma:salud', 'vaciarSalida'),
     },
   },

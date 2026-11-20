@@ -244,3 +244,21 @@ test('Forma → Salud: cada comida y entreno al guardarse, reenvío si cambia y 
   // Lo que solo ha salido de los 7 días no cuenta como borrado.
   assert.deepEqual(borradosParaSalud(datos, { hoy: '2026-12-20', zona: Z }), []);
 });
+
+test('Forma → Salud: las comidas sin hora propia (importadas) usan la hora de su momento', async () => {
+  const { itemsParaSalud } = await import('../src/compartido/forma/salud.js');
+  const datos = normalizarForma({
+    integracion: { exportar: true },
+    registros: [
+      { id: 'r1', fecha: '2026-11-17', momento: 'desayuno', nombre: 'Tostada', kcal: 200 },
+      { id: 'r2', fecha: '2026-11-17', momento: 'cena', nombre: 'Tortilla', kcal: 400 },
+      { id: 'r3', fecha: '2026-11-17', momento: 'cena', minuto: 1290, nombre: 'Yogur', kcal: 90 },
+      { id: 'r4', fecha: '2026-11-17', momento: 'raro', nombre: 'Sin momento', kcal: 50 },
+    ],
+  });
+  const hora = (n) => itemsParaSalud(datos, { hoy: '2026-11-20', zona: Z }).find((x) => x.datos.nombre === n).datos.fecha_hora;
+  assert.equal(hora('Tostada'), '2026-11-17T07:00:00.000Z'); // 08:00 en Madrid
+  assert.equal(hora('Tortilla'), '2026-11-17T20:30:00.000Z'); // 21:30
+  assert.equal(hora('Yogur'), '2026-11-17T20:30:00.000Z'); // la suya
+  assert.equal(hora('Sin momento'), '2026-11-17T11:00:00.000Z'); // 12:00
+});

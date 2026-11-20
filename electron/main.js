@@ -580,7 +580,7 @@ function registrarCanales() {
     return true;
   });
   manejar('forma:salud', async (metodo, ...args) => {
-    if (!['estado', 'crearToken', 'revocar', 'recoger', 'exportar', 'vaciarSalida'].includes(metodo)) throw new Error('Acción no válida.');
+    if (!['estado', 'crearToken', 'revocar', 'recoger', 'exportar', 'reenviar', 'vaciarSalida'].includes(metodo)) throw new Error('Acción no válida.');
     return salud[metodo](...args);
   });
   // Importar desde JSON: se vuelve a validar aquí, con los datos guardados, y se

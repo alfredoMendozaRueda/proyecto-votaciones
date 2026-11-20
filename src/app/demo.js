@@ -617,6 +617,13 @@ export function crearDemo() {
           }
           return { ok: true, guardados: items.length, pendientes: servidorSalud.salida.filter((x) => !x.entregado).length };
         },
+        async reenviarSaludSalida(items) {
+          for (const x of items) {
+            servidorSalud.salida = servidorSalud.salida.filter((y) => y.id !== x.id);
+            servidorSalud.salida.push({ ...x, entregado: false });
+          }
+          return { ok: true, guardados: items.length, pendientes: servidorSalud.salida.filter((x) => !x.entregado).length };
+        },
         async borrarSaludSalida(ids) {
           servidorSalud.salida = servidorSalud.salida.filter((x) => x.entregado || !ids.includes(x.id));
           return { ok: true };
@@ -650,6 +657,7 @@ export function crearDemo() {
             revocar: async (id) => (await cargar()).revocar(id),
             recoger: async () => (await cargar()).recoger(),
             exportar: async (o) => (await cargar()).exportar(o),
+            reenviar: async (o) => (await cargar()).reenviar(o),
             vaciarSalida: async () => (await cargar()).vaciarSalida(),
             // Solo en la demo: lo que leería el segundo Atajo (GET /integraciones/salud/salida).
             leerSalida() {

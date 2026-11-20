@@ -91,7 +91,18 @@ export function crearIntegraciones(ctx) {
     return `<div class="f-int-exportar" data-exportar>
       <label class="f-check"><input type="checkbox" data-cambio="int-exportar" ${on ? 'checked' : ''}><span><b style="color:var(--f-texto)">Escribir en Apple Salud</b> cada comida que apuntas (kcal y macros, con su hora) y cada entreno que terminas.</span></label>
       <p class="f-tenue">${ic('info', 12)} Salen solas en cuanto las guardas; el Atajo las recoge por la noche y las escribe en Salud. Para que pueda leerlas viajan <b>sin cifrar</b> a tu servidor y se borran en cuanto las recoge (o a los 30 días). El resto de Forma sigue cifrado.</p>
-      ${on ? `<p class="f-tenue">Enviados (últimos 7 días): ${comidas} comida${comidas === 1 ? '' : 's'} y ${entrenos} entreno${entrenos === 1 ? '' : 's'}. Si corriges o borras algo antes de que el Atajo lo recoja, se actualiza.</p><button type="button" class="f-boton f-boton--fantasma" data-a="int-guia-salida">${ic('info', 16)}Cómo configurar el Atajo «Forma → Salud»</button>` : ''}
+      ${
+        on
+          ? `<p class="f-tenue">Enviados (últimos 7 días): ${comidas} comida${comidas === 1 ? '' : 's'} y ${entrenos} entreno${entrenos === 1 ? '' : 's'}. Si corriges o borras algo antes de que el Atajo lo recoja, se actualiza.</p>
+        <button type="button" class="f-boton f-boton--fantasma" data-a="int-guia-salida">${ic('info', 16)}Cómo configurar el Atajo «Forma → Salud»</button>
+        ${
+          local().reenviar
+            ? `<p class="f-tenue" data-reenviar-aviso>Todo lo de los últimos 7 días volverá a esperar al Atajo. Lo que ya esté en Salud se duplicaría: bórralo antes en Salud (Todos los datos → Editar). Toca otra vez para confirmar.</p>
+        <button type="button" class="f-boton f-boton--azul" data-a="int-reenviar">${ic('importar', 16)}Sí, volver a enviar</button>`
+            : `<button type="button" class="f-boton f-boton--fantasma" data-a="int-reenviar">${ic('importar', 16)}Volver a enviar los últimos 7 días</button>`
+        }`
+          : ''
+      }
     </div>`;
   }
 
@@ -244,6 +255,30 @@ Content-Type: application/json</code>
     'int-generar': () => hojaGenerar(),
     'int-guia': () => hojaGuia(),
     'int-guia-salida': () => hojaGuiaSalida(),
+    // Por si el Atajo se quedó a medias: primero pide confirmación (duplicaría lo ya escrito).
+    'int-reenviar': async (el) => {
+      const s = local();
+      if (!s.reenviar) {
+        s.reenviar = true;
+        repintarPanel();
+        setTimeout(() => {
+          if (s.reenviar) {
+            s.reenviar = false;
+            repintarPanel();
+          }
+        }, 8000);
+        return;
+      }
+      s.reenviar = false;
+      el.disabled = true;
+      try {
+        const r = await ctx.reenviarSalud();
+        ctx.tostada(r?.reenviados ? `Listo: ${r.reenviados} cosas esperan otra vez al Atajo. Ejecútalo ahora.` : 'No hay nada de los últimos 7 días que enviar.');
+      } catch (e) {
+        ctx.tostada(`No se ha podido: ${e.message}`);
+      }
+      repintarPanel();
+    },
     'int-recoger': async (el) => {
       el.disabled = true;
       const r = await ctx.recogerSalud({ avisar: true, siempre: true });

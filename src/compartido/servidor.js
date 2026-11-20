@@ -253,6 +253,10 @@ export class ClienteServidor {
     return this.pedir('/salud/salida', { metodo: 'POST', cuerpo: { items } });
   }
 
+  reenviarSaludSalida(items) {
+    return this.pedir('/salud/salida/reenviar', { metodo: 'POST', cuerpo: { items } });
+  }
+
   borrarSaludSalida(ids) {
     return this.pedir('/salud/salida/borrar', { metodo: 'POST', cuerpo: { ids } });
   }

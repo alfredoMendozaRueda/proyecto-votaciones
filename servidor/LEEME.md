@@ -170,6 +170,11 @@ escribe en Salud con «Registrar muestra de salud» y, si tu iPhone la tiene,
 - **Una sola vez:** cada cosa se entrega una vez, así que no se duplica en Salud.
 - **Correcciones:** lo que está pendiente se actualiza si lo corriges, o se
   quita si lo borras, antes de que llegue; lo ya entregado ya no cambia.
+- **Volver a enviar:** si el Atajo se quedó a medias, el botón «Volver a
+  enviar los últimos 7 días» deja todo pendiente otra vez
+  (`POST /salud/salida/reenviar`). Lo que ya estuviera en Salud se duplicaría.
+- **Sin hora:** las comidas sin hora propia (por ejemplo, las importadas) van
+  a la hora de su momento (desayuno 08:00, cena 21:30…).
 - **Desactivar:** borra lo pendiente.
 - **Privacidad:** estos totales van sin cifrar, porque los Atajos no saben
   descifrar. Se borran a los 30 días; el resto de Forma sigue cifrado.

@@ -1214,16 +1214,18 @@ test('salud: pasos idempotentes, pesaje duplicado, grasa en fracción, coma deci
 
 test('salud: errores 400 con el campo y el motivo, y nada se guarda', async () => {
   const { enviar, buzon, hoy } = await preparadoSalud();
+  // Los pesajes, de ayer: «hoy a las 07:00» sería futuro si la prueba corre de madrugada.
+  const ayer = partesSalud(Date.now() - 86_400_000, 'Europe/Madrid').fecha;
   const casos = [
     [{ dias: [{ fecha: hoy, pasos: -5 }] }, 'dias[0].pasos', /entre 0 y 100\.000/],
     [{ dias: [{ fecha: hoy, pasos: 100001 }] }, 'dias[0].pasos', /entre 0 y 100\.000/],
     [{ dias: [{ fecha: '2026-02-30', pasos: 10 }] }, 'dias[0].fecha', /fecha real/],
     [{ dias: [{ fecha: '2999-01-01', pasos: 10 }] }, 'dias[0].fecha', /futura/],
-    [{ pesaje: { fecha_hora: `${hoy}T07:00:00+01:00`, peso_kg: 29 } }, 'pesaje.peso_kg', /entre 30 y 300/],
-    [{ pesaje: { fecha_hora: `${hoy}T07:00:00+01:00`, peso_kg: 301 } }, 'pesaje.peso_kg', /entre 30 y 300/],
-    [{ pesaje: { fecha_hora: `${hoy}T07:00:00+01:00`, peso_kg: 77, grasa_pct: 75 } }, 'pesaje.grasa_pct', /entre 3 y 60/],
+    [{ pesaje: { fecha_hora: `${ayer}T07:00:00+01:00`, peso_kg: 29 } }, 'pesaje.peso_kg', /entre 30 y 300/],
+    [{ pesaje: { fecha_hora: `${ayer}T07:00:00+01:00`, peso_kg: 301 } }, 'pesaje.peso_kg', /entre 30 y 300/],
+    [{ pesaje: { fecha_hora: `${ayer}T07:00:00+01:00`, peso_kg: 77, grasa_pct: 75 } }, 'pesaje.grasa_pct', /entre 3 y 60/],
     [{ pesaje: { fecha_hora: 'ayer por la mañana', peso_kg: 77 } }, 'pesaje.fecha_hora', /ISO 8601/],
-    [{ pesaje: { fecha_hora: `${hoy}T07:00:00+01:00`, peso_kg: 'mucho' } }, 'pesaje.peso_kg', /número/],
+    [{ pesaje: { fecha_hora: `${ayer}T07:00:00+01:00`, peso_kg: 'mucho' } }, 'pesaje.peso_kg', /número/],
     [{}, '', /nada que guardar/],
   ];
   for (const [cuerpo, campo, motivo] of casos) {
@@ -1368,4 +1370,11 @@ test('Forma → Salud: el Atajo recoge lo pendiente una sola vez; lo pendiente s
   assert.equal((await api.exportar({ hoy })).borrados, 1);
   const recogido = await (await leerSalida()).json();
   assert.deepEqual(recogido.comidas.map((c) => c.kcal).sort(), [2000, 500]);
+  // Si el Atajo se quedó a medias: «Volver a enviar» deja otra vez pendiente lo de los 7 días.
+  assert.equal((await leerSalida().then((r) => r.json())).total, 0);
+  const re = await api.reenviar({ hoy });
+  assert.equal(re.reenviados, 2);
+  const otra = await (await leerSalida()).json();
+  assert.deepEqual(otra.comidas.map((c) => c.kcal).sort(), [2000, 500]);
+  assert.equal((await api.exportar({ hoy })).enviados, 0); // y no se vuelve a subir solo
 });

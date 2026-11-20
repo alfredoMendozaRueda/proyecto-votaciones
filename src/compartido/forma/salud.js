@@ -393,13 +393,16 @@ const enviados = (datos) => {
   return mapa;
 };
 
-function todosParaSalud(datos, { hoy, zona = datos.perfil?.zona ?? 'Europe/Madrid' }) {
+export function todosParaSalud(datos, { hoy, zona = datos.perfil?.zona ?? 'Europe/Madrid' }) {
   const desde = sumarDias(hoy, -DIAS_EXPORTAR);
   const items = [];
+  // Sin hora propia (las importadas se quedan en las 12:00), la de su momento.
+  const horaMomento = new Map((datos.momentos ?? []).map((m) => [m.id, m.hora]));
   // Cada comida apuntada, con su hora.
   for (const reg of datos.registros) {
     if (reg.fecha < desde || reg.fecha > hoy || !idSeguro(reg.id)) continue;
-    const hora = `${String(Math.floor((reg.minuto ?? 720) / 60)).padStart(2, '0')}:${String((reg.minuto ?? 720) % 60).padStart(2, '0')}`;
+    const minuto = reg.minuto ?? 720;
+    const hora = minuto === 720 && /^\d{2}:\d{2}$/.test(horaMomento.get(reg.momento) ?? '') ? horaMomento.get(reg.momento) : `${String(Math.floor(minuto / 60)).padStart(2, '0')}:${String(minuto % 60).padStart(2, '0')}`;
     items.push({
       id: `comida:${idSeguro(reg.id)}`,
       tipo: 'comida',
@@ -614,6 +617,18 @@ export function crearApiSalud({ cliente, vinculado, leer, guardar }) {
       datos = marcarSubidos(await leer(), items, borrados);
       await guardar(datos);
       return { enviados: items.length, borrados: borrados.length, pendientes: r.pendientes ?? null, subidos: datos.integracion.subidos, datos };
+    },
+    // Vuelve a dejar para el Atajo todo lo de los últimos 7 días, aunque ya lo
+    // hubiera recogido (si se quedó a medias). Lo ya escrito en Salud se duplica.
+    async reenviar({ hoy } = {}) {
+      if (!(await vinculado())) return { reenviados: 0, vinculado: false };
+      let datos = await leer();
+      if (!datos.integracion?.exportar) return { reenviados: 0 };
+      const items = todosParaSalud(datos, { hoy }).slice(0, 200);
+      const r = items.length ? await (await cliente()).reenviarSaludSalida(items) : {};
+      datos = marcarSubidos(await leer(), items, []);
+      await guardar(datos);
+      return { reenviados: items.length, pendientes: r.pendientes ?? null, subidos: datos.integracion.subidos, datos };
     },
     async vaciarSalida() {
       if (!(await vinculado())) return { ok: true };

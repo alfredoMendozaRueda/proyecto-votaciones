@@ -51,7 +51,7 @@ export async function rutaIntegraciones(n, peticion, ruta, { json, ErrorHttp, cu
   // Forma → Apple Salud: lo pendiente de escribir en Salud (se entrega una vez).
   if (ruta === '/integraciones/salud/salida') {
     if (peticion.method !== 'GET') throw new ErrorHttp(405, 'Usa GET.');
-    const { results } = await n.db.prepare('SELECT id, tipo, datos FROM salud_salida WHERE entregado IS NULL ORDER BY creado LIMIT 200').all();
+    const { results } = await n.db.prepare('SELECT id, tipo, datos FROM salud_salida WHERE entregado IS NULL ORDER BY creado, id LIMIT 200').all();
     if (results.length) await n.db.batch(results.map((r) => n.db.prepare('UPDATE salud_salida SET entregado = ? WHERE id = ?').bind(n.ahora, r.id)));
     await n.db.prepare('UPDATE token_integracion SET ultimo_uso_en = ? WHERE id = ?').bind(n.ahora, fila.id).run();
     const de = (tipo) => results.filter((r) => r.tipo === tipo).map((r) => JSON.parse(r.datos));
@@ -158,7 +158,9 @@ export async function rutaSaludDispositivo(n, m, ruta, { json, ErrorHttp, cuerpo
   }
   // Lo que la app quiere escribir en Apple Salud. Lo ya entregado no se toca;
   // lo pendiente se actualiza (por si corregiste algo antes de que llegara).
-  if (m === 'POST' && ruta === '/salud/salida') {
+  // «Volver a enviar»: también lo ya entregado vuelve a quedar pendiente.
+  if (m === 'POST' && (ruta === '/salud/salida' || ruta === '/salud/salida/reenviar')) {
+    const forzar = ruta.endsWith('/reenviar');
     const { items } = await cuerpo(peticion);
     if (!Array.isArray(items) || items.length > 200) throw new ErrorHttp(400, 'Lista no válida.');
     const validos = items.filter(
@@ -168,7 +170,11 @@ export async function rutaSaludDispositivo(n, m, ruta, { json, ErrorHttp, cuerpo
       await n.db.batch(
         validos.map((x) =>
           n.db
-            .prepare('INSERT INTO salud_salida (id, tipo, datos, creado, entregado) VALUES (?, ?, ?, ?, NULL) ON CONFLICT(id) DO UPDATE SET datos = excluded.datos WHERE salud_salida.entregado IS NULL')
+            .prepare(
+              forzar
+                ? 'INSERT INTO salud_salida (id, tipo, datos, creado, entregado) VALUES (?, ?, ?, ?, NULL) ON CONFLICT(id) DO UPDATE SET datos = excluded.datos, creado = excluded.creado, entregado = NULL'
+                : 'INSERT INTO salud_salida (id, tipo, datos, creado, entregado) VALUES (?, ?, ?, ?, NULL) ON CONFLICT(id) DO UPDATE SET datos = excluded.datos WHERE salud_salida.entregado IS NULL',
+            )
             .bind(x.id, x.tipo, JSON.stringify(x.datos), n.ahora),
         ),
       );

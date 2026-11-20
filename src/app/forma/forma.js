@@ -152,6 +152,14 @@ export async function montarForma({ raiz, api, salir }) {
     }
   };
 
+  // «Volver a enviar»: lo de los últimos 7 días vuelve a esperar al Atajo.
+  ctx.reenviarSalud = async () => {
+    await guardando;
+    const r = await api.forma.salud.reenviar({ hoy: fechaISO() });
+    if (r?.subidos) await ctx.guardar({ ...estado.datos, integracion: { ...estado.datos.integracion, subidos: r.subidos } }, { pintar: false });
+    return r;
+  };
+
   // ---------- Resumen semanal ----------
   // El texto lo escribe la IA (si está activada y quedan usos) solo con las
   // métricas ya calculadas; si no hay IA o falla, el de reglas.
