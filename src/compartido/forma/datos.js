@@ -552,6 +552,11 @@ function normalizarIntegracion(x) {
         u.pesaje && esFecha(u.pesaje.fecha) && num(u.pesaje.kg, 20, 400) !== undefined
           ? sinVacios({ fecha: u.pesaje.fecha, hora: /^\d{2}:\d{2}$/.test(u.pesaje.hora) ? u.pesaje.hora : undefined, momento: num(u.pesaje.momento, 0), kg: u.pesaje.kg, grasa: num(u.pesaje.grasa, 3, 70), magra: num(u.pesaje.magra, 5, 300) })
           : undefined,
+      // Con la lista de pesajes: cuántos llegaron, cuántos eran nuevos y cuántos repetidos.
+      pesajes:
+        u.pesajes && typeof u.pesajes === 'object' && num(u.pesajes.recibidos, 0, 1000) !== undefined
+          ? { recibidos: u.pesajes.recibidos, guardados: num(u.pesajes.guardados, 0, 1000) ?? 0, duplicados: num(u.pesajes.duplicados, 0, 1000) ?? 0 }
+          : undefined,
       resultado: ['guardado', 'duplicado', 'no_enviado'].includes(u.resultado) ? u.resultado : undefined,
     });
   }

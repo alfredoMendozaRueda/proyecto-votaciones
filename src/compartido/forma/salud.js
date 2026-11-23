@@ -18,6 +18,8 @@ export const RANGO_GRASA = [3, 60];
 export const RANGO_MAGRA = [10, 200];
 // Dos pesajes son el mismo si se separan menos de un minuto y pesan igual.
 export const MARGEN_DUPLICADO_MS = 60_000;
+// Como mucho, pesajes por envío (7 días con varios al día dan de sobra).
+export const MAX_PESAJES = 60;
 
 const miles = (n) => n.toLocaleString('es-ES');
 
@@ -147,7 +149,7 @@ export function desdePlano(entrada, { zona = 'Europe/Madrid', ahora = Date.now()
   const nombre = {};
   const avisos = [];
   for (const [k, v] of Object.entries(entrada)) {
-    if (k === 'fuente') continue;
+    if (k === 'fuente' || claveLimpia(k) === 'pesajes') continue;
     const canonica = CANONICA.get(claveLimpia(k));
     if (!canonica) avisos.push(`«${k}» no se reconoce: se ignora`);
     else if (!(canonica in c) || (vacio(c[canonica]) && !vacio(v))) {
@@ -185,11 +187,14 @@ export function desdePlano(entrada, { zona = 'Europe/Madrid', ahora = Date.now()
   }
   const cuerpo = { fuente: entrada.fuente };
   if (dias.length) cuerpo.dias = dias;
+  // La lista de pesajes de los últimos días (va igual que en el formato completo).
+  const claveLista = Object.keys(entrada).find((k) => claveLimpia(k) === 'pesajes');
+  if (claveLista) cuerpo.pesajes = entrada[claveLista];
   if (!vacio(c.peso_kg)) {
     cuerpo.pesaje = { fecha_hora: vacio(c.fecha_peso) ? undefined : c.fecha_peso, peso_kg: c.peso_kg };
     if (!vacio(c.grasa_pct)) cuerpo.pesaje.grasa_pct = c.grasa_pct;
     if (!vacio(c.masa_magra_kg)) cuerpo.pesaje.masa_magra_kg = c.masa_magra_kg;
-  } else if ('peso_kg' in c) avisos.push(`«${llamado('peso_kg')}» llegó vacío: sin peso en las últimas 24 h no se guarda pesaje`);
+  } else if ('peso_kg' in c && !claveLista) avisos.push(`«${llamado('peso_kg')}» llegó vacío: sin peso en las últimas 24 h no se guarda pesaje`);
   else if (!vacio(c.grasa_pct) || !vacio(c.masa_magra_kg)) avisos.push('falta el peso («peso_kg»): sin él no se guarda el pesaje');
   // Para que los errores digan el nombre del campo que mandaste.
   const CAMPO = { 'pesaje.fecha_hora': 'fecha_peso', 'pesaje.peso_kg': 'peso_kg', 'pesaje.grasa_pct': 'grasa_pct', 'pesaje.masa_magra_kg': 'masa_magra_kg' };
@@ -203,13 +208,13 @@ export function validarSalud(cuerpo, { zona = 'Europe/Madrid', ahora = Date.now(
   if (esPlano(cuerpo)) {
     const { cuerpo: completo, campo, avisos } = desdePlano(cuerpo, { zona, ahora });
     const v = validarSalud(completo, { zona, ahora });
-    return { ...v, avisos, errores: v.errores.map((e) => ({ ...e, campo: campo(e.campo) })) };
+    return { ...v, avisos: [...avisos, ...(v.avisos ?? [])], errores: v.errores.map((e) => ({ ...e, campo: campo(e.campo) })) };
   }
   const errores = [];
   const mal = (campo, motivo) => errores.push({ campo, motivo });
   if (!cuerpo || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) {
-    mal('', 'el cuerpo debe ser un objeto JSON con «dias» y/o «pesaje» (o con pasos_hoy, pasos_ayer, peso_kg…)');
-    return { dias: [], pesaje: null, fuente: FUENTE_SALUD, errores };
+    mal('', 'el cuerpo debe ser un objeto JSON con «dias», «pesaje» y/o «pesajes» (o con pasos_hoy, pasos_ayer, peso_kg…)');
+    return { dias: [], pesaje: null, pesajes: [], fuente: FUENTE_SALUD, errores, avisos: [] };
   }
   const fuente = typeof cuerpo.fuente === 'string' && /^[a-z0-9_]{1,30}$/.test(cuerpo.fuente) ? cuerpo.fuente : FUENTE_SALUD;
   const hoy = partesLocales(ahora, zona).fecha;
@@ -251,50 +256,95 @@ export function validarSalud(cuerpo, { zona = 'Europe/Madrid', ahora = Date.now(
     }
   }
 
-  let pesaje = null;
-  const p = cuerpo.pesaje;
-  if (p !== undefined && p !== null) {
-    if (typeof p !== 'object' || Array.isArray(p)) mal('pesaje', 'debe ser un objeto { fecha_hora, peso_kg, … }');
-    else {
-      const momento = momentoDe(p.fecha_hora, zona);
-      if (p.fecha_hora === undefined || p.fecha_hora === null || p.fecha_hora === '') mal('pesaje.fecha_hora', 'falta la fecha y hora del pesaje');
-      else if (momento === null) mal('pesaje.fecha_hora', 'debe ser una fecha y hora ISO 8601, como 2026-11-20T08:12:00+01:00');
-      else if (momento > ahora + 5 * 60_000) mal('pesaje.fecha_hora', 'es una hora futura');
-      const kg = numeroTolerante(p.peso_kg);
-      if (p.peso_kg === undefined || p.peso_kg === null || p.peso_kg === '') mal('pesaje.peso_kg', 'falta el peso');
-      else if (!Number.isFinite(kg)) mal('pesaje.peso_kg', 'debe ser un número');
-      else if (kg < RANGO_PESO[0] || kg > RANGO_PESO[1]) mal('pesaje.peso_kg', `debe estar entre ${RANGO_PESO[0]} y ${RANGO_PESO[1]} kg`);
-      let grasa;
-      if (p.grasa_pct !== undefined && p.grasa_pct !== null && p.grasa_pct !== '') {
-        grasa = numeroTolerante(p.grasa_pct);
-        // HealthKit da el porcentaje como fracción (0,229 = 22,9 %).
-        if (Number.isFinite(grasa) && grasa > 0 && grasa <= 1) grasa *= 100;
-        if (!Number.isFinite(grasa)) mal('pesaje.grasa_pct', 'debe ser un número');
-        else if (grasa < RANGO_GRASA[0] || grasa > RANGO_GRASA[1]) mal('pesaje.grasa_pct', `debe estar entre ${RANGO_GRASA[0]} y ${RANGO_GRASA[1]} %`);
-      }
-      let magra;
-      if (p.masa_magra_kg !== undefined && p.masa_magra_kg !== null && p.masa_magra_kg !== '') {
-        magra = numeroTolerante(p.masa_magra_kg);
-        if (!Number.isFinite(magra)) mal('pesaje.masa_magra_kg', 'debe ser un número');
-        else if (magra < RANGO_MAGRA[0] || magra > RANGO_MAGRA[1]) mal('pesaje.masa_magra_kg', `debe estar entre ${RANGO_MAGRA[0]} y ${RANGO_MAGRA[1]} kg`);
-        else if (Number.isFinite(kg) && magra >= kg) mal('pesaje.masa_magra_kg', 'no puede ser mayor que el peso');
-      }
-      if (momento !== null && Number.isFinite(kg)) {
-        const local = partesLocales(momento, zona);
-        pesaje = {
-          momento,
-          fecha: local.fecha,
-          hora: local.hora,
-          kg: Math.round(kg * 100) / 100,
-          ...(Number.isFinite(grasa) ? { grasa: Math.round(grasa * 10) / 10 } : {}),
-          ...(Number.isFinite(magra) ? { magra: Math.round(magra * 100) / 100 } : {}),
-        };
-      }
+  // Pesajes: el último («pesaje», el de siempre) y/o la lista de los últimos
+  // días («pesajes»). Dentro del envío, los repetidos (±1 min, mismo peso) cuentan una vez.
+  const avisos = [];
+  const pesajes = [];
+  if (cuerpo.pesaje !== undefined && cuerpo.pesaje !== null) {
+    const x = validarPesaje(cuerpo.pesaje, 'pesaje', { zona, ahora, mal });
+    if (x) pesajes.push(x);
+  }
+  let lista = cuerpo.pesajes;
+  if (typeof lista === 'string' && /^\s*\[/.test(lista)) {
+    try {
+      lista = JSON.parse(lista);
+    } catch {
+      /* se queja abajo */
     }
   }
-  if (!errores.length && !porFecha.size && !pesaje) mal('', 'no hay nada que guardar: manda «dias» con pasos (o sueño) o un «pesaje»');
+  if (lista !== undefined && lista !== null && lista !== '') {
+    if (!Array.isArray(lista)) mal('pesajes', 'debe ser una lista de { fecha_hora, peso_kg, grasa_pct, masa_magra_kg }');
+    else if (lista.length > MAX_PESAJES) mal('pesajes', `como mucho ${MAX_PESAJES} pesajes por envío`);
+    else
+      lista.forEach((crudo, i) => {
+        const el = pesajeConAlias(crudo);
+        // Atajos a veces deja huecos (una muestra sin peso): se ignoran con aviso.
+        if (el && typeof el === 'object' && vacio(el.peso_kg)) return avisos.push(`pesajes[${i}] llegó sin peso: se ignora`);
+        const x = validarPesaje(el, `pesajes[${i}]`, { zona, ahora, mal });
+        if (x) pesajes.push(x);
+      });
+  }
+  const unicos = [];
+  for (const x of pesajes.sort((a, b) => a.momento - b.momento)) if (!unicos.some((y) => mismoPesaje(x, y))) unicos.push(x);
+  if (!errores.length && !porFecha.size && !unicos.length) mal('', 'no hay nada que guardar: manda «dias» con pasos (o sueño) o un «pesaje»');
   const dias = [...porFecha].map(([fecha, d]) => ({ fecha, ...d })).sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
-  return { dias, pesaje: errores.length ? null : pesaje, fuente, errores };
+  const validos = errores.length ? [] : unicos;
+  // «pesaje»: el más reciente (lo que enseña «Última sincronización»).
+  return { dias, pesaje: validos.at(-1) ?? null, pesajes: validos, fuente, errores, avisos };
+}
+
+// Las claves de un pesaje con los nombres que suele poner Siri («peso», «fecha»…).
+function pesajeConAlias(el) {
+  if (!el || typeof el !== 'object' || Array.isArray(el)) return el;
+  const salida = {};
+  for (const [k, v] of Object.entries(el)) {
+    const canonica = CANONICA.get(claveLimpia(k));
+    const clave = canonica === 'fecha_peso' ? 'fecha_hora' : ['peso_kg', 'grasa_pct', 'masa_magra_kg'].includes(canonica) ? canonica : k;
+    if (!(clave in salida) || (vacio(salida[clave]) && !vacio(v))) salida[clave] = v;
+  }
+  return salida;
+}
+
+// Un pesaje { fecha_hora, peso_kg, grasa_pct?, masa_magra_kg? } → { momento, fecha, hora, kg, grasa?, magra? }.
+// Los errores van con su campo («pesaje.peso_kg», «pesajes[2].fecha_hora»…).
+function validarPesaje(p, base, { zona, ahora, mal }) {
+  if (!p || typeof p !== 'object' || Array.isArray(p)) {
+    mal(base, 'debe ser un objeto { fecha_hora, peso_kg, … }');
+    return null;
+  }
+  const momento = momentoDe(p.fecha_hora, zona);
+  if (vacio(p.fecha_hora)) mal(`${base}.fecha_hora`, 'falta la fecha y hora del pesaje');
+  else if (momento === null) mal(`${base}.fecha_hora`, 'debe ser una fecha y hora ISO 8601, como 2026-11-20T08:12:00+01:00');
+  else if (momento > ahora + 5 * 60_000) mal(`${base}.fecha_hora`, 'es una hora futura');
+  const kg = numeroTolerante(p.peso_kg);
+  if (vacio(p.peso_kg)) mal(`${base}.peso_kg`, 'falta el peso');
+  else if (!Number.isFinite(kg)) mal(`${base}.peso_kg`, 'debe ser un número');
+  else if (kg < RANGO_PESO[0] || kg > RANGO_PESO[1]) mal(`${base}.peso_kg`, `debe estar entre ${RANGO_PESO[0]} y ${RANGO_PESO[1]} kg`);
+  let grasa;
+  if (!vacio(p.grasa_pct)) {
+    grasa = numeroTolerante(p.grasa_pct);
+    // HealthKit da el porcentaje como fracción (0,229 = 22,9 %).
+    if (Number.isFinite(grasa) && grasa > 0 && grasa <= 1) grasa *= 100;
+    if (!Number.isFinite(grasa)) mal(`${base}.grasa_pct`, 'debe ser un número');
+    else if (grasa < RANGO_GRASA[0] || grasa > RANGO_GRASA[1]) mal(`${base}.grasa_pct`, `debe estar entre ${RANGO_GRASA[0]} y ${RANGO_GRASA[1]} %`);
+  }
+  let magra;
+  if (!vacio(p.masa_magra_kg)) {
+    magra = numeroTolerante(p.masa_magra_kg);
+    if (!Number.isFinite(magra)) mal(`${base}.masa_magra_kg`, 'debe ser un número');
+    else if (magra < RANGO_MAGRA[0] || magra > RANGO_MAGRA[1]) mal(`${base}.masa_magra_kg`, `debe estar entre ${RANGO_MAGRA[0]} y ${RANGO_MAGRA[1]} kg`);
+    else if (Number.isFinite(kg) && magra >= kg) mal(`${base}.masa_magra_kg`, 'no puede ser mayor que el peso');
+  }
+  if (momento === null || momento > ahora + 5 * 60_000 || !Number.isFinite(kg) || kg < RANGO_PESO[0] || kg > RANGO_PESO[1]) return null;
+  const local = partesLocales(momento, zona);
+  return {
+    momento,
+    fecha: local.fecha,
+    hora: local.hora,
+    kg: Math.round(kg * 100) / 100,
+    ...(Number.isFinite(grasa) && grasa >= RANGO_GRASA[0] && grasa <= RANGO_GRASA[1] ? { grasa: Math.round(grasa * 10) / 10 } : {}),
+    ...(Number.isFinite(magra) && magra >= RANGO_MAGRA[0] && magra <= RANGO_MAGRA[1] && magra < kg ? { magra: Math.round(magra * 100) / 100 } : {}),
+  };
 }
 
 export const mismoPesaje = (a, b) =>
@@ -308,10 +358,15 @@ export function aplicarSalud(datos, entrega, { zona = datos.perfil?.zona ?? 'Eur
   const cuerpo = {
     fuente: entrega?.fuente,
     dias: Array.isArray(entrega?.dias) ? entrega.dias.map((d) => ({ fecha: d?.fecha, pasos: d?.pasos, sueno_min: d?.sueno })) : entrega?.dias,
-    pesaje: entrega?.pesaje ? { fecha_hora: new Date(entrega.pesaje.momento).toISOString(), peso_kg: entrega.pesaje.kg, grasa_pct: entrega.pesaje.grasa, masa_magra_kg: entrega.pesaje.magra } : undefined,
+    pesajes: [...(entrega?.pesaje ? [entrega.pesaje] : []), ...(Array.isArray(entrega?.pesajes) ? entrega.pesajes : [])].map((x) => ({
+      fecha_hora: Number.isFinite(x?.momento) ? new Date(x.momento).toISOString() : undefined,
+      peso_kg: x?.kg,
+      grasa_pct: x?.grasa,
+      masa_magra_kg: x?.magra,
+    })),
   };
   const v = validarSalud(cuerpo, { zona, ahora: Math.max(ahora, Number(entrega?.recibido) || 0) });
-  if (v.errores.length) return { datos, resultado: { pasos: 0, pesaje: 'no_valido', errores: v.errores } };
+  if (v.errores.length) return { datos, resultado: { pasos: 0, pesaje: 'no_valido', pesajesGuardados: 0, pesajesDuplicados: 0, errores: v.errores } };
   const fuente = v.fuente;
   const dias = { ...datos.dias };
   for (const d of v.dias) {
@@ -320,18 +375,24 @@ export function aplicarSalud(datos, entrega, { zona = datos.perfil?.zona ?? 'Eur
     if (Number.isFinite(d.sueno)) Object.assign(dia, { sueno: d.sueno, suenoFuente: fuente });
     dias[d.fecha] = dia;
   }
+  // Cada pesaje, una vez: si ya está (±1 min, mismo peso), se ignora.
   let pesos = datos.pesos;
-  let estadoPesaje = 'no_enviado';
-  if (v.pesaje) {
-    if (pesos.some((x) => mismoPesaje(x, v.pesaje))) estadoPesaje = 'duplicado';
+  let guardados = 0;
+  let duplicados = 0;
+  for (const x of v.pesajes) {
+    if (pesos.some((y) => mismoPesaje(y, x))) duplicados++;
     else {
-      pesos = [...pesos, { id: id('w'), ...v.pesaje, fuente }];
-      estadoPesaje = 'guardado';
+      pesos = [...pesos, { id: id('w'), ...x, fuente }];
+      guardados++;
     }
   }
+  const estadoPesaje = guardados ? 'guardado' : duplicados ? 'duplicado' : 'no_enviado';
   let nuevo = { ...datos, dias, pesos };
-  if (estadoPesaje === 'guardado') nuevo = revisarHitos(nuevo, partesLocales(ahora, zona).fecha).datos;
-  return { datos: nuevo, resultado: { pasos: v.dias.filter((d) => Number.isFinite(d.pasos)).length, sueno: v.dias.filter((d) => Number.isFinite(d.sueno)).length, pesaje: estadoPesaje, errores: [] } };
+  if (guardados) nuevo = revisarHitos(nuevo, partesLocales(ahora, zona).fecha).datos;
+  return {
+    datos: nuevo,
+    resultado: { pasos: v.dias.filter((d) => Number.isFinite(d.pasos)).length, sueno: v.dias.filter((d) => Number.isFinite(d.sueno)).length, pesaje: estadoPesaje, pesajesGuardados: guardados, pesajesDuplicados: duplicados, errores: [] },
+  };
 }
 
 // «Última sincronización»: lo que mandó el Atajo en su último envío (aunque el
@@ -345,6 +406,7 @@ export function anotarUltima(datos, resumen, { ahora = Date.now() } = {}) {
     fuente: resumen.fuente ?? FUENTE_SALUD,
     dias: Array.isArray(resumen.dias) ? resumen.dias : [],
     pesaje: resumen.pesaje ?? null,
+    ...(resumen.pesajes && typeof resumen.pesajes === 'object' ? { pesajes: resumen.pesajes } : {}),
     resultado: resumen.resultado ?? (resumen.pesaje ? 'guardado' : 'no_enviado'),
   };
   return { ...datos, integracion: { ...datos.integracion, ultima } };
@@ -548,9 +610,10 @@ export async function recogerBuzonSalud({ cliente, leer, guardar, ahora = () => 
       hechas.push(e.id);
       continue;
     }
-    const envio = envios.get(e.recibido) ?? { recibido: e.recibido, fuente: contenido.fuente, dias: [], pesaje: null, ids: [] };
+    const envio = envios.get(e.recibido) ?? { recibido: e.recibido, fuente: contenido.fuente, dias: [], pesajes: [], ids: [] };
     envio.dias.push(...(Array.isArray(contenido.dias) ? contenido.dias : []));
-    if (contenido.pesaje) envio.pesaje = contenido.pesaje;
+    if (contenido.pesaje) envio.pesajes.push(contenido.pesaje);
+    if (Array.isArray(contenido.pesajes)) envio.pesajes.push(...contenido.pesajes);
     envio.ids.push(e.id);
     envios.set(e.recibido, envio);
   }
@@ -562,7 +625,7 @@ export async function recogerBuzonSalud({ cliente, leer, guardar, ahora = () => 
     datos = r.datos;
     pasos += r.resultado.pasos;
     sueno += r.resultado.sueno ?? 0;
-    if (r.resultado.pesaje === 'guardado') pesajes++;
+    pesajes += r.resultado.pesajesGuardados ?? 0;
     hechas.push(...ids);
   }
   if (hechas.length) {

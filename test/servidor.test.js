@@ -1162,10 +1162,10 @@ test('salud: pasos idempotentes, pesaje duplicado, grasa en fracción, coma deci
   if (ahoraMadrid.minutos < 8 * 60 + 30) cuerpo.pesaje.fecha_hora = `${ayer}T08:12:00+01:00`;
   const r1 = await enviar(cuerpo);
   assert.equal(r1.status, 200);
-  assert.deepEqual(await r1.json(), { pasos_guardados: 2, pesaje: 'guardado' });
+  assert.deepEqual(await r1.json(), { pasos_guardados: 2, pesaje: 'guardado', pesajes_guardados: 1, pesajes_duplicados: 0 });
   // Lo mismo otra vez: los pasos se reemplazan y el pesaje es duplicado (también a 40 s).
   const r2 = await enviar({ ...cuerpo, pesaje: { ...cuerpo.pesaje, fecha_hora: cuerpo.pesaje.fecha_hora.replace(':12:00', ':12:40') } });
-  assert.deepEqual(await r2.json(), { pasos_guardados: 2, pesaje: 'duplicado' });
+  assert.deepEqual(await r2.json(), { pasos_guardados: 2, pesaje: 'duplicado', pesajes_guardados: 0, pesajes_duplicados: 1 });
   const entregas = await buzon();
   assert.equal(entregas.length, 4); // 2 días + 1 pesaje + el resumen del último envío
   // El servidor no puede leerlo: nada de pesos ni pasos en claro.
@@ -1261,7 +1261,7 @@ test('salud: el formato plano del Atajo llega igual (y sin peso no rechaza los p
   const { enviar, buzon, llave, hoy, ayer } = await preparadoSalud();
   const r = await enviar({ pasos_hoy: 4321, pasos_ayer: '11.234', peso_kg: '', grasa_pct: '', masa_magra_kg: '', fecha_peso: '' });
   assert.equal(r.status, 200);
-  assert.deepEqual(await r.json(), { pasos_guardados: 2, pesaje: 'no_enviado', avisos: ['«peso_kg» llegó vacío: sin peso en las últimas 24 h no se guarda pesaje'] });
+  assert.deepEqual(await r.json(), { pasos_guardados: 2, pesaje: 'no_enviado', pesajes_guardados: 0, pesajes_duplicados: 0, avisos: ['«peso_kg» llegó vacío: sin peso en las últimas 24 h no se guarda pesaje'] });
   const dias = (await Promise.all((await buzon()).map((e) => descifrarDelBuzon(llave.privada, e.sobre)))).filter((c) => c.tipo !== 'resumen').flatMap((c) => c.dias ?? []);
   assert.deepEqual(dias.sort((a, b) => (a.fecha < b.fecha ? -1 : 1)), [
     { fecha: ayer, pasos: 11234 },
@@ -1274,9 +1274,9 @@ test('salud: el formato plano del Atajo llega igual (y sin peso no rechaza los p
 test('salud: con los nombres de Siri guarda el pesaje y avisa de lo que llega vacío', async () => {
   const { enviar, ayer } = await preparadoSalud();
   const r = await (await enviar({ pasos_hoy: 4321, pasos_ayer: '', peso: '77,5', fecha_peso: `${ayer}T08:12:00+01:00`, grasa_corporal: 0.229, masa_magra: 59.8 })).json();
-  assert.deepEqual(r, { pasos_guardados: 1, pesaje: 'guardado', avisos: ['«pasos_ayer» llegó vacío'] });
+  assert.deepEqual(r, { pasos_guardados: 1, pesaje: 'guardado', pesajes_guardados: 1, pesajes_duplicados: 0, avisos: ['«pasos_ayer» llegó vacío'] });
   const sinAvisos = await (await enviar({ pasos_hoy: 4321, pasos_ayer: 9000 })).json();
-  assert.deepEqual(sinAvisos, { pasos_guardados: 2, pesaje: 'no_enviado' });
+  assert.deepEqual(sinAvisos, { pasos_guardados: 2, pesaje: 'no_enviado', pesajes_guardados: 0, pesajes_duplicados: 0 });
 });
 
 test('Forma: el aviso del resumen semanal llega una vez a la hora elegida (y nunca con datos)', async () => {
@@ -1314,7 +1314,7 @@ test('Forma: el aviso del resumen semanal llega una vez a la hora elegida (y nun
 test('salud: el sueño viaja aparte de los pasos y no los pisa en el buzón', async () => {
   const { enviar, buzon, llave, hoy, dispositivo, env } = await preparadoSalud();
   const r = await (await enviar({ pasos_hoy: 4321, sueno_horas: '7,5' })).json();
-  assert.deepEqual(r, { pasos_guardados: 1, pesaje: 'no_enviado', sueno: 'guardado', avisos: ['no ha llegado «pasos_ayer»'] });
+  assert.deepEqual(r, { pasos_guardados: 1, pesaje: 'no_enviado', pesajes_guardados: 0, pesajes_duplicados: 0, sueno: 'guardado', avisos: ['no ha llegado «pasos_ayer»'] });
   // Otro envío solo con pasos: el sueño pendiente sigue.
   await enviar({ pasos_hoy: 5000, pasos_ayer: 9000 });
   const contenidos = (await Promise.all((await buzon()).map((e) => descifrarDelBuzon(llave.privada, e.sobre)))).filter((c) => c.tipo !== 'resumen');
@@ -1377,4 +1377,44 @@ test('Forma → Salud: el Atajo recoge lo pendiente una sola vez; lo pendiente s
   const otra = await (await leerSalida()).json();
   assert.deepEqual(otra.comidas.map((c) => c.kcal).sort(), [2000, 500]);
   assert.equal((await api.exportar({ hoy })).enviados, 0); // y no se vuelve a subir solo
+});
+
+test('salud: la lista «pesajes» de 7 días guarda cada pesaje una vez y al reenviarla todo es duplicado', async () => {
+  const { env, dispositivo, llave, enviar } = await preparadoSalud();
+  // Siete días seguidos (de hace 7 a hace 1), con dos pesajes el de hace 3.
+  const dias = [7, 6, 5, 4, 3, 2, 1].map((n) => partesSalud(Date.now() - n * 86_400_000, 'Europe/Madrid').fecha);
+  const pesajes = dias.map((f, i) => ({ fecha_hora: `${f}T07:3${i}:00+01:00`, peso_kg: (78 - i * 0.2).toFixed(2), grasa_pct: 0.23, masa_magra_kg: '59,5' }));
+  pesajes.push({ fecha_hora: `${dias[4]}T21:05:00+01:00`, peso_kg: 79.1 });
+  // Con los nombres de Siri y un hueco sin peso (se ignora con aviso).
+  pesajes.push({ fecha: `${dias[6]}T22:00:00+01:00`, peso: '77,9' }, { fecha_hora: `${dias[6]}T23:00:00+01:00`, peso_kg: '' });
+  const r1 = await (await enviar({ pasos_hoy: 3000, pasos_ayer: 9000, pesajes })).json();
+  assert.equal(r1.pasos_guardados, 2);
+  assert.equal(r1.pesaje, 'guardado');
+  assert.deepEqual([r1.pesajes_guardados, r1.pesajes_duplicados], [9, 0]);
+  assert.ok(r1.avisos.some((a) => /pesajes\[9\] llegó sin peso/.test(a)), JSON.stringify(r1.avisos));
+  // Los mismos 7 días otra vez (lo normal cada noche): nada nuevo.
+  const r2 = await (await enviar({ pasos_hoy: 3500, pesajes })).json();
+  assert.deepEqual([r2.pesaje, r2.pesajes_guardados, r2.pesajes_duplicados], ['duplicado', 0, 9]);
+  // Con uno nuevo (y el «pesaje» suelto de siempre, que sigue valiendo): solo entra el nuevo.
+  const nuevo = { fecha_hora: new Date(Date.now() - 60_000).toISOString(), peso_kg: 77.4 };
+  const r3 = await (await enviar({ pesaje: pesajes[0], pesajes: [...pesajes.slice(0, 3), nuevo] })).json();
+  assert.deepEqual([r3.pesajes_guardados, r3.pesajes_duplicados], [1, 3]);
+  // Un pesaje con un error tumba el envío entero (como siempre), con su campo.
+  const mal = await enviar({ pesajes: [pesajes[0], { fecha_hora: pesajes[1].fecha_hora, peso_kg: 900 }] });
+  assert.equal(mal.status, 400);
+  assert.equal((await mal.json()).campo, 'pesajes[1].peso_kg');
+  assert.equal((await enviar({ pesajes: 'muchos' })).status, 400);
+
+  // La app los recoge todos (también los de días en que el Atajo no se ejecutó).
+  let datos = normalizarForma({ perfil: { peso: 78 }, integracion: llave });
+  const cliente = new ClienteServidor({ url: 'https://kitsune.ejemplo.workers.dev', token: dispositivo, fetch: (url, init) => servidor.fetch(new Request(url, init), env) });
+  const r = await recogerBuzonSalud({ cliente, leer: async () => datos, guardar: async (d) => (datos = normalizarForma(d)) });
+  assert.equal(r.pesajes, 10);
+  assert.equal(datos.pesos.filter((p) => p.fuente === 'apple_salud').length, 10);
+  assert.equal(datos.pesos.filter((p) => p.fecha === dias[4]).length, 2);
+  assert.equal(datos.integracion.ultima.pesajes.recibidos, 4);
+  // Reenviar los 7 días con la app ya al día tampoco duplica nada en Forma.
+  const { aplicarSalud } = await import('../src/compartido/forma/salud.js');
+  const otra = aplicarSalud(datos, { recibido: Date.now(), pesajes: datos.pesos.filter((p) => p.fuente).map((p) => ({ ...p, momento: p.momento + 30_000 })) });
+  assert.deepEqual([otra.resultado.pesajesGuardados, otra.resultado.pesajesDuplicados], [0, 10]);
 });

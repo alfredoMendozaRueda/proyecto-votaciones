@@ -64,7 +64,12 @@ export function crearIntegraciones(ctx) {
     if (u?.pesaje) {
       const p = u.pesaje;
       const extra = [Number.isFinite(p.grasa) ? `${num(p.grasa, 1)} % grasa` : '', Number.isFinite(p.magra) ? `${num(p.magra, 1)} kg magra` : ''].filter(Boolean).join(', ');
-      partes.push(`pesaje <b>${num(p.kg, 2)} kg</b>${p.hora ? ` a las ${p.hora}` : ''}${extra ? ` (${extra})` : ''}${u.resultado === 'duplicado' ? ' · ya lo tenías' : ''}`);
+      const lista = u.pesajes?.recibidos > 1 ? u.pesajes : null;
+      partes.push(
+        lista
+          ? `${lista.recibidos} pesajes (${lista.guardados} nuevo${lista.guardados === 1 ? '' : 's'}, ${lista.duplicados} ya los tenías), el último <b>${num(p.kg, 2)} kg</b>${p.hora ? ` a las ${p.hora}` : ''}`
+          : `pesaje <b>${num(p.kg, 2)} kg</b>${p.hora ? ` a las ${p.hora}` : ''}${extra ? ` (${extra})` : ''}${u.resultado === 'duplicado' ? ' · ya lo tenías' : ''}`,
+      );
     }
     const pendiente = usoServidor && (!u || usoServidor > u.recibido + 5_000);
     return `<p class="f-explica" data-ultima>Última sincronización: <b style="color:var(--f-texto)">${haceCuanto(cuando)}</b>${u ? ` · ${escapar(nombreFuente(u.fuente))}` : ''}.</p>

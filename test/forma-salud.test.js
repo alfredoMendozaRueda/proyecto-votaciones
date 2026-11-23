@@ -87,7 +87,7 @@ test('aplicar: los pasos reemplazan el total del día y un pesaje repetido no se
   let datos = normalizarForma({ perfil: { peso: 78 }, dias: { '2026-11-19': { agua: 1500, suplementos: ['u1'] } } });
   const envio = { recibido: AHORA, dias: [{ fecha: '2026-11-19', pasos: 9000 }], pesaje: { momento: Date.parse('2026-11-20T07:12:00Z'), kg: 77.55, grasa: 22.9 } };
   let r = aplicarSalud(datos, envio, { ahora: AHORA });
-  assert.deepEqual(r.resultado, { pasos: 1, sueno: 0, pesaje: 'guardado', errores: [] });
+  assert.deepEqual(r.resultado, { pasos: 1, sueno: 0, pesaje: 'guardado', pesajesGuardados: 1, pesajesDuplicados: 0, errores: [] });
   datos = normalizarForma(r.datos);
   assert.equal(datos.dias['2026-11-19'].agua, 1500);
   assert.deepEqual(datos.dias['2026-11-19'].suplementos, ['u1']);

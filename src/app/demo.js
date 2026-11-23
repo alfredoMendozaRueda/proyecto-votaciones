@@ -674,19 +674,20 @@ export function crearDemo() {
               if (v.errores.length) return { estado: 400, ...v.errores[0] };
               const meter = async (contenido) => servidorSalud.buzon.push({ id: `s${Math.random().toString(36).slice(2, 10)}`, recibido: ahora, sobre: await cifrarParaBuzon(servidorSalud.publica, contenido) });
               for (const d of v.dias) await meter({ fuente: v.fuente, dias: [d] });
-              let pesaje = 'no_enviado';
-              if (v.pesaje) {
-                const minuto = Math.floor(v.pesaje.momento / 60_000);
-                const clave = `${minuto}|${v.pesaje.kg}`;
-                if ([minuto - 1, minuto, minuto + 1].some((m) => servidorSalud.vistos.has(`${m}|${v.pesaje.kg}`))) pesaje = 'duplicado';
+              let guardados = 0;
+              let duplicados = 0;
+              for (const x of v.pesajes) {
+                const minuto = Math.floor(x.momento / 60_000);
+                if ([minuto - 1, minuto, minuto + 1].some((m) => servidorSalud.vistos.has(`${m}|${x.kg}`))) duplicados++;
                 else {
-                  servidorSalud.vistos.add(clave);
-                  pesaje = 'guardado';
-                  await meter({ fuente: v.fuente, pesaje: v.pesaje });
+                  servidorSalud.vistos.add(`${minuto}|${x.kg}`);
+                  guardados++;
+                  await meter({ fuente: v.fuente, pesaje: x });
                 }
               }
-              await meter({ tipo: 'resumen', fuente: v.fuente, dias: v.dias, pesaje: v.pesaje, resultado: pesaje });
-              return { estado: 200, pasos_guardados: v.dias.length, pesaje };
+              const pesaje = guardados ? 'guardado' : duplicados ? 'duplicado' : 'no_enviado';
+              await meter({ tipo: 'resumen', fuente: v.fuente, dias: v.dias, pesaje: v.pesaje, pesajes: { recibidos: v.pesajes.length, guardados, duplicados }, resultado: pesaje });
+              return { estado: 200, pasos_guardados: v.dias.length, pesaje, pesajes_guardados: guardados, pesajes_duplicados: duplicados };
             },
           };
         })(),

@@ -87,23 +87,33 @@ export async function rutaIntegraciones(n, peticion, ruta, { json, ErrorHttp, cu
       );
     }
   }
-  // Pesaje: si ya llegó uno igual (±1 minuto y mismo peso), no se guarda otra vez.
-  let pesaje = 'no_enviado';
-  if (v.pesaje) {
-    const minuto = Math.floor(v.pesaje.momento / 60_000);
-    const kg = v.pesaje.kg.toFixed(2);
+  // Pesajes (el último y/o los de los últimos días): cada uno se guarda una vez.
+  // Si ya llegó uno igual (±1 minuto y mismo peso), cuenta como duplicado.
+  let guardados = 0;
+  let duplicados = 0;
+  const vistos = new Set();
+  for (const [i, x] of v.pesajes.entries()) {
+    const minuto = Math.floor(x.momento / 60_000);
+    const kg = x.kg.toFixed(2);
     const claves = await Promise.all([minuto - 1, minuto, minuto + 1].map((m) => hmac(n.env.CLAVE_CIFRADO, `peso|${m}|${kg}`)));
-    const visto = await n.db.prepare('SELECT clave FROM salud_vistos WHERE clave IN (?, ?, ?)').bind(...claves).first();
-    if (visto) pesaje = 'duplicado';
-    else {
-      pesaje = 'guardado';
-      const sobre = JSON.stringify(await cifrarParaBuzon(publica, { fuente: v.fuente, pesaje: v.pesaje }));
-      sentencias.push(n.db.prepare('INSERT INTO buzon_salud (id, clave, recibido, sobre) VALUES (?, NULL, ?, ?)').bind(`s${aleatorio(9)}`, n.ahora, sobre));
-      sentencias.push(n.db.prepare('INSERT OR IGNORE INTO salud_vistos (clave, cuando) VALUES (?, ?)').bind(claves[1], n.ahora));
+    const visto = claves.some((c) => vistos.has(c)) || (await n.db.prepare('SELECT clave FROM salud_vistos WHERE clave IN (?, ?, ?)').bind(...claves).first());
+    if (visto) {
+      duplicados++;
+      continue;
     }
+    guardados++;
+    vistos.add(claves[1]);
+    // Uno por entrega (con su propia hora de llegada), para que también lo
+    // recojan bien las versiones de la app que solo entienden «pesaje».
+    const sobre = JSON.stringify(await cifrarParaBuzon(publica, { fuente: v.fuente, pesaje: x }));
+    sentencias.push(n.db.prepare('INSERT INTO buzon_salud (id, clave, recibido, sobre) VALUES (?, NULL, ?, ?)').bind(`s${aleatorio(9)}`, n.ahora + i, sobre));
+    sentencias.push(n.db.prepare('INSERT OR IGNORE INTO salud_vistos (clave, cuando) VALUES (?, ?)').bind(claves[1], n.ahora));
   }
+  const pesaje = guardados ? 'guardado' : duplicados ? 'duplicado' : 'no_enviado';
   // Resumen del envío (para «Última sincronización» en la app), también cifrado.
-  const resumen = JSON.stringify(await cifrarParaBuzon(publica, { tipo: 'resumen', fuente: v.fuente, dias: v.dias, pesaje: v.pesaje, resultado: pesaje }));
+  const resumen = JSON.stringify(
+    await cifrarParaBuzon(publica, { tipo: 'resumen', fuente: v.fuente, dias: v.dias, pesaje: v.pesaje, pesajes: { recibidos: v.pesajes.length, guardados, duplicados }, resultado: pesaje }),
+  );
   sentencias.push(
     n.db
       .prepare('INSERT INTO buzon_salud (id, clave, recibido, sobre) VALUES (?, ?, ?, ?) ON CONFLICT(clave) DO UPDATE SET recibido = excluded.recibido, sobre = excluded.sobre')
@@ -113,7 +123,14 @@ export async function rutaIntegraciones(n, peticion, ruta, { json, ErrorHttp, cu
   await n.db.batch(sentencias);
   // Avisos (claves que no se reconocen, campos vacíos): ayudan a arreglar el Atajo.
   const sueno = v.dias.some((d) => Number.isFinite(d.sueno));
-  return json({ pasos_guardados: v.dias.filter((d) => Number.isFinite(d.pasos)).length, pesaje, ...(sueno ? { sueno: 'guardado' } : {}), ...(v.avisos?.length ? { avisos: v.avisos } : {}) });
+  return json({
+    pasos_guardados: v.dias.filter((d) => Number.isFinite(d.pasos)).length,
+    pesaje,
+    pesajes_guardados: guardados,
+    pesajes_duplicados: duplicados,
+    ...(sueno ? { sueno: 'guardado' } : {}),
+    ...(v.avisos?.length ? { avisos: v.avisos } : {}),
+  });
 }
 
 // ---------- Los dispositivos: tokens y buzón ----------

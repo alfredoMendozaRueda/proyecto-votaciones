@@ -136,12 +136,25 @@ Reglas del envío:
 - **% de grasa:** de 3 a 60. Si llega como fracción (0,229), se multiplica por 100.
 - **Números:** pueden ir como número o como texto, con coma decimal («77,55»).
 - **Fecha y hora:** sin zona se entiende en la de Ajustes (Europe/Madrid).
+- **Varios pesajes (`pesajes`):** además de `pesaje` (que se mantiene), se puede
+  mandar una lista `pesajes` con el mismo formato por elemento (`fecha_hora`,
+  `peso_kg`, `grasa_pct`, `masa_magra_kg`; hasta 60). Sirve para mandar cada
+  noche todos los pesajes de los últimos 7 días: si un día el Atajo no se
+  ejecuta, el pesaje llega al siguiente. Los elementos sin peso se ignoran con
+  un aviso. Vale también junto al formato plano.
 - **Pesaje repetido:** el mismo peso con menos de un minuto de diferencia no se
-  vuelve a guardar.
+  vuelve a guardar, así que reenviar los mismos 7 días no duplica nada.
 - **Todo o nada:** si un dato no vale, responde 400 con el campo y el motivo, y
   no guarda nada.
 
-Si todo va bien, responde `{"pasos_guardados": 2, "pesaje": "guardado" | "duplicado" | "no_enviado"}`.
+Si todo va bien, responde:
+
+```json
+{ "pasos_guardados": 2, "pesaje": "guardado", "pesajes_guardados": 1, "pesajes_duplicados": 6 }
+```
+
+`pesaje` resume el envío: `guardado` si entró alguno nuevo, `duplicado` si todos
+ya estaban y `no_enviado` si no había ninguno.
 
 **Privacidad.** El servidor no puede leer tus datos de salud:
 
