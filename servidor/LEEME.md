@@ -116,14 +116,30 @@ También vale un formato **plano**, más fácil de montar en Atajos, porque no
 lleva listas y las fechas de los días las pone el servidor:
 
 ```json
-{ "pasos_hoy": 4321, "pasos_ayer": 11234, "peso_kg": 77.55, "grasa_pct": 22.9, "masa_magra_kg": 59.8, "fecha_peso": "20 nov 2026, 8:12" }
+{
+  "pasos_hoy": 4321,
+  "pasos_ayer": 11234,
+  "pesajes": [
+    { "fecha_hora": "19 nov 2026, 7:41", "peso_kg": "77,7", "grasa_pct": "23,1", "masa_magra_kg": "59,7" },
+    { "fecha_hora": "20 nov 2026, 8:12", "peso_kg": "77,55", "grasa_pct": "", "masa_magra_kg": "" }
+  ]
+}
 ```
+
+El Atajo recomendado (la guía de la app) busca **todas las muestras de Peso de
+los últimos 7 días**, sin límite. Para cada una saca su fecha, busca el % de
+grasa y la masa magra con esa misma fecha y lo añade a `pesajes`. Los pasos
+siguen siendo los de hoy y ayer. `pesajes` puede ir como lista JSON o como
+texto que la contenga, que es como la monta Atajos con «Combinar texto». El
+formato antiguo con un solo pesaje (`peso_kg`, `grasa_pct`, `masa_magra_kg`,
+`fecha_peso`) sigue valiendo.
 
 En este formato:
 
 - **Campos vacíos:** se ignoran. Si no hay peso, no se manda pesaje, pero los
   pasos se guardan igual.
-- **`fecha_peso`:** vale en ISO 8601 o tal como la escribe el iPhone en español.
+- **`fecha_peso` y `fecha_hora`:** valen en ISO 8601 o tal como las escribe el
+  iPhone en español.
 - **`sueno_horas`** (opcional): lo que dormiste la última noche, que cuenta para
   hoy. Vale en horas, en minutos o como «7 h 20 min». En el formato completo va
   como `sueno_min` dentro de cada día.

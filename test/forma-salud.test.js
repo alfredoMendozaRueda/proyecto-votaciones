@@ -262,3 +262,32 @@ test('Forma → Salud: las comidas sin hora propia (importadas) usan la hora de 
   assert.equal(hora('Yogur'), '2026-11-17T20:30:00.000Z'); // la suya
   assert.equal(hora('Sin momento'), '2026-11-17T11:00:00.000Z'); // 12:00
 });
+
+test('pesajes: la lista montada como texto por el Atajo (fechas del iPhone, unidades y huecos) vale igual', () => {
+  const ahora = Date.parse('2026-11-23T21:00:00Z');
+  // Lo que sale del paso 4-5 de la guía: todo entre comillas, con lo vacío vacío.
+  const texto =
+    '[{"fecha_hora":"17 nov 2026, 7:41","peso_kg":"77,7 kg","grasa_pct":"23,1 %","masa_magra_kg":"59,7 kg"},' +
+    '{"fecha_hora":"20 nov 2026, 8:12","peso_kg":"77,55 kg","grasa_pct":"","masa_magra_kg":""},' +
+    '{"fecha_hora":"22 nov 2026, 21:03","peso_kg":"","grasa_pct":"","masa_magra_kg":""}]';
+  const v = validarSalud({ pasos_hoy: '8.012', pasos_ayer: '10.500', pesajes: texto }, { zona: Z, ahora });
+  assert.deepEqual(v.errores, []);
+  assert.deepEqual(
+    v.pesajes.map((p) => [p.fecha, p.hora, p.kg, p.grasa ?? null, p.magra ?? null]),
+    [
+      ['2026-11-17', '07:41', 77.7, 23.1, 59.7],
+      ['2026-11-20', '08:12', 77.55, null, null],
+    ],
+  );
+  assert.ok(v.avisos.some((a) => /pesajes\[2\] llegó sin peso/.test(a)));
+  assert.equal(v.pesaje.kg, 77.55); // el más reciente
+  assert.equal(v.dias.length, 2);
+  // Repetido dentro del mismo envío (a 30 s): cuenta una vez.
+  const dos = validarSalud({ pesajes: [{ fecha_hora: '2026-11-20T08:12:00+01:00', peso_kg: 77.55 }, { fecha_hora: '2026-11-20T08:12:30+01:00', peso_kg: '77,55' }] }, { zona: Z, ahora });
+  assert.equal(dos.pesajes.length, 1);
+  // Texto que no es una lista: error con su campo.
+  assert.equal(validarSalud({ pesajes: '[{roto' }, { zona: Z, ahora }).errores[0].campo, 'pesajes');
+  // Más de 60, error.
+  const muchos = Array.from({ length: 61 }, (_, i) => ({ fecha_hora: new Date(ahora - i * 3_600_000).toISOString(), peso_kg: 77 }));
+  assert.match(validarSalud({ pesajes: muchos }, { zona: Z, ahora }).errores[0].motivo, /como mucho 60/);
+});

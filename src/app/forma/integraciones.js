@@ -10,12 +10,18 @@ import { ic, escapar, num } from './ui.js';
 const EJEMPLO = {
   pasos_hoy: 4321,
   pasos_ayer: 11234,
-  peso_kg: 77.55,
-  grasa_pct: 22.9,
-  masa_magra_kg: 59.8,
-  fecha_peso: '2026-11-20T08:12:00+01:00',
   sueno_horas: 7.4,
+  // Todos los pesajes de los últimos 7 días: si un día el Atajo no se ejecuta,
+  // ese pesaje llega al día siguiente (los repetidos no se duplican).
+  pesajes: [
+    { fecha_hora: '2026-11-19T07:41:00+01:00', peso_kg: 77.7, grasa_pct: 23.1, masa_magra_kg: 59.7 },
+    { fecha_hora: '2026-11-20T08:12:00+01:00', peso_kg: 77.55, grasa_pct: 22.9, masa_magra_kg: 59.8 },
+  ],
 };
+
+// Lo que monta el bucle del paso 4, por cada pesaje (todo entre comillas: si
+// falta la grasa o la magra, va vacío y se ignora).
+const PLANTILLA_PESAJE = '{"fecha_hora":"[fecha]","peso_kg":"[Valor de peso]","grasa_pct":"[grasa]","masa_magra_kg":"[magra]"}';
 
 export function haceCuanto(ms, ahora = Date.now()) {
   if (!Number.isFinite(ms)) return 'nunca';
@@ -229,7 +235,7 @@ export function crearIntegraciones(ctx) {
     const paso = (n, html) => `<li class="f-guia__paso"><span class="f-guia__n">${n}</span><div>${html}</div></li>`;
     ctx.hojas.abrir(
       `<div class="f-hoja__titulo"><h2>Cómo configurar el Atajo</h2></div>
-       <p class="f-explica">Un Atajo de la app <b style="color:var(--f-texto)">Atajos</b> lee tus pasos y tu último pesaje de Salud y se los manda a tu servidor de Kitsune. Necesitas un token (Perfil → Integraciones → Generar token).</p>
+       <p class="f-explica">Un Atajo de la app <b style="color:var(--f-texto)">Atajos</b> lee tus pasos de hoy y de ayer y <b style="color:var(--f-texto)">todos tus pesajes de los últimos 7 días</b> y se los manda a tu servidor de Kitsune. Así, si un día no se ejecuta (por ejemplo, con el iPhone bloqueado), el pesaje llega al día siguiente. Necesitas un token (Perfil → Integraciones → Generar token).</p>
 
        <span class="f-etiqueta">Dirección (POST)</span>
        <code class="f-codigo">${escapar(url)}</code>
@@ -245,12 +251,12 @@ Content-Type: application/json</code>
        <button type="button" class="f-boton" data-a="int-copiar" data-texto="${escapar(json)}" data-que="Ejemplo copiado">${ic('copiar', 16)}Copiar ejemplo</button>
        <ul class="f-tenue f-guia__notas">
          <li><b>pasos_hoy</b> y <b>pasos_ayer</b>: el TOTAL de cada día; el servidor pone las fechas. Mandar lo mismo dos veces no duplica nada: se reemplaza.</li>
-         <li><b>peso_kg</b> (30 a 300), <b>grasa_pct</b> (3 a 60; si llega como fracción, 0,229, se pasa a 22,9 %), <b>masa_magra_kg</b> y <b>fecha_peso</b>. Si un día no te pesas y van vacíos, se guardan los pasos igual.</li>
+         <li><b>pesajes</b>: la lista de los pesajes de los últimos 7 días, cada uno con <b>fecha_hora</b>, <b>peso_kg</b> (30 a 300), <b>grasa_pct</b> (3 a 60; si llega como fracción, 0,229, se pasa a 22,9 %) y <b>masa_magra_kg</b>. Cada noche se manda la semana entera: los que ya estaban (misma hora ±1 min y mismo peso) no se duplican. Hasta 60 por envío; los que llegan sin peso se ignoran.</li>
          <li><b>sueno_horas</b>: lo que dormiste la última noche (cuenta para hoy). Vale en horas («7,4»), en minutos («444») o como «7 h 24 min».</li>
-         <li>Los números pueden ir como número o como texto, con coma decimal («77,55» o «77,55 kg»).</li>
-         <li><b>fecha_peso</b> vale tal cual la escribe el iPhone («20 nov 2026, 8:12») o en ISO 8601; sin zona, se entiende en la de tu perfil (${escapar(ctx.datos.perfil?.zona ?? 'Europe/Madrid')}).</li>
-         <li>Respuesta: <code>{"pasos_guardados": 2, "pesaje": "guardado"}</code> (o <code>"duplicado"</code>, <code>"no_enviado"</code>). Si algo no vale, 400 con el campo y el motivo, y no se guarda nada.</li>
-         <li>Como mucho 60 envíos por hora y token. También vale el formato completo con <code>dias</code> (lista de fecha y pasos) y <code>pesaje</code>.</li>
+         <li>Los números pueden ir como número o como texto, con coma decimal («77,55» o «77,55 kg»). La lista puede ir como lista JSON o como texto que la contenga (así la monta el paso 4).</li>
+         <li><b>fecha_hora</b> vale tal cual la escribe el iPhone («20 nov 2026, 8:12») o en ISO 8601; sin zona, se entiende en la de tu perfil (${escapar(ctx.datos.perfil?.zona ?? 'Europe/Madrid')}).</li>
+         <li>Respuesta: <code>{"pasos_guardados": 2, "pesaje": "guardado", "pesajes_guardados": 1, "pesajes_duplicados": 6}</code>. Si algo no vale, 400 con el campo (por ejemplo <code>pesajes[3].peso_kg</code>) y el motivo, y no se guarda nada.</li>
+         <li>Como mucho 60 envíos por hora y token. Sigue valiendo el formato antiguo con un solo pesaje (<code>peso_kg</code>, <code>grasa_pct</code>, <code>masa_magra_kg</code>, <code>fecha_peso</code>) y el completo con <code>dias</code> y <code>pesaje</code>.</li>
        </ul>
 
        <span class="f-etiqueta">Crear el Atajo en el iPhone (a mano)</span>
@@ -258,14 +264,18 @@ Content-Type: application/json</code>
          ${paso(1, '<b>Fecha</b> (fecha actual) → <b>Ajustar fecha</b>: <i>Obtener inicio del día</i>. Guárdalo con <b>Establecer variable</b> como <code>inicio_hoy</code>. Otra <b>Ajustar fecha</b>: <i>restar 1 día</i> a <code>inicio_hoy</code> → <code>inicio_ayer</code>.')}
          ${paso(2, '<b>Buscar muestras de salud</b>: tipo <i>Pasos</i>, filtro <i>Fecha de inicio es posterior a</i> <code>inicio_hoy</code>. Después <b>Calcular estadísticas</b> → <i>Suma</i> → variable <code>pasos_hoy</code>.')}
          ${paso(3, 'Igual con dos filtros: <i>Fecha de inicio es posterior a</i> <code>inicio_ayer</code> y <i>es anterior a</i> <code>inicio_hoy</code> → <i>Suma</i> → <code>pasos_ayer</code>.')}
-         ${paso(4, '<b>Buscar muestras de salud</b>: tipo <i>Peso</i>, <i>Fecha de inicio está en los últimos 1 días</i>, ordenar por <i>Fecha de inicio</i>, <i>más reciente primero</i>, límite <i>1</i> → variable <code>peso</code>.')}
-         ${paso(5, 'Igual con <i>Porcentaje de grasa corporal</i> → <code>grasa</code> y con <i>Masa corporal magra</i> → <code>magra</code>.')}
+         ${paso(4, '<b>Buscar muestras de salud</b>: tipo <i>Peso</i>, <i>Fecha de inicio está en los últimos 7 días</i>, ordenar por <i>Fecha de inicio</i>, <b>sin límite</b> (quita el «Límite 1» si lo tenías) → variable <code>pesos</code>.')}
+         ${paso('4a', '<b>Repetir con cada elemento</b> de <code>pesos</code>. Dentro: <b>Obtener detalles de las muestras de salud</b> → <i>Fecha de inicio</i> del <i>Elemento repetido</i> → variable <code>fecha</code>.')}
+         ${paso('4b', 'Dentro también: <b>Buscar muestras de salud</b> de tipo <i>Porcentaje de grasa corporal</i> con <i>Fecha de inicio es</i> <code>fecha</code>, límite 1 → <code>grasa</code>; y lo mismo con <i>Masa corporal magra</i> → <code>magra</code>.')}
+         ${paso('4c', `Dentro también: <b>Texto</b> con <code>${escapar(PLANTILLA_PESAJE)}</code> (cada corchete es su variable: <code>fecha</code>, el <i>Valor</i> del <i>Elemento repetido</i>, <code>grasa</code> y <code>magra</code>) → <b>Añadir a variable</b> <code>lista_pesajes</code>. Cierra el Repetir.`)}
+         ${paso(5, '<b>Combinar texto</b> <code>lista_pesajes</code> con el separador <i>Personalizado</i> <code>,</code> y luego <b>Texto</b> <code>[</code><i>Texto combinado</i><code>]</code> → variable <code>pesajes</code>.')}
          ${paso('5b', '<b>Sueño</b> (opcional): <b>Buscar muestras de salud</b> de tipo <i>Análisis del sueño</i>, <i>Fecha de inicio está en las últimas 18 horas</i> y valor <i>Dormido</i> (o los tipos de sueño: núcleo, profundo y REM). Saca su <i>Duración</i> con <b>Obtener detalles</b>, súmala con <b>Calcular estadísticas</b> → <i>Suma</i> y mándala como <code>sueno_horas</code> (o <code>sueno</code> en minutos).')}
-         ${paso(6, `<b>Obtener contenido de URL</b>: <code>${escapar(url)}</code>, método <i>POST</i>, cabecera <code>Authorization</code> = <code>Bearer forma_…</code>. Cuerpo <i>JSON</i> con <code>pasos_hoy</code>, <code>pasos_ayer</code>, <code>peso_kg</code> (variable <code>peso</code> → toca y elige <i>Valor</i>), <code>grasa_pct</code> (<code>grasa</code> → <i>Valor</i>), <code>masa_magra_kg</code> (<code>magra</code> → <i>Valor</i>) y <code>fecha_peso</code> (<code>peso</code> → <i>Fecha de inicio</i>) y, si quieres, <code>sueno_horas</code>.`)}
+         ${paso(6, `<b>Obtener contenido de URL</b>: <code>${escapar(url)}</code>, método <i>POST</i>, cabecera <code>Authorization</code> = <code>Bearer forma_…</code>. Cuerpo <i>JSON</i> con <code>pasos_hoy</code>, <code>pasos_ayer</code>, <code>pesajes</code> (tipo <i>Texto</i>, la variable del paso 5) y, si quieres, <code>sueno_horas</code>. Quita <code>peso_kg</code>, <code>grasa_pct</code>, <code>masa_magra_kg</code> y <code>fecha_peso</code> si los tenías.`)}
          ${paso(7, '<b>Mostrar notificación</b> con el <i>Contenido de la URL</i>, para ver la respuesta.')}
          ${paso(8, '<b>Automatizaciones</b> (pestaña Automatización): <i>App → Renpho Health → Se cierra</i> (sincroniza el peso justo después de pesarte) y <i>Hora del día → 22:30 → Diariamente</i>. En las dos, <i>Ejecutar inmediatamente</i>.')}
        </ol>
-       <p class="f-tenue">iOS no deja leer Salud con el iPhone bloqueado: por eso el Atajo manda también los pasos de ayer. Forma recoge lo que llega cada vez que la abres.</p>`,
+       <button type="button" class="f-boton" data-a="int-copiar" data-texto="${escapar(PLANTILLA_PESAJE)}" data-que="Texto del paso 4c copiado">${ic('copiar', 16)}Copiar el texto del paso 4c</button>
+       <p class="f-tenue">iOS no deja leer Salud con el iPhone bloqueado: por eso el Atajo manda también los pasos de ayer y los pesajes de toda la semana. Forma recoge lo que llega cada vez que la abres y, si el Atajo lleva más de 36 h sin ejecutarse, te avisa en el Diario.</p>`,
       { clase: 'f-hoja--alta', titulo: 'Atajo de Apple Salud' },
     );
   }
