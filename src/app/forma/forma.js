@@ -18,7 +18,7 @@ import { crearBiblioteca } from './biblioteca.js';
 import { crearEditorSesion } from './editor-sesion.js';
 import { crearIntegraciones } from './integraciones.js';
 import { aplicarImportacion } from '../../compartido/forma/importar.js';
-import { generarResumen, semanasPendientes, peticionResumenIA, leerTextoIA } from '../../compartido/forma/semanas.js';
+import { generarResumen, semanasPendientes, peticionResumenIA, leerTextoIA, semanasConPesajesCambiados } from '../../compartido/forma/semanas.js';
 import { puedeUsarIA } from '../../compartido/forma/ia.js';
 import { contarUsoIA } from '../../compartido/forma/acciones.js';
 
@@ -75,7 +75,9 @@ export async function montarForma({ raiz, api, salir }) {
     hoy: () => fechaISO(),
     // Guarda y vuelve a pintar. Los cambios van en orden aunque lleguen seguidos.
     guardar(nuevos, { pintar: repintar = true } = {}) {
+      const previo = estado.datos;
       estado.datos = normalizarForma(nuevos);
+      revisarResumenes(previo, estado.datos);
       const copia = estado.datos;
       guardando = guardando.then(() => api.forma.guardar(copia)).catch((e) => tostada(`No se ha podido guardar: ${e.message}`));
       if (repintar) pintar();
@@ -99,7 +101,9 @@ export async function montarForma({ raiz, api, salir }) {
         r = aplicarImportacion(estado.datos, plan, { hoy: fechaISO() });
         await api.forma.guardar(normalizarForma(r.datos));
       }
+      const previo = estado.datos;
       estado.datos = normalizarForma(r.datos);
+      revisarResumenes(previo, estado.datos);
       return r.resumen;
     },
     // Vuelve a leer lo guardado (lo que otra parte acaba de escribir), sin perder el entreno a medias.
@@ -118,7 +122,10 @@ export async function montarForma({ raiz, api, salir }) {
         const r = await api.forma.salud.recoger();
         if (r?.recogidas) {
           const nuevos = normalizarForma(r.datos ?? (await api.forma.leer()));
+          const previo = estado.datos;
           estado.datos = { ...nuevos, activa: estado.datos.activa ?? nuevos.activa };
+          // Pesajes de días que ya tenían resumen (el Atajo no se ejecutó a tiempo).
+          revisarResumenes(previo, estado.datos);
           const partes = [r.pasos ? `${r.pasos} día${r.pasos > 1 ? 's' : ''} de pasos` : '', r.sueno ? 'el sueño' : '', r.pesajes ? `${r.pesajes} pesaje${r.pesajes > 1 ? 's' : ''}` : ''].filter(Boolean);
           if (partes.length) tostada(`Apple Salud: ${partes.length > 1 ? `${partes.slice(0, -1).join(', ')} y ${partes.at(-1)}` : partes[0]}.`);
           if (!raiz.hidden && !hojas.abierta()) pintar();
@@ -182,6 +189,28 @@ export async function montarForma({ raiz, api, salir }) {
     await ctx.guardar(r.datos, { pintar: false });
     return r.resumen;
   };
+  // Añadir, excluir o borrar un pesaje de una semana que ya tiene resumen lo
+  // regenera solo (y la siguiente, que se compara con ella). Se agrupan los
+  // cambios seguidos; el texto de la IA solo se vuelve a pedir si lo tenía.
+  const porRegenerar = new Set();
+  let temporizadorResumen = null;
+  function revisarResumenes(antes, despues) {
+    const semanas = semanasConPesajesCambiados(antes, despues);
+    if (!semanas.length) return;
+    semanas.forEach((l) => porRegenerar.add(l));
+    clearTimeout(temporizadorResumen);
+    temporizadorResumen = setTimeout(async () => {
+      const lista = [...porRegenerar].sort();
+      porRegenerar.clear();
+      for (const lunes of lista) {
+        const previo = estado.datos.resumenes.find((x) => x.id === lunes);
+        if (previo) await ctx.generarSemana(lunes, { ia: previo.origen === 'ia' });
+      }
+      if (!raiz.hidden && !hojas.abierta()) pintar();
+    }, 1500);
+  }
+  ctx.regenerandoResumenes = () => porRegenerar.size > 0;
+
   // Las semanas cerradas que aún no tienen resumen (al abrir Forma, al volver y
   // cada minuto). Solo la más reciente lleva texto de la IA.
   let generando = false;

@@ -5,7 +5,8 @@
 // redacta el texto a partir de estas métricas.
 // Cada semana cerrada se guarda como una foto (datos.resumenes, id = su lunes)
 // para que el historial no cambie si luego tocas registros antiguos, salvo que
-// pulses «Regenerar». Son funciones puras: se prueban en test/forma-semanas.test.js.
+// pulses «Regenerar» o cambien sus pesajes (añadir, excluir o borrar uno), que
+// la regeneran sola. Son funciones puras: se prueban en test/forma-semanas.test.js.
 import { sumarDias, lunesDe, diasEntre, esFecha } from './fechas.js';
 import { pesosPorDia, mediasSemanales, serieComposicion, mejorMarca, revisarHitos } from './progreso.js';
 import { objetivoDelDia, planActual } from './diario.js';
@@ -474,6 +475,39 @@ export function generarResumen(datos, lunes, { ahora = Date.now(), texto = null,
   };
   const resumenes = [...conHitos.resumenes.filter((x) => x.id !== lunes), resumen].sort((a, b) => (a.id < b.id ? -1 : 1));
   return { datos: { ...conHitos, resumenes }, resumen };
+}
+
+// Semanas con resumen guardado cuyos pesajes han cambiado entre «antes» y
+// «despues» (uno nuevo, excluido, vuelto a contar, corregido o borrado). También
+// la semana siguiente si tiene resumen: su cambio se mide contra esta.
+export function semanasConPesajesCambiados(antes, despues) {
+  if (antes?.pesos === despues?.pesos) return [];
+  const huella = (datos) => {
+    const mapa = new Map();
+    for (const p of datos?.pesos ?? []) {
+      const l = lunesDe(p.fecha);
+      mapa.set(l, [...(mapa.get(l) ?? []), `${p.id}|${p.fecha}|${p.hora ?? ''}|${p.kg}|${p.excluido ? 1 : 0}|${p.grasa ?? ''}|${p.magra ?? ''}`]);
+    }
+    return new Map([...mapa].map(([l, lista]) => [l, lista.sort().join(';')]));
+  };
+  const a = huella(antes);
+  const b = huella(despues);
+  const con = new Set((despues.resumenes ?? []).map((x) => x.id));
+  const salida = new Set();
+  for (const l of new Set([...a.keys(), ...b.keys()])) {
+    if (a.get(l) === b.get(l)) continue;
+    if (con.has(l)) salida.add(l);
+    if (con.has(sumarDias(l, 7))) salida.add(sumarDias(l, 7));
+  }
+  return [...salida].sort();
+}
+
+// Regenera esas semanas (con el texto de reglas; la app pide el de la IA aparte).
+export function regenerarPorPesajes(antes, despues, { ahora = Date.now() } = {}) {
+  let datos = despues;
+  const semanas = semanasConPesajesCambiados(antes, despues);
+  for (const lunes of semanas) datos = generarResumen(datos, lunes, { ahora }).datos;
+  return { datos, semanas };
 }
 
 // Lo que se le pasa a la IA: solo las métricas ya calculadas (nada de registros).

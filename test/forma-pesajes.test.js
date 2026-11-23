@@ -99,3 +99,45 @@ test('excluir: no deshace hitos que no dependían de esos pesajes', () => {
   assert.equal(r.hitos[0].cumplido, '2026-10-01');
   assert.equal(normalizarForma(borrarPeso(d, d.pesos[1].id, HOY)).hitos[0].cumplido, '2026-10-01');
 });
+
+test('resumen semanal: se regenera solo al añadir, excluir o borrar un pesaje de su semana', async () => {
+  const { semanasConPesajesCambiados, regenerarPorPesajes } = await import('../src/compartido/forma/semanas.js');
+  const { aplicarSalud } = await import('../src/compartido/forma/salud.js');
+  let d = base({ pesos: [...semana(L1, Array(7).fill(80)), ...semana(L2, [79.6, 79.5, null, 79.4, null, 79.3, null])] });
+  d = normalizarForma(generarResumen(d, L1, { ahora: 1 }).datos);
+  d = normalizarForma(generarResumen(d, L2, { ahora: 2 }).datos);
+  const foto = (x, l) => x.resumenes.find((r) => r.id === l);
+  assert.equal(foto(d, L2).datos.peso.n, 4);
+  // Nada cambia en los pesos: nada que regenerar (aunque cambien otras cosas).
+  assert.deepEqual(semanasConPesajesCambiados(d, { ...d, registros: [] }), []);
+  assert.deepEqual(semanasConPesajesCambiados(d, normalizarForma(d)), []);
+
+  // 1) Llega por Apple Salud el pesaje del miércoles de la semana 2 (el Atajo no se ejecutó ese día).
+  const antes = d;
+  const { datos: conSalud } = aplicarSalud(d, { recibido: Date.parse('2026-11-20T21:00:00Z'), pesajes: [{ momento: Date.parse(`${sumarDias(L2, 2)}T06:30:00Z`), kg: 79.45 }] }, { ahora: Date.parse('2026-11-20T21:00:00Z') });
+  assert.deepEqual(semanasConPesajesCambiados(antes, conSalud), [L2]);
+  let r = regenerarPorPesajes(antes, conSalud, { ahora: 3 });
+  d = normalizarForma(r.datos);
+  assert.deepEqual(r.semanas, [L2]);
+  assert.equal(foto(d, L2).datos.peso.n, 5);
+  assert.equal(foto(d, L2).generado, 3);
+  assert.equal(foto(d, L1).generado, 1); // la otra semana no se toca
+
+  // 2) Excluir uno de la semana 1 regenera la 1 y también la 2 (su cambio se mide contra la 1).
+  const excluido = normalizarForma(excluirPeso(d, d.pesos.find((p) => p.fecha === L1).id, true, '', HOY));
+  r = regenerarPorPesajes(d, excluido, { ahora: 4 });
+  assert.deepEqual(r.semanas, [L1, L2]);
+  d = normalizarForma(r.datos);
+  assert.equal(foto(d, L1).datos.peso.n, 6);
+  assert.deepEqual([foto(d, L1).generado, foto(d, L2).generado], [4, 4]);
+
+  // 3) Borrar uno de la semana 2: vuelve a 4 pesajes.
+  const borrado = normalizarForma(borrarPeso(d, d.pesos.find((p) => p.fecha === sumarDias(L2, 2)).id, HOY));
+  r = regenerarPorPesajes(d, borrado, { ahora: 5 });
+  assert.deepEqual(r.semanas, [L2]);
+  assert.equal(foto(normalizarForma(r.datos), L2).datos.peso.n, 4);
+
+  // Una semana sin resumen no se genera por esto (eso lo hace el domingo).
+  const nuevaSemana = normalizarForma({ ...d, pesos: [...d.pesos, { id: 'z', fecha: L3, kg: 79 }] });
+  assert.deepEqual(semanasConPesajesCambiados(d, nuevaSemana), []);
+});
