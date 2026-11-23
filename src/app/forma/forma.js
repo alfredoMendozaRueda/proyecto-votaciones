@@ -406,8 +406,23 @@ export async function montarForma({ raiz, api, salir }) {
   pintar();
   // Lo que haya mandado el Atajo de Apple Salud: al arrancar, al abrir Forma y al volver a la app.
   // Y los resúmenes semanales pendientes, después de recoger lo de Salud.
+  // Tokens y último envío del servidor, para el aviso de «el Atajo lleva más de
+  // 36 h sin ejecutarse» del Diario (como mucho cada 5 minutos).
+  let ultimoEstadoSalud = 0;
+  ctx.estadoSalud = null;
+  ctx.actualizarEstadoSalud = async ({ siempre = false } = {}) => {
+    if (!api.forma.salud?.estado || (!siempre && Date.now() - ultimoEstadoSalud < 300_000)) return;
+    ultimoEstadoSalud = Date.now();
+    try {
+      ctx.estadoSalud = await api.forma.salud.estado();
+      if (!raiz.hidden && !hojas.abierta() && estado.vista === 'diario') pintar();
+    } catch {
+      /* sin conexión: se usa lo último que se recogió */
+    }
+  };
   const ponerseAlDia = () =>
     Promise.resolve(ctx.recogerSalud())
+      .finally(() => ctx.actualizarEstadoSalud())
       .finally(() => ctx.generarResumenes())
       .finally(() => ctx.exportarSalud());
   if (!raiz.hidden) ponerseAlDia();

@@ -2,7 +2,7 @@
 // momentos, el agua, los suplementos, las sugerencias de comidas habituales y
 // «Qué puedo comer».
 import { pasosDe } from '../../compartido/forma/calculos.js';
-import { nombreFuente } from '../../compartido/forma/salud.js';
+import { nombreFuente, avisoAtajo } from '../../compartido/forma/salud.js';
 import { horasYMinutos } from '../../compartido/forma/semanas.js';
 import { resumenDia, comidasHabituales, avisosDelDia, quePuedoComer, nutrientesDe, totales, esDiaEntreno } from '../../compartido/forma/diario.js';
 import { apuntar, editarRegistro, borrarRegistros, sumarAgua, alternarSuplemento, marcarEntreno, descartarSugerencia, verAviso, copiarDia, guardarPlantilla, contarUsoIA } from '../../compartido/forma/acciones.js';
@@ -181,11 +181,29 @@ export function vistaDiario(ctx) {
       .join('');
   }
 
+  // El Atajo de Apple Salud lleva más de 36 h sin ejecutarse: se ve hoy, hasta
+  // que llega algo nuevo (o lo cierras, hasta el próximo envío).
+  function avisoDelAtajo(r) {
+    if (r.fecha !== ctx.hoy()) return '';
+    const e = ctx.estadoSalud;
+    if (e && e.vinculado === false) return '';
+    const a = avisoAtajo({ ultima: ctx.datos.integracion?.ultima, ultimoEnvio: e?.ultimoEnvio, tokens: e?.vinculado ? e.tokens : null });
+    if (!a || ctx.estado.local.atajoCerrado === a.desde) return '';
+    // En el iPhone se puede lanzar el Atajo desde aquí.
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    return `<section class="f-panel f-panel--aviso f-columna" data-aviso-atajo>
+      <div class="f-fila">${ic('salud', 18)}<p class="f-explica" style="flex:1;color:var(--f-texto)">${escapar(a.texto)}</p>
+      <button type="button" class="f-icono-boton" style="border:0;background:none" data-a="atajo-cerrar" data-desde="${a.desde}" aria-label="Cerrar">${ic('cerrar', 15)}</button></div>
+      ${ios ? '<a class="f-boton f-boton--chico" href="shortcuts://run-shortcut?name=Sincronizar%20Forma">Ejecutar «Sincronizar Forma»</a>' : ''}
+    </section>`;
+  }
+
   function html() {
     const r = resumenDia(ctx.datos, ctx.estado.fecha);
     if (!r.objetivo) return '';
     const hayAlgo = r.registros.length > 0;
     return `<div class="f-vista">
+      ${avisoDelAtajo(r)}
       ${tarjetaResumen(r)}
       ${instrumento(r)}
       <section class="f-panel f-macros">${MACROS.map((m) => barraMacro(m, r)).join('')}</section>
@@ -298,6 +316,10 @@ export function vistaDiario(ctx) {
   // ---------- Acciones ----------
 
   const acciones = {
+    'atajo-cerrar': (el) => {
+      ctx.estado.local.atajoCerrado = Number(el.dataset.desde);
+      el.closest('[data-aviso-atajo]')?.remove();
+    },
     'ver-resumen': () => ctx.irASemanas(),
     'tipo-dia': () => {
       const f = ctx.estado.fecha;

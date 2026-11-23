@@ -3565,3 +3565,8 @@ p.f-sem__aviso {
   display: inline-block;
   vertical-align: -1px;
 }
+
+/* Botones que son enlaces (abrir el Atajo del iPhone). */
+a.f-boton {
+  text-decoration: none;
+}

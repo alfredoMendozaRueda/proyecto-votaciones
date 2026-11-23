@@ -595,7 +595,12 @@ export function crearDemo() {
       const clienteDemo = {
         url: 'https://kitsune.ejemplo.workers.dev',
         urlSalud: () => 'https://kitsune.ejemplo.workers.dev/integraciones/salud',
-        saludTokens: async () => ({ tokens: servidorSalud.tokens.map((t) => ({ ...t, token: undefined })), llave: servidorSalud.publica, pendientes: servidorSalud.buzon.length }),
+        saludTokens: async () => ({
+          tokens: servidorSalud.tokens.map((t) => ({ ...t, token: undefined })),
+          llave: servidorSalud.publica,
+          pendientes: servidorSalud.buzon.length,
+          ultimo_envio: servidorSalud.buzon.reduce((m, e) => Math.max(m, e.recibido), 0) || null,
+        }),
         async crearTokenSalud(nombre, publica) {
           servidorSalud.publica = publica;
           const t = { id: `t${Date.now().toString(36)}`, nombre: nombre || 'Atajo iPhone', creado_en: Date.now(), ultimo_uso_en: null, revocado: false };

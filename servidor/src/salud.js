@@ -139,7 +139,8 @@ export async function rutaSaludDispositivo(n, m, ruta, { json, ErrorHttp, cuerpo
   if (m === 'GET' && ruta === '/salud/tokens') {
     const { results } = await n.db.prepare('SELECT * FROM token_integracion ORDER BY creado_en DESC').all();
     const pendientes = await n.db.prepare('SELECT COUNT(*) AS total, MAX(recibido) AS ultimo FROM buzon_salud').first();
-    return json({ tokens: results.map(tokenPublico), llave: (await n.ajustes()).saludPublica ?? null, pendientes: pendientes?.total ?? 0 });
+    // ultimo_envio: cuándo llegó lo último que la app aún no ha recogido (para el aviso de 36 h).
+    return json({ tokens: results.map(tokenPublico), llave: (await n.ajustes()).saludPublica ?? null, pendientes: pendientes?.total ?? 0, ultimo_envio: pendientes?.ultimo ?? null });
   }
   if (m === 'POST' && ruta === '/salud/tokens') {
     const d = await cuerpo(peticion);

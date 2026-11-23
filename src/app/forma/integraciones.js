@@ -37,6 +37,7 @@ export function crearIntegraciones(ctx) {
     s.cargando = true;
     try {
       s.estado = await ctx.api.forma.salud.estado();
+      ctx.estadoSalud = s.estado;
       s.error = null;
     } catch (e) {
       s.error = e.message;

@@ -141,3 +141,26 @@ test('resumen semanal: se regenera solo al añadir, excluir o borrar un pesaje d
   const nuevaSemana = normalizarForma({ ...d, pesos: [...d.pesos, { id: 'z', fecha: L3, kg: 79 }] });
   assert.deepEqual(semanasConPesajesCambiados(d, nuevaSemana), []);
 });
+
+test('aviso del Atajo: más de 36 h sin ejecutarse, con lo recogido o lo que espera en el servidor', async () => {
+  const { avisoAtajo } = await import('../src/compartido/forma/salud.js');
+  const H = 3_600_000;
+  const ahora = Date.parse('2026-11-23T10:00:00Z');
+  const token = { id: 't1', revocado: false, creado_en: ahora - 30 * 24 * H };
+  // 36 h justas: todavía no; 37 h: sí, con las horas en el texto.
+  assert.equal(avisoAtajo({ ultima: { recibido: ahora - 36 * H }, tokens: [token] }, ahora), null);
+  const a = avisoAtajo({ ultima: { recibido: ahora - 37 * H - 5 * 60_000 }, tokens: [token] }, ahora);
+  assert.equal(a.horas, 37);
+  assert.equal(a.texto, 'El atajo de Apple Salud no se ha ejecutado desde hace 37 h. Ábrelo o ejecútalo a mano.');
+  // Si llegó algo al servidor que la app aún no ha recogido, cuenta eso.
+  assert.equal(avisoAtajo({ ultima: { recibido: ahora - 50 * H }, ultimoEnvio: ahora - 2 * H, tokens: [token] }, ahora), null);
+  // Sin token activo (revocado o sin montar), no se avisa.
+  assert.equal(avisoAtajo({ ultima: { recibido: ahora - 99 * H }, tokens: [{ ...token, revocado: true }] }, ahora), null);
+  assert.equal(avisoAtajo({ tokens: [] }, ahora), null);
+  // Sin saber del servidor (sin conexión): con lo último recogido; si nunca llegó nada, nada.
+  assert.equal(avisoAtajo({ ultima: { recibido: ahora - 40 * H } }, ahora).horas, 40);
+  assert.equal(avisoAtajo({}, ahora), null);
+  // Token creado y el Atajo nunca ha mandado nada: cuenta desde que se creó.
+  assert.equal(avisoAtajo({ tokens: [{ ...token, creado_en: ahora - 48 * H }] }, ahora).horas, 48);
+  assert.equal(avisoAtajo({ tokens: [{ ...token, creado_en: ahora - 2 * H }] }, ahora), null);
+});

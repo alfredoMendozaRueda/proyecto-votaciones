@@ -1413,6 +1413,11 @@ test('salud: la lista «pesajes» de 7 días guarda cada pesaje una vez y al ree
   assert.equal(datos.pesos.filter((p) => p.fuente === 'apple_salud').length, 10);
   assert.equal(datos.pesos.filter((p) => p.fecha === dias[4]).length, 2);
   assert.equal(datos.integracion.ultima.pesajes.recibidos, 4);
+  // Con todo recogido, el servidor no tiene envíos pendientes (el aviso de 36 h usa lo recogido).
+  assert.equal((await (await pedir(env, '/salud/tokens', { token: dispositivo })).json()).ultimo_envio, null);
+  await enviar({ pasos_hoy: 10 });
+  const conPendiente = await (await pedir(env, '/salud/tokens', { token: dispositivo })).json();
+  assert.ok(conPendiente.ultimo_envio > Date.now() - 60_000);
   // Reenviar los 7 días con la app ya al día tampoco duplica nada en Forma.
   const { aplicarSalud } = await import('../src/compartido/forma/salud.js');
   const otra = aplicarSalud(datos, { recibido: Date.now(), pesajes: datos.pesos.filter((p) => p.fuente).map((p) => ({ ...p, momento: p.momento + 30_000 })) });

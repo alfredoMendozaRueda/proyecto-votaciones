@@ -412,6 +412,24 @@ export function anotarUltima(datos, resumen, { ahora = Date.now() } = {}) {
   return { ...datos, integracion: { ...datos.integracion, ultima } };
 }
 
+// ¿Lleva el Atajo de Apple Salud demasiado sin ejecutarse? (aviso en el Diario)
+// ultima: lo último que recogió la app (datos.integracion.ultima);
+// ultimoEnvio: lo último que llegó al servidor y aún no se ha recogido;
+// tokens: los del servidor (null si no se sabe, por ejemplo sin conexión).
+// Solo avisa si el Atajo está montado: hay un token activo o, sin saberlo, alguna
+// vez llegó algo. Sin ningún envío, cuenta desde que se creó el token.
+export const HORAS_AVISO_ATAJO = 36;
+export function avisoAtajo({ ultima = null, ultimoEnvio = null, tokens = null } = {}, ahora = Date.now()) {
+  const activos = Array.isArray(tokens) ? tokens.filter((t) => !t.revocado) : null;
+  if (activos && !activos.length) return null;
+  let ultimo = Math.max(Number(ultima?.recibido) || 0, Number(ultimoEnvio) || 0);
+  if (!ultimo && activos) ultimo = Math.max(...activos.map((t) => Number(t.creado_en) || 0));
+  if (!ultimo) return null;
+  const horas = Math.floor((ahora - ultimo) / 3_600_000);
+  if ((ahora - ultimo) / 3_600_000 <= HORAS_AVISO_ATAJO) return null;
+  return { horas, desde: ultimo, texto: `El atajo de Apple Salud no se ha ejecutado desde hace ${horas} h. Ábrelo o ejecútalo a mano.` };
+}
+
 // Pasos del día que llegaron de Salud (o null).
 export function pasosSincronizados(datos, fecha) {
   const d = datos.dias?.[fecha];
@@ -652,7 +670,7 @@ export function crearApiSalud({ cliente, vinculado, leer, guardar }) {
       const c = await cliente();
       const r = await c.saludTokens();
       const propia = (await leer()).integracion?.publica ?? null;
-      return { vinculado: true, url: c.urlSalud(), tokens: r.tokens ?? [], pendientes: r.pendientes ?? 0, llaveDistinta: Boolean(r.llave && propia && r.llave !== propia) };
+      return { vinculado: true, url: c.urlSalud(), tokens: r.tokens ?? [], pendientes: r.pendientes ?? 0, ultimoEnvio: r.ultimo_envio ?? null, llaveDistinta: Boolean(r.llave && propia && r.llave !== propia) };
     },
     async crearToken(nombre) {
       const c = await cliente();
