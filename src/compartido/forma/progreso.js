@@ -19,12 +19,20 @@ export function pesoDelDia(lista) {
   return ordenados.find((p) => p.hora && p.hora < '12:00') ?? ordenados[0];
 }
 
-// Pesajes agrupados por día: { fecha → [pesajes] }.
-export function pesajesPorFecha(datos) {
+// Los pesajes excluidos (otra báscula, un error…) no cuentan para nada: ni la
+// media de 7 días, ni el ritmo, ni los hitos, ni el resumen semanal. Solo se ven
+// en gris en la gráfica y en la lista de pesos.
+export const cuentaEnMedia = (p) => !p.excluido;
+
+// Pesajes agrupados por día: { fecha → [pesajes] }. Sin los excluidos, salvo con «todos».
+export function pesajesPorFecha(datos, { todos = false } = {}) {
   const mapa = new Map();
-  for (const p of datos.pesos) mapa.set(p.fecha, [...(mapa.get(p.fecha) ?? []), p]);
+  for (const p of datos.pesos) if (todos || cuentaEnMedia(p)) mapa.set(p.fecha, [...(mapa.get(p.fecha) ?? []), p]);
   return mapa;
 }
+
+// Los excluidos, por fecha y hora (para pintarlos en gris).
+export const pesajesExcluidos = (datos) => datos.pesos.filter((p) => !cuentaEnMedia(p)).sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : porHora(a, b)));
 
 // Un peso por día (el que cuenta, ver pesoDelDia), ordenado.
 export function pesosPorDia(datos) {
@@ -185,6 +193,26 @@ export function revisarHitos(datos, hoy = fechaISO()) {
     return hecho;
   });
   return { datos: nuevos.length ? { ...datos, hitos } : datos, nuevos };
+}
+
+// Tras excluir o borrar pesajes («antes» → «despues»): los hitos de peso vuelven
+// a mirarse con lo que cuenta. Uno que se cumplía con los pesajes de antes y ya
+// no se cumple deja de estar conseguido; si ahora se consigue otra semana, cambia
+// la fecha; y si ahora se cumple, se cumple. Los que no dependían de esos
+// pesajes (conseguidos a mano o con la regla antigua) no se tocan.
+export function recalcularHitosPeso(antes, despues, hoy = fechaISO()) {
+  const hitos = despues.hitos.map((h) => {
+    if (h.tipo !== 'peso' || !h.cumplido) return h;
+    const previo = estadoHito(antes, h, hoy);
+    if (!previo.cumple) return h;
+    const { cumple, semana } = estadoHito(despues, h, hoy);
+    if (!cumple) {
+      const { semana: _s, ...resto } = h;
+      return { ...resto, cumplido: null };
+    }
+    return semana && semana !== h.semana ? { ...h, semana, cumplido: sumarDias(semana, 6) } : h;
+  });
+  return revisarHitos({ ...despues, hitos }, hoy).datos;
 }
 
 // Hitos automáticos de peso cada ~2,5 % del peso inicial hasta el objetivo.

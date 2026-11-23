@@ -182,7 +182,7 @@ export function vistaPerfil(ctx) {
       // Sin la llave privada del buzón de Apple Salud: no sale de tus dispositivos.
       'forma.json': strToU8(JSON.stringify({ ...d, activa: undefined, integracion: { ultima: d.integracion?.ultima } }, null, 2)),
       'comidas.csv': strToU8(csv([['fecha', 'momento', 'alimento', 'gramos', 'kcal', 'proteina', 'hidratos', 'grasa', 'fibra', 'estimado'], ...d.registros.map((r) => [r.fecha, r.momento, r.nombre, r.gramos, r.kcal, r.proteina, r.hidratos, r.grasa, r.fibra, r.estimado ? 'sí' : ''])])),
-      'pesos.csv': strToU8(csv([['fecha', 'hora', 'kg', 'grasa_pct', 'masa_magra_kg', 'origen'], ...d.pesos.map((p) => [p.fecha, p.hora, p.kg, p.grasa, p.magra, p.fuente ?? 'manual'])])),
+      'pesos.csv': strToU8(csv([['fecha', 'hora', 'kg', 'grasa_pct', 'masa_magra_kg', 'origen', 'excluido', 'motivo_exclusion'], ...d.pesos.map((p) => [p.fecha, p.hora, p.kg, p.grasa, p.magra, p.fuente ?? 'manual', p.excluido ? 'sí' : 'no', p.motivoExclusion])])),
       'pasos.csv': strToU8(csv([['fecha', 'pasos', 'origen'], ...Object.entries(d.dias).filter(([, v]) => Number.isFinite(v.pasos)).sort(([a], [b]) => (a < b ? -1 : 1)).map(([f, v]) => [f, v.pasos, v.pasosFuente])])),
       'medidas.csv': strToU8(csv([['fecha', 'medida', 'cm'], ...d.medidas.map((m) => [m.fecha, m.tipo, m.cm])])),
       'entrenos.csv': strToU8(csv([['fecha', 'sesion', 'ejercicio', 'kg', 'reps', 'rir', 'calentamiento'], ...d.sesiones.flatMap((s) => s.series.map((x) => [s.fecha, s.nombre, nombreEj(x.ejercicioId), x.kg, x.reps, x.rir, x.calentamiento ? 'sí' : '']))])),

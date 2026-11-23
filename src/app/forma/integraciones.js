@@ -1,7 +1,8 @@
 // Perfil → Integraciones: Apple Salud por un Atajo del iPhone. Tokens personales
 // (se ven una sola vez), última sincronización con lo que llegó, recoger ahora
 // y la guía para montar el Atajo sin depender de nadie.
-import { nombreFuente } from '../../compartido/forma/salud.js';
+import { nombreFuente, FUENTE_SALUD } from '../../compartido/forma/salud.js';
+import { excluirAnteriores } from '../../compartido/forma/acciones.js';
 import { fechaCorta } from '../../compartido/forma/fechas.js';
 import { horasYMinutos } from '../../compartido/forma/semanas.js';
 import { ic, escapar, num } from './ui.js';
@@ -173,7 +174,25 @@ export function crearIntegraciones(ctx) {
       <p class="f-explica">Tus <b style="color:var(--f-texto)">pasos</b> y los <b style="color:var(--f-texto)">pesajes de la báscula</b> (peso, % de grasa y masa magra) llegan solos con un Atajo del iPhone. Viajan cifrados: el servidor los guarda sin poder leerlos hasta que Forma los recoge.</p>
       ${cuerpo}
       <button type="button" class="f-boton f-boton--fantasma" data-a="int-guia">${ic('info', 16)}Cómo configurar el Atajo</button>
+      ${bloqueExcluir()}
     </section>`;
+  }
+
+  // Báscula nueva: lo de antes no es comparable y se saca de la media de una vez.
+  function bloqueExcluir() {
+    const pesos = ctx.datos.pesos;
+    if (!pesos.length) return '';
+    const fuera = pesos.filter((p) => p.excluido).length;
+    // Por defecto, el día del primer pesaje que llegó de Apple Salud.
+    const primero = pesos.filter((p) => p.fuente === FUENTE_SALUD).reduce((a, p) => (!a || p.fecha < a ? p.fecha : a), null) ?? ctx.hoy();
+    return `<form class="f-columna f-int-excluir" data-form="int-excluir-antes">
+      <span class="f-etiqueta">Báscula antigua</span>
+      <p class="f-tenue">Excluye de la media todos los pesajes anteriores a una fecha (motivo «báscula antigua»). Siguen guardados y se ven en gris en la gráfica; cada uno se puede volver a contar desde Progreso → Ver y corregir pesos apuntados.${fuera ? ` Ahora hay ${fuera} fuera de la media.` : ''}</p>
+      <div class="f-fila">
+        <input class="f-entrada" type="date" name="fecha" value="${escapar(primero)}" max="${escapar(ctx.hoy())}" aria-label="Fecha" required style="flex:1">
+        <button type="submit" class="f-boton">${ic('menos', 16)}Excluir anteriores</button>
+      </div>
+    </form>`;
   }
 
   function hojaGenerar() {
@@ -343,6 +362,15 @@ Content-Type: application/json</code>
   };
 
   const formularios = {
+    'int-excluir-antes': (form) => {
+      const fecha = form.elements.fecha.value;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return;
+      const previo = ctx.datos;
+      const r = excluirAnteriores(previo, fecha, 'báscula antigua');
+      if (!r.cambiados) return ctx.tostada(`No hay pesajes que contar antes del ${fechaCorta(fecha)}.`);
+      ctx.guardar(r.datos);
+      ctx.tostada(`${r.cambiados} pesaje${r.cambiados > 1 ? 's' : ''} anterior${r.cambiados > 1 ? 'es' : ''} al ${fechaCorta(fecha)} fuera de la media.`, { accion: () => ctx.guardar(previo), ms: 7000 });
+    },
     'int-generar': async (form) => {
       const boton = form.querySelector('[type="submit"]');
       boton.disabled = true;

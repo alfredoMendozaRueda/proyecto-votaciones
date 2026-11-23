@@ -1,7 +1,7 @@
 // Progreso: peso con la media de 7 días, ritmo real frente al previsto, fecha
 // estimada, resumen semanal, TDEE adaptativo, avisos, hitos, medidas y fotos.
-import { serieMedia, pesoDeReferencia, ritmoReal, avisosProgreso, estadoHito, hitosSugeridos, tdeeAdaptativo, serieMedida, pesosPorDia, serieComposicion, pesoDelDia, pesajesPorFecha } from '../../compartido/forma/progreso.js';
-import { apuntarPeso, apuntarMedida, anadirHito, borrarHito, verAviso, borrarPeso } from '../../compartido/forma/acciones.js';
+import { serieMedia, pesoDeReferencia, ritmoReal, avisosProgreso, estadoHito, hitosSugeridos, tdeeAdaptativo, serieMedida, pesosPorDia, serieComposicion, pesoDelDia, pesajesPorFecha, pesajesExcluidos } from '../../compartido/forma/progreso.js';
+import { apuntarPeso, apuntarMedida, anadirHito, borrarHito, verAviso, borrarPeso, excluirPeso } from '../../compartido/forma/acciones.js';
 import { calcularPlan, fechaEstimada, deKg, aKg, unidadPeso, deCm, aCm, unidadLongitud, KCAL_POR_KG_GRASA } from '../../compartido/forma/calculos.js';
 import { perfilActual } from '../../compartido/forma/diario.js';
 import { ejercicio } from '../../compartido/forma/datos.js';
@@ -33,6 +33,8 @@ export function vistaProgreso(ctx) {
     // Fecha estimada con el ritmo real (si va en la buena dirección).
     const real = ritmo && ref ? fechaEstimada(d.perfil, (-ritmo * KCAL_POR_KG_GRASA) / 7, hoy, ref) : null;
     const ultimos = serie.filter((p) => p.fecha >= sumarDias(hoy, -60));
+    // Los excluidos de la media se ven, en gris, pero no cuentan.
+    const excluidos = pesajesExcluidos(d).filter((p) => p.fecha >= sumarDias(hoy, -60));
     return `<section class="f-panel f-visor">
       <div class="f-etiqueta"><span>Peso · media 7 días</span><button type="button" class="f-enlace" data-a="nuevo-peso">${ic('mas', 14)}</button></div>
       <div class="f-grande" style="margin-top:8px">
@@ -48,11 +50,12 @@ export function vistaProgreso(ctx) {
         series: [
           { puntos: ultimos.map((p) => ({ x: p.fecha, y: deKg(p.kg, u()) })), sinLinea: true, puntosVisibles: true },
           { puntos: ultimos.map((p) => ({ x: p.fecha, y: deKg(p.media, u()) })), area: true },
+          ...(excluidos.length ? [{ puntos: excluidos.map((p) => ({ x: p.fecha, y: deKg(p.kg, u()) })), sinLinea: true, puntosVisibles: true, clase: 'excluido' }] : []),
         ],
         objetivo: d.perfil.pesoObjetivo ? deKg(d.perfil.pesoObjetivo, u()) : null,
         vacio: 'Apunta tu peso unos días para ver la tendencia',
       })}
-      <div class="f-leyenda"><span><i></i>Media de 7 días</span><span><i style="--c:var(--f-t2);height:4px;width:4px;border-radius:50%"></i>Cada pesada</span>${d.perfil.pesoObjetivo ? `<span><i style="--c:var(--f-hielo)"></i>Objetivo ${P(d.perfil.pesoObjetivo)}</span>` : ''}</div>
+      <div class="f-leyenda"><span><i></i>Media de 7 días</span><span><i style="--c:var(--f-t2);height:4px;width:4px;border-radius:50%"></i>Cada pesada</span>${excluidos.length ? '<span data-leyenda-excluidos><i style="--c:var(--f-t3);height:4px;width:4px;border-radius:50%"></i>Fuera de la media</span>' : ''}${d.perfil.pesoObjetivo ? `<span><i style="--c:var(--f-hielo)"></i>Objetivo ${P(d.perfil.pesoObjetivo)}</span>` : ''}</div>
       <div class="f-kpis">
         <div class="f-kpi"><span>Ritmo real</span><b>${ritmo === null ? '—' : `${signo(deKg(ritmo, u()), 2)}`}</b><small class="f-tenue">${unidadPeso(u())}/sem</small></div>
         <div class="f-kpi"><span>Previsto</span><b>${signo(deKg(previsto, u()), 2)}</b><small class="f-tenue">${unidadPeso(u())}/sem</small></div>
@@ -320,33 +323,77 @@ export function vistaProgreso(ctx) {
       ctx.repintar();
     },
     'pesos-lista': () => {
-      // Por días; en cada día, primero el que cuenta y luego los secundarios.
-      const porDia = [...pesajesPorFecha(ctx.datos)].sort(([a], [b]) => (a < b ? 1 : -1)).slice(0, 60);
-      const fila = (p, principal) => {
-        const extra = [Number.isFinite(p.grasa) ? `${num(p.grasa, 1)} % grasa` : '', Number.isFinite(p.magra) ? `${P(p.magra)} ${unidadPeso(u())} magra` : ''].filter(Boolean).join(' · ');
-        return `<div class="f-item${principal ? '' : ' f-item--secundario'}">
-          <span class="f-item__texto"><span class="f-item__nombre">${P(p.kg, 2)} ${unidadPeso(u())}${p.fuente ? `<span class="f-origen" title="Llegó de ${escapar(nombreFuente(p.fuente))}">${ic('salud', 11)}${escapar(nombreFuente(p.fuente))}</span>` : ''}</span>
-          <span class="f-item__detalle">${principal ? escapar(nombreDia(p.fecha, ctx.hoy())) : 'Secundario'}${p.hora ? ` · ${p.hora}` : ''}${extra ? ` · ${extra}` : ''}</span></span>
-          <button type="button" class="f-icono-boton" style="border:0;background:none" data-a="peso-borrar" data-id="${p.id}" aria-label="Borrar">${ic('basura', 15)}</button></div>`;
-      };
+      listaPesos = ctx.hojas.abrir(htmlListaPesos(), { clase: 'f-hoja--alta', titulo: 'Pesos', alCerrar: () => (listaPesos = null) });
+    },
+    // Tocar un pesaje: sus datos, sacarlo (o volver a meterlo) de la media y borrarlo.
+    'peso-ver': (el) => {
+      const p = ctx.datos.pesos.find((x) => x.id === el.dataset.id);
+      if (!p) return;
+      const extra = [Number.isFinite(p.grasa) ? `${num(p.grasa, 1)} % grasa` : '', Number.isFinite(p.magra) ? `${P(p.magra)} ${unidadPeso(u())} magra` : ''].filter(Boolean).join(' · ');
       ctx.hojas.abrir(
-        `<div class="f-hoja__titulo"><h2>Pesos apuntados</h2></div>
-         <p class="f-tenue">Si un día hay varios pesajes de la báscula, cuenta el primero antes de las 12:00 (o el primero del día). El que apuntas a mano manda siempre.</p>
-         <div class="f-lista">${porDia
-           .map(([, lista]) => {
-             const principal = pesoDelDia(lista);
-             return [principal, ...lista.filter((p) => p !== principal).sort((a, b) => (a.momento ?? 0) - (b.momento ?? 0))].map((p) => fila(p, p === principal)).join('');
-           })
-           .join('')}</div>`,
-        { clase: 'f-hoja--alta', titulo: 'Pesos' },
+        `<div class="f-hoja__titulo"><h2>${P(p.kg, 2)} ${unidadPeso(u())}</h2></div>
+         <p class="f-explica">${escapar(fechaLarga(p.fecha))}${p.hora ? ` · ${p.hora}` : ''}${p.fuente ? ` · ${escapar(nombreFuente(p.fuente))}` : ' · apuntado a mano'}${extra ? `<br>${extra}` : ''}</p>
+         ${
+           p.excluido
+             ? `<p class="f-tenue" data-peso-estado>Fuera de la media${p.motivoExclusion ? ` (${escapar(p.motivoExclusion)})` : ''}: no cuenta para la media de 7 días, el ritmo, los hitos ni el resumen semanal.</p>
+                <button type="button" class="f-boton f-boton--azul" data-a="peso-excluir" data-id="${p.id}" data-valor="no">${ic('check', 16)}Volver a contar en la media</button>`
+             : `<form class="f-columna" data-form="peso-excluir" data-id="${p.id}">
+                  <label class="f-campo"><span>Motivo (opcional)</span><input class="f-entrada" name="motivo" maxlength="60" placeholder="Otra báscula, con ropa…" autocomplete="off"></label>
+                  <button type="submit" class="f-boton">${ic('menos', 16)}Excluir de la media</button>
+                </form>`
+         }
+         <button type="button" class="f-boton f-boton--fantasma" data-a="peso-borrar" data-id="${p.id}">${ic('basura', 16)}Borrar este pesaje</button>`,
+        { titulo: 'Pesaje' },
       );
     },
+    'peso-excluir': (el) => cambiarExclusion(el.dataset.id, el.dataset.valor !== 'no'),
     'peso-borrar': (el) => {
       ctx.guardar(borrarPeso(ctx.datos, el.dataset.id), { pintar: false });
-      el.closest('.f-item')?.remove();
+      if (ctx.hojas.abierta() !== listaPesos) ctx.hojas.cerrar();
+      refrescarLista();
       ctx.repintar();
     },
   };
+
+  let listaPesos = null;
+  // Por días; en cada día, primero el que cuenta, luego los secundarios y al final los excluidos.
+  function htmlListaPesos() {
+    const porDia = [...pesajesPorFecha(ctx.datos, { todos: true })].sort(([a], [b]) => (a < b ? 1 : -1)).slice(0, 60);
+    const fila = (p, principal) => {
+      const extra = [Number.isFinite(p.grasa) ? `${num(p.grasa, 1)} % grasa` : '', Number.isFinite(p.magra) ? `${P(p.magra)} ${unidadPeso(u())} magra` : ''].filter(Boolean).join(' · ');
+      const estado = p.excluido ? `Fuera de la media${p.motivoExclusion ? ` · ${escapar(p.motivoExclusion)}` : ''}` : principal ? escapar(nombreDia(p.fecha, ctx.hoy())) : 'Secundario';
+      return `<button type="button" class="f-item f-item--boton${principal ? '' : ' f-item--secundario'}${p.excluido ? ' f-item--excluido' : ''}" data-a="peso-ver" data-id="${p.id}">
+          <span class="f-item__texto"><span class="f-item__nombre">${P(p.kg, 2)} ${unidadPeso(u())}${p.fuente ? `<span class="f-origen" title="Llegó de ${escapar(nombreFuente(p.fuente))}">${ic('salud', 11)}${escapar(nombreFuente(p.fuente))}</span>` : ''}</span>
+          <span class="f-item__detalle">${p.excluido ? `${escapar(fechaCorta(p.fecha))} · ` : ''}${estado}${p.hora ? ` · ${p.hora}` : ''}${extra ? ` · ${extra}` : ''}</span></span>
+          ${ic('adelante', 14)}</button>`;
+    };
+    return `<div class="f-hoja__titulo"><h2>Pesos apuntados</h2></div>
+       <p class="f-tenue">Si un día hay varios pesajes de la báscula, cuenta el primero antes de las 12:00 (o el primero del día). El que apuntas a mano manda siempre. Toca uno para excluirlo de la media o borrarlo.</p>
+       <div class="f-lista">${porDia
+         .map(([, lista]) => {
+           const validos = lista.filter((p) => !p.excluido);
+           const principal = pesoDelDia(validos);
+           const orden = (a, b) => (a.momento ?? 0) - (b.momento ?? 0);
+           return [...(principal ? [principal] : []), ...validos.filter((p) => p !== principal).sort(orden), ...lista.filter((p) => p.excluido).sort(orden)].map((p) => fila(p, p === principal)).join('');
+         })
+         .join('')}</div>`;
+  }
+  function refrescarLista() {
+    if (listaPesos?.cuerpo?.isConnected) listaPesos.cuerpo.innerHTML = htmlListaPesos();
+  }
+  function cambiarExclusion(pid, excluir, motivo = '') {
+    const previo = ctx.datos.pesos.find((x) => x.id === pid)?.motivoExclusion ?? '';
+    const antes = new Set(ctx.datos.hitos.filter((h) => h.cumplido).map((h) => h.id));
+    const datos = excluirPeso(ctx.datos, pid, excluir, motivo);
+    const perdidos = ctx.datos.hitos.filter((h) => antes.has(h.id) && !datos.hitos.find((x) => x.id === h.id)?.cumplido).length;
+    ctx.guardar(datos, { pintar: false });
+    if (ctx.hojas.abierta() !== listaPesos) ctx.hojas.cerrar();
+    refrescarLista();
+    ctx.repintar();
+    ctx.tostada(excluir ? `Fuera de la media.${perdidos ? ` ${perdidos} hito${perdidos > 1 ? 's' : ''} vuelve${perdidos > 1 ? 'n' : ''} a estar pendiente${perdidos > 1 ? 's' : ''}.` : ''}` : 'Vuelve a contar en la media.', {
+      accion: () => cambiarExclusion(pid, !excluir, excluir ? '' : previo),
+    });
+  }
 
   const cambios = {
     'hito-tipo': (el) => {
@@ -372,6 +419,7 @@ export function vistaProgreso(ctx) {
   };
 
   const formularios = {
+    'peso-excluir': (form) => cambiarExclusion(form.dataset.id, true, form.elements.motivo.value),
     peso: (form) => {
       const v = Number(String(form.elements.kg.value).replace(',', '.'));
       if (!(v > 0)) return;

@@ -444,6 +444,10 @@ export function normalizarForma(d = {}) {
           fuente: p.fuente ? fuenteDe(p.fuente) : undefined,
           grasa: num(p.grasa, 3, 70),
           magra: num(p.magra, 5, 300),
+          // Fuera de la media (otra báscula, un error…): solo se ve en gris en la gráfica.
+          // Los pesajes de antes no lo traen: cuentan, como siempre.
+          excluido: p.excluido === true ? true : undefined,
+          motivoExclusion: p.excluido === true ? texto(p.motivoExclusion, 60) || undefined : undefined,
         }),
       ),
     medidas: lista(d.medidas)

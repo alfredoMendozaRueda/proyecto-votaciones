@@ -2,7 +2,7 @@
 // unos nuevos (no toca los de entrada). La pantalla guarda el resultado.
 import { id } from './datos.js';
 import { sumarDias, fechaISO } from './fechas.js';
-import { revisarHitos } from './progreso.js';
+import { revisarHitos, recalcularHitosPeso } from './progreso.js';
 
 const conDia = (datos, fecha, cambio) => {
   const dia = datos.dias[fecha] ?? { agua: 0, suplementos: [] };
@@ -77,7 +77,29 @@ export function apuntarPeso(datos, fecha, kg) {
   const pesos = [...datos.pesos.filter((p) => p.fecha !== fecha || p.fuente), { id: id('w'), fecha, kg: Math.round(kg * 100) / 100 }];
   return revisarHitos({ ...datos, pesos }, fechaISO()).datos;
 }
-export const borrarPeso = (datos, pid) => ({ ...datos, pesos: datos.pesos.filter((p) => p.id !== pid) });
+export const borrarPeso = (datos, pid, hoy = fechaISO()) => recalcularHitosPeso(datos, { ...datos, pesos: datos.pesos.filter((p) => p.id !== pid) }, hoy);
+
+// Sacar (o volver a meter) un pesaje de la media: sigue guardado y se ve en gris.
+export function excluirPeso(datos, pid, excluido = true, motivo = '', hoy = fechaISO()) {
+  const pesos = datos.pesos.map((p) => {
+    if (p.id !== pid) return p;
+    const { excluido: _e, motivoExclusion: _m, ...resto } = p;
+    return excluido ? { ...resto, excluido: true, ...(String(motivo).trim() ? { motivoExclusion: String(motivo).trim().slice(0, 60) } : {}) } : resto;
+  });
+  return recalcularHitosPeso(datos, { ...datos, pesos }, hoy);
+}
+
+// «Excluir todos los pesajes anteriores a una fecha» (la báscula antigua):
+// los que ya estaban excluidos conservan su motivo. Devuelve cuántos cambian.
+export function excluirAnteriores(datos, fecha, motivo = 'báscula antigua', hoy = fechaISO()) {
+  let cambiados = 0;
+  const pesos = datos.pesos.map((p) => {
+    if (p.fecha >= fecha || p.excluido) return p;
+    cambiados++;
+    return { ...p, excluido: true, motivoExclusion: motivo };
+  });
+  return { datos: cambiados ? recalcularHitosPeso(datos, { ...datos, pesos }, hoy) : datos, cambiados };
+}
 
 export function apuntarMedida(datos, fecha, tipo, cm) {
   const medidas = [...datos.medidas.filter((m) => !(m.fecha === fecha && m.tipo === tipo)), { id: id('v'), fecha, tipo, cm: Math.round(cm * 10) / 10 }];

@@ -1803,6 +1803,14 @@ select.f-entrada {
   opacity: 0.7;
 }
 
+.f-grafica__punto.excluido {
+  fill: none;
+  stroke: var(--f-t3);
+  stroke-width: 1.2;
+  opacity: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+
 .f-grafica__punto.azul {
   fill: var(--f-azul-2);
   opacity: 1;
@@ -3016,6 +3024,26 @@ html[data-transformacion='kitsune']::view-transition-new(root) {
 
 .f-item--secundario .f-item__nombre {
   font-size: 13.5px;
+}
+
+.f-item--boton {
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.f-item--boton > svg {
+  flex: none;
+  color: var(--f-t3);
+}
+
+.f-item--excluido {
+  opacity: 0.55;
+}
+
+.f-item--excluido .f-item__nombre {
+  text-decoration: line-through;
+  text-decoration-color: var(--f-t3);
 }
 
 .f-codigo {
