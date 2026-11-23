@@ -1423,3 +1423,72 @@ test('salud: la lista «pesajes» de 7 días guarda cada pesaje una vez y al ree
   const otra = aplicarSalud(datos, { recibido: Date.now(), pesajes: datos.pesos.filter((p) => p.fuente).map((p) => ({ ...p, momento: p.momento + 30_000 })) });
   assert.deepEqual([otra.resultado.pesajesGuardados, otra.resultado.pesajesDuplicados], [0, 10]);
 });
+
+test('de principio a fin: 7 días de pesajes, resumen regenerado, reenvío sin duplicados, báscula antigua fuera y aviso de 36 h', async () => {
+  const { avisoAtajo } = await import('../src/compartido/forma/salud.js');
+  const { generarResumen, regenerarPorPesajes } = await import('../src/compartido/forma/semanas.js');
+  const { excluirAnteriores } = await import('../src/compartido/forma/acciones.js');
+  const { pesoDeReferencia, mediasSemanales } = await import('../src/compartido/forma/progreso.js');
+  const { sumarDias, lunesDe } = await import('../src/compartido/forma/fechas.js');
+  const { env, dispositivo, llave, enviar } = await preparadoSalud();
+  const Z = 'Europe/Madrid';
+  const hoy = partesSalud(Date.now(), Z).fecha;
+  const lunesPasado = sumarDias(lunesDe(hoy), -7);
+  // Antes: dos semanas de la báscula antigua (marca ~1,5 kg de más), con su resumen ya generado.
+  // Hasta hace 8 días, la báscula antigua; desde hace 7, la nueva por Apple Salud.
+  const vieja = Array.from({ length: 14 }, (_, i) => ({ id: `v${i}`, fecha: sumarDias(hoy, i - 21), kg: 81.6 - i * 0.05 }));
+  let datos = normalizarForma({
+    perfil: { sexo: 'hombre', nacimiento: '1995-01-01', altura: 178, peso: 81, objetivo: 'perder', ritmo: 'moderado', pesoObjetivo: 70, zona: Z },
+    integracion: llave,
+    pesos: vieja,
+  });
+  // Resumen de todas las semanas ya cerradas desde entonces.
+  for (let l = lunesDe(sumarDias(hoy, -21)); l <= lunesPasado; l = sumarDias(l, 7)) datos = normalizarForma(generarResumen(datos, l, { ahora: 1 }).datos);
+  const nAntes = datos.resumenes.find((r) => r.id === lunesPasado).datos.peso.n;
+
+  // El Atajo no se ejecutó en días: esta noche manda los 7 últimos días de la báscula nueva.
+  const dias = [7, 6, 5, 4, 3, 2, 1].map((n) => partesSalud(Date.now() - n * 86_400_000, Z).fecha);
+  const pesajes = dias.map((f, i) => ({ fecha_hora: `${f}T07:4${i}:00+01:00`, peso_kg: String(79.9 - i * 0.1).replace('.', ','), grasa_pct: '22,9 %' }));
+  const r1 = await (await enviar({ pasos_hoy: 2000, pasos_ayer: 9500, pesajes })).json();
+  assert.deepEqual([r1.pesajes_guardados, r1.pesajes_duplicados], [7, 0]);
+  const cliente = new ClienteServidor({ url: 'https://kitsune.ejemplo.workers.dev', token: dispositivo, fetch: (url, init) => servidor.fetch(new Request(url, init), env) });
+  const leer = async () => datos;
+  const guardar = async (d) => (datos = normalizarForma(d));
+  const antes = datos;
+  const rec = await recogerBuzonSalud({ cliente, leer, guardar });
+  assert.equal(rec.pesajes, 7);
+  // Las semanas cerradas con resumen y pesajes nuevos se regeneran con ellos.
+  const reg = regenerarPorPesajes(antes, datos, { ahora: 2 });
+  assert.ok(reg.semanas.includes(lunesPasado), JSON.stringify(reg.semanas));
+  datos = normalizarForma(reg.datos);
+  const semanaPasada = datos.resumenes.find((r) => r.id === lunesPasado);
+  assert.equal(semanaPasada.generado, 2);
+  assert.ok(semanaPasada.datos.peso.n > nAntes);
+
+  // Mañana vuelve a mandar los mismos 7 días: nada se duplica, ni en el servidor ni en la app.
+  const r2 = await (await enviar({ pasos_hoy: 2100, pesajes })).json();
+  assert.deepEqual([r2.pesajes_guardados, r2.pesajes_duplicados], [0, 7]);
+  await recogerBuzonSalud({ cliente, leer, guardar });
+  assert.equal(datos.pesos.filter((p) => p.fuente === 'apple_salud').length, 7);
+
+  // La báscula antigua fuera de la media: baja la media de 7 días que la tocaba y la semanal.
+  const hace5 = sumarDias(hoy, -5);
+  const refAntes = pesoDeReferencia(datos, hace5);
+  const primero = datos.pesos.filter((p) => p.fuente === 'apple_salud').map((p) => p.fecha).sort()[0];
+  const ex = excluirAnteriores(datos, primero, 'báscula antigua', hoy);
+  assert.equal(ex.cambiados, vieja.filter((p) => p.fecha < primero).length);
+  const sinVieja = normalizarForma(ex.datos);
+  assert.ok(pesoDeReferencia(sinVieja, hace5) < refAntes - 0.5, `${pesoDeReferencia(sinVieja, hace5)} / ${refAntes}`);
+  const semanas = mediasSemanales(sinVieja);
+  assert.ok(semanas.every((s) => s.media < 80), JSON.stringify(semanas));
+  // Y el resumen de esas semanas se regenera con solo la báscula nueva.
+  const reg2 = regenerarPorPesajes(datos, sinVieja, { ahora: 3 });
+  assert.ok(reg2.semanas.length >= 1);
+  assert.ok(normalizarForma(reg2.datos).resumenes.filter((r) => reg2.semanas.includes(r.id)).every((r) => r.generado === 3));
+
+  // Aviso: recién sincronizado, nada; 37 h sin ejecutarse, aviso con las horas.
+  const tokens = (await (await pedir(env, '/salud/tokens', { token: dispositivo })).json()).tokens;
+  const ultima = datos.integracion.ultima;
+  assert.equal(avisoAtajo({ ultima, tokens }, Date.now()), null);
+  assert.equal(avisoAtajo({ ultima, tokens }, ultima.recibido + 37 * 3_600_000).horas, 37);
+});
