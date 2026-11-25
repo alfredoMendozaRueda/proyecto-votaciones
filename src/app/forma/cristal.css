@@ -1,0 +1,336 @@
+/* =====================================================================
+   FORMA · «Cristal líquido». La misma idea que src/app/cristal.css, en azul
+   hielo: el fondo es una noche con luz eléctrica; los paneles son láminas
+   translúcidas con el filo iluminado; la barra, la cabecera, las hojas y
+   los avisos son cristal grueso que flota; la elegida es una lente que se
+   desliza (../fluidez.js) y todo se mueve con muelles.
+   Va después de forma.css y todo cuelga de .forma.
+   ===================================================================== */
+
+.forma {
+  --f-capa: rgba(130, 172, 255, 0.05);
+  --f-capa-2: rgba(130, 172, 255, 0.085);
+  --f-capa-3: rgba(130, 172, 255, 0.13);
+  --f-linea: rgba(150, 190, 255, 0.09);
+  --f-linea-2: rgba(150, 190, 255, 0.17);
+  --f-r: 22px;
+  --f-r-s: 14px;
+  --f-ease: var(--muelle-suave, cubic-bezier(0.22, 1, 0.36, 1));
+
+  --fv-tinte: rgba(12, 22, 42, 0.52);
+  --fv-tinte-hoja: rgba(9, 17, 33, 0.78);
+  --fv-brillo: linear-gradient(180deg, rgba(235, 244, 255, 0.1), rgba(235, 244, 255, 0.025) 40%, rgba(235, 244, 255, 0) 62%);
+  --fv-filo: inset 0.6px 0.8px 0 rgba(225, 238, 255, 0.3), inset -0.6px -0.6px 0 rgba(225, 238, 255, 0.07), inset 0 0 0 0.5px rgba(200, 222, 255, 0.07);
+  --fv-interior: inset 0 -14px 22px -20px rgba(150, 200, 255, 0.24), inset 0 16px 26px -24px rgba(255, 255, 255, 0.22);
+  --fv-sombra: 0 18px 42px -16px rgba(0, 3, 12, 0.8), 0 3px 10px -3px rgba(0, 3, 12, 0.45);
+  --fv-especular: radial-gradient(150px circle at var(--luz-x, 50%) var(--luz-y, 0%), rgba(235, 244, 255, calc(var(--luz) * 0.2)), transparent 70%);
+
+  background:
+    radial-gradient(100% 48% at 50% -8%, rgba(47, 125, 255, 0.26), transparent 70%),
+    radial-gradient(70% 40% at 108% 40%, rgba(127, 214, 255, 0.09), transparent 65%),
+    radial-gradient(110% 55% at -10% 105%, rgba(47, 90, 255, 0.18), transparent 62%),
+    linear-gradient(rgba(120, 165, 255, 0.028) 1px, transparent 1px) 0 0 / 100% 28px,
+    var(--f-fondo);
+}
+
+/* ---------- Cristal: lo que flota ---------- */
+
+.forma :is(.f-barra, .f-fecha, .f-salir, .f-tostada) {
+  border: 0;
+  background: var(--fv-especular), var(--fv-brillo), var(--fv-tinte);
+  -webkit-backdrop-filter: blur(26px) saturate(185%);
+  backdrop-filter: blur(26px) saturate(185%);
+  box-shadow: var(--fv-filo), var(--fv-interior), var(--fv-sombra);
+  transition:
+    transform var(--muelle-rebote-ms, 0.5s) var(--muelle-rebote, ease),
+    --luz 0.45s ease;
+}
+
+/* La barra: una cápsula que flota (como en iOS), con el «+» dentro. */
+.forma .f-barra {
+  /* Más densa: lo que pasa por debajo se adivina, pero no se lee. */
+  --fv-tinte: rgba(10, 19, 38, 0.7);
+  left: 12px;
+  right: 12px;
+  bottom: calc(10px + var(--f-abajo));
+  align-items: center;
+  height: var(--f-barra);
+  padding: 0 6px;
+  border-radius: 999px;
+  -webkit-backdrop-filter: blur(30px) saturate(190%);
+  backdrop-filter: blur(30px) saturate(190%);
+  box-shadow: var(--fv-filo), var(--fv-interior), 0 22px 48px -14px rgba(0, 3, 12, 0.9), 0 4px 14px -4px rgba(0, 3, 12, 0.5);
+}
+
+.forma .f-cuerpo {
+  padding-bottom: calc(var(--f-barra) + var(--f-abajo) + 44px);
+}
+
+.forma .f-barra__boton {
+  z-index: 1;
+  height: calc(var(--f-barra) - 12px);
+  border-radius: 999px;
+  transition:
+    color 0.25s ease,
+    transform var(--muelle-rebote-ms, 0.5s) var(--muelle-rebote, ease);
+}
+
+.forma .f-barra__boton::before {
+  display: none;
+}
+
+/* La elegida: una lente de cristal azul (y viaja con un muelle). */
+.forma .f-barra__boton[aria-current='page'] {
+  background: linear-gradient(180deg, rgba(120, 170, 255, 0.26), rgba(80, 140, 255, 0.1));
+  box-shadow: inset 0.6px 0.8px 0 rgba(225, 238, 255, 0.36), inset -0.5px -0.5px 0 rgba(225, 238, 255, 0.1), 0 6px 18px -8px rgba(47, 125, 255, 0.7);
+}
+
+.forma .f-barra__boton:active {
+  transform: scale(0.92);
+  transition-duration: 0.2s, 100ms;
+  transition-timing-function: ease, ease-out;
+}
+
+/* El «+»: una gota de cristal azul dentro de la barra. */
+.forma .f-barra__mas {
+  width: 52px;
+  height: 52px;
+  margin-top: 0;
+  border-radius: 50%;
+  background:
+    var(--fv-especular),
+    linear-gradient(180deg, rgba(170, 205, 255, 0.5), rgba(90, 150, 255, 0) 55%),
+    rgba(40, 112, 255, 0.9);
+  box-shadow:
+    inset 0.6px 0.8px 0 rgba(230, 240, 255, 0.7),
+    inset -0.6px -0.6px 0 rgba(200, 225, 255, 0.2),
+    inset 0 -12px 18px -12px rgba(190, 220, 255, 0.5),
+    0 12px 28px -8px rgba(47, 125, 255, 0.85);
+  transition:
+    transform var(--muelle-rebote-ms, 0.5s) var(--muelle-rebote, ease),
+    --luz 0.45s ease;
+}
+
+.forma .f-barra__mas:active {
+  transform: scale(0.88);
+  transition-duration: 100ms, 0.2s;
+  transition-timing-function: ease-out;
+}
+
+.forma .f-salir:hover {
+  background: var(--fv-especular), var(--fv-brillo), rgba(30, 60, 120, 0.55);
+}
+
+/* ---------- Paneles: láminas translúcidas ---------- */
+
+.forma .f-panel {
+  border-color: var(--f-linea);
+  background: var(--fv-especular), var(--fv-brillo), var(--f-capa);
+  box-shadow: var(--fv-filo), inset 0 16px 26px -26px rgba(255, 255, 255, 0.2), 0 12px 30px -20px rgba(0, 3, 12, 0.85);
+  transition: --luz 0.45s ease;
+}
+
+.forma .f-panel--azul {
+  background:
+    var(--fv-especular),
+    linear-gradient(160deg, rgba(90, 150, 255, 0.22), rgba(47, 125, 255, 0.06) 55%),
+    var(--f-capa);
+  border-color: rgba(90, 150, 255, 0.3);
+}
+
+.forma .f-panel--aviso {
+  background:
+    var(--fv-especular),
+    linear-gradient(90deg, rgba(255, 181, 71, 0.12), transparent 70%),
+    var(--f-capa);
+}
+
+.forma .f-panel--plano {
+  box-shadow: none;
+}
+
+/* ---------- Controles ---------- */
+
+.forma .f-boton {
+  border-color: transparent;
+  border-radius: 999px;
+  background: var(--fv-brillo), var(--f-capa-2);
+  box-shadow: var(--fv-filo);
+  transition:
+    transform var(--muelle-rebote-ms, 0.5s) var(--muelle-rebote, ease),
+    background-color 0.2s,
+    color 0.2s;
+}
+
+.forma .f-boton--azul {
+  background: linear-gradient(180deg, rgba(170, 205, 255, 0.38), rgba(90, 150, 255, 0) 55%), #2a6ef5;
+  box-shadow:
+    inset 0.6px 0.8px 0 rgba(230, 240, 255, 0.6),
+    inset -0.5px -0.5px 0 rgba(200, 225, 255, 0.16),
+    0 10px 26px -10px rgba(47, 125, 255, 0.85);
+}
+
+.forma .f-boton--fantasma {
+  background: transparent;
+  box-shadow: none;
+}
+
+.forma :is(.f-boton, .f-chip, .f-icono-boton, .f-segmento button, .f-fecha button):active:not(:disabled) {
+  transform: scale(0.94);
+  transition-duration: 100ms;
+  transition-timing-function: ease-out;
+}
+
+.forma :is(.f-chip, .f-icono-boton, .f-segmento button) {
+  transition:
+    transform var(--muelle-rebote-ms, 0.5s) var(--muelle-rebote, ease),
+    background-color 0.2s,
+    color 0.2s,
+    border-color 0.2s;
+}
+
+.forma .f-entrada {
+  border-color: var(--f-linea);
+  border-radius: 14px;
+  background: rgba(2, 6, 14, 0.55);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 0 0 0.5px rgba(200, 222, 255, 0.06);
+}
+
+.forma .f-icono-boton {
+  border-color: transparent;
+  border-radius: 50%;
+  background: var(--fv-brillo), var(--f-capa-2);
+  box-shadow: var(--fv-filo);
+}
+
+/* Pestañas: pista de cristal fino y la elegida, una lente azul. */
+.forma .f-segmento {
+  border-color: transparent;
+  border-radius: 999px;
+  background: var(--fv-brillo), rgba(130, 172, 255, 0.06);
+  box-shadow: inset 0 0.6px 0 rgba(225, 238, 255, 0.12), inset 0 0 0 0.5px rgba(200, 222, 255, 0.06);
+}
+
+.forma .f-segmento button {
+  border-radius: 999px;
+}
+
+.forma .f-segmento button[aria-pressed='true'] {
+  background: linear-gradient(180deg, rgba(170, 205, 255, 0.4), rgba(90, 150, 255, 0) 60%), #2a6ef5;
+  box-shadow: inset 0.6px 0.8px 0 rgba(230, 240, 255, 0.6), 0 6px 16px -8px rgba(47, 125, 255, 0.9);
+}
+
+.forma .f-chip {
+  border-color: transparent;
+  background: var(--f-capa-2);
+  box-shadow: var(--fv-filo);
+}
+
+/* ---------- Hojas: cristal grueso que sube con un muelle ---------- */
+
+.forma .f-hoja__fondo {
+  background: rgba(1, 3, 8, 0.45);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.forma .f-hoja__panel {
+  border: 0;
+  border-radius: 32px 32px 0 0;
+  background: var(--fv-brillo), var(--fv-tinte-hoja);
+  -webkit-backdrop-filter: blur(34px) saturate(190%);
+  backdrop-filter: blur(34px) saturate(190%);
+  box-shadow: var(--fv-filo), var(--fv-interior), 0 -24px 60px -20px rgba(0, 3, 12, 0.85);
+  animation: cristal-sube var(--muelle-hoja-ms, 0.5s) var(--muelle-hoja, ease) backwards;
+}
+
+/* Se va por donde vino (desde donde la soltó el dedo). */
+.forma .f-hoja--sale .f-hoja__panel {
+  animation: f-baja 0.3s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+/* Lo de detrás se aparta mientras hay una hoja abierta. */
+.forma .f-cuerpo,
+.forma .f-cab {
+  transition:
+    transform var(--muelle-hoja-ms, 0.5s) var(--muelle-hoja, ease),
+    opacity 0.3s ease;
+  transform-origin: 50% 0;
+}
+
+.forma:has(.f-hoja:not(.f-hoja--sale)) :is(.f-cuerpo, .f-cab) {
+  transform: scale(0.96) translateY(4px);
+  opacity: 0.6;
+}
+
+/* El aviso de abajo: una píldora de cristal que llega con rebote. */
+.forma .f-tostada {
+  bottom: calc(var(--f-barra) + var(--f-abajo) + 22px);
+  border-radius: 20px;
+  /* Centrada con «translate», así la animación puede usar «transform». */
+  transform: none;
+  translate: -50% 0;
+  animation: cristal-llega var(--muelle-rebote-ms, 0.5s) var(--muelle-rebote, ease) both;
+}
+
+/* ---------- Accesibilidad ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .forma .f-hoja__panel,
+  .forma .f-tostada {
+    animation: cristal-funde 0.2s ease both;
+  }
+
+  .forma:has(.f-hoja:not(.f-hoja--sale)) :is(.f-cuerpo, .f-cab) {
+    transform: none;
+  }
+
+  .forma :is(.f-boton, .f-chip, .f-icono-boton, .f-segmento button, .f-fecha button, .f-barra__boton, .f-barra__mas):active {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .forma {
+    --f-capa: #08101e;
+    --f-capa-2: #0c1628;
+    --f-capa-3: #122039;
+    --fv-tinte: rgba(9, 17, 33, 0.97);
+    --fv-tinte-hoja: rgba(8, 15, 29, 0.99);
+  }
+
+  .forma :is(.f-barra, .f-fecha, .f-salir, .f-tostada, .f-hoja__panel) {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .forma {
+    --f-capa: #0a1322;
+    --f-capa-2: #0f1b30;
+    --f-linea: rgba(170, 200, 255, 0.45);
+    --f-t2: #c3d1ea;
+    --f-t3: #94a7c8;
+    --fv-tinte: rgba(9, 17, 33, 0.98);
+    --fv-filo: inset 0 0 0 1px rgba(200, 222, 255, 0.5);
+  }
+}
+
+/* ---------- Borde de desplazamiento (scroll edge) ---------- */
+/* El contenido se funde con el fondo donde pasa bajo la barra flotante. */
+.forma::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 15;
+  height: calc(var(--f-barra) + var(--f-abajo) + 44px);
+  background: linear-gradient(to bottom, rgba(3, 6, 12, 0), rgba(3, 6, 12, 0.72) 55%, rgba(3, 6, 12, 0.9));
+  pointer-events: none;
+}
+
+.forma.sin-barra::after {
+  display: none;
+}

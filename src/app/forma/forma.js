@@ -3,9 +3,11 @@
 // diseño, su barra y sus pantallas: Diario, Entreno, Añadir, Progreso y Perfil.
 import '@fontsource-variable/archivo/wdth.css';
 import './forma.css';
+import './cristal.css';
 import { fechaISO, sumarDias, nombreDia } from '../../compartido/forma/fechas.js';
 import { normalizarForma } from '../../compartido/forma/datos.js';
 import { ic, escapar, crearHojas, crearTostada } from './ui.js';
+import { escalonar } from '../fluidez.js';
 import { vistaDiario } from './vista-diario.js';
 import { vistaEntreno } from './vista-entreno.js';
 import { vistaProgreso } from './vista-progreso.js';
@@ -301,7 +303,11 @@ export async function montarForma({ raiz, api, salir }) {
     estado.vista = vista;
     hojas.cerrarTodas();
     pintar();
-    if (cambia) cuerpo.scrollTop = 0;
+    if (cambia) {
+      cuerpo.scrollTop = 0;
+      // La vista nueva llega con sus paneles escalonados.
+      escalonar(cuerpo);
+    }
   }
 
   // Repintar sin perder el sitio (al marcar una serie, sumar agua…).

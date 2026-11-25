@@ -267,7 +267,7 @@ export function crearCorreo({ contenedor, api, abrirAjustes, alNoLeidos, alLeer 
     lista.innerHTML = estado.mensajes
       .map((m) => {
         const grupo = grupoDe(m.fecha);
-        const cabecera = grupo !== grupoAnterior ? `<li class="lista-correos__dia" role="presentation">${grupo}</li>` : '';
+        const cabecera = grupo !== grupoAnterior ? `<li class="lista-correos__dia">${grupo}</li>` : '';
         grupoAnterior = grupo;
         return `${cabecera}
         <li class="fila${m.noLeido ? ' no-leida' : ''}" data-id="${m.id}">

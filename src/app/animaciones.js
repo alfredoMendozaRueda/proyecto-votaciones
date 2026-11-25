@@ -4,6 +4,8 @@
 // avión de papel del botón de enviar y los elementos que se pliegan al
 // borrarlos. Todo respeta «reducir movimiento».
 
+import { muelle, escalonar } from './fluidez.js';
+
 const reducido = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const CURVA = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 
@@ -89,14 +91,11 @@ export function entrarVista(vista, direccion) {
   vista.classList.add('entrando');
   clearTimeout(vista._finEntrada);
   vista._finEntrada = setTimeout(() => vista.classList.remove('entrando'), 1400);
-  if (reducido() || !direccion) return;
-  vista.animate(
-    [
-      { opacity: 0, transform: `translateX(${direccion * 22}px)` },
-      { opacity: 1, transform: 'none' },
-    ],
-    { duration: 340, easing: CURVA },
-  );
+  if (reducido()) return;
+  // Con un muelle (sin rebote), y sus tarjetas llegan escalonadas.
+  if (direccion) vista.animate([{ opacity: 0, transform: `translateX(${direccion * 22}px)` }, { opacity: 1, transform: 'none' }], muelle('suave'));
+  // Después de pintarse (la vista se rellena justo a continuación).
+  escalonar(vista);
 }
 
 // Pasar a una pantalla más honda (leer un correo) o volver de ella.

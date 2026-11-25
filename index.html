@@ -19,6 +19,7 @@
     <link rel="apple-touch-icon" href="./iconos/apple-touch-icon.png" />
     <link rel="stylesheet" href="/src/app/app.css" />
     <link rel="stylesheet" href="/src/app/diseno.css" />
+    <link rel="stylesheet" href="/src/app/cristal.css" />
   </head>
   <body>
     <div class="escena" id="escena" data-tamano="mediano" data-posicion="izquierda">
@@ -41,7 +42,7 @@
           <button type="button" role="tab" id="pestana-chat" data-vista="chat" aria-selected="false" aria-controls="vista-chat" title="Chat"><span class="apartado__icono" data-icono="chat"></span><span class="apartado__nombre">Chat</span></button>
           <button type="button" role="tab" id="pestana-correo" data-vista="correo" aria-selected="false" aria-controls="vista-correo" title="Correo"><span class="apartado__icono" data-icono="sobre"></span><span class="apartado__nombre">Correo</span><span class="insignia" id="insignia-correo" hidden></span></button>
           <button type="button" role="tab" id="pestana-agenda" data-vista="agenda" aria-selected="false" aria-controls="vista-agenda" title="Agenda"><span class="apartado__icono" data-icono="calendario"></span><span class="apartado__nombre">Agenda</span><span class="insignia" id="insignia-agenda" hidden></span></button>
-          <button type="button" id="pestana-mas" aria-haspopup="dialog" aria-expanded="false" aria-controls="hoja-mas" title="Más apartados"><span class="apartado__icono" data-icono="mas"></span><span class="apartado__nombre">Más</span><span class="insignia" id="insignia-empleo" hidden></span></button>
+          <button type="button" role="tab" aria-selected="false" id="pestana-mas" aria-haspopup="dialog" aria-expanded="false" aria-controls="hoja-mas" title="Más apartados"><span class="apartado__icono" data-icono="mas"></span><span class="apartado__nombre">Más</span><span class="insignia" id="insignia-empleo" hidden></span></button>
         </nav>
         <!-- Hablar con Kitsune: siempre a mano, al lado de la barra. -->
         <button type="button" class="boton-voz" id="boton-voz" aria-label="Hablar con Kitsune" title="Hablar con Kitsune"><span class="apartado__icono" data-icono="ondas"></span></button>

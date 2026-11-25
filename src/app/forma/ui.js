@@ -1,6 +1,7 @@
 // Piezas comunes de la interfaz de Forma: iconos propios (trazo recto, otro
 // lenguaje que el de Kitsune), formato de números, hojas que suben desde
 // abajo, avisos con «Deshacer» y gráficas en SVG.
+import { arrastrarParaCerrar } from '../fluidez.js';
 
 // La unidad de un alimento o de lo apuntado: gramos salvo las bebidas (ml).
 export const unidadDe = (x) => (x?.unidad === 'ml' ? 'ml' : 'g');
@@ -76,7 +77,7 @@ export function crearHojas(contenedor) {
     if (i >= 0) pila.splice(i, 1);
     hoja.el.classList.add('f-hoja--sale');
     hoja.alCerrar?.();
-    setTimeout(() => hoja.el.remove(), 260);
+    setTimeout(() => hoja.el.remove(), 300);
     // El foco vuelve a la hoja de debajo (o a Forma): así Escape sigue cerrando la siguiente.
     const debajo = pila.at(-1)?.el.querySelector('.f-hoja__panel') ?? contenedor.closest('.forma');
     debajo?.focus({ preventScroll: true });
@@ -91,29 +92,18 @@ export function crearHojas(contenedor) {
     el.addEventListener('click', (e) => {
       if (e.target.closest('[data-cerrar-hoja]')) cerrar(hoja);
     });
-    // Arrastrar hacia abajo desde el asa o la parte de arriba para cerrar.
+    // Arrastrar hacia abajo desde el asa o la parte de arriba para cerrar: sigue
+    // al dedo y, al soltar, se cierra o vuelve según el impulso (../fluidez.js).
     const panel = el.querySelector('.f-hoja__panel');
-    let y0 = null;
-    let dy = 0;
-    panel.addEventListener('pointerdown', (e) => {
-      if (e.clientY - panel.getBoundingClientRect().top > 44 || e.target.closest('input, textarea, select, button')) return;
-      y0 = e.clientY;
-      dy = 0;
-      panel.setPointerCapture(e.pointerId);
+    arrastrarParaCerrar(panel, {
+      capturar: true,
+      puedeEmpezar: (e) => e.clientY - panel.getBoundingClientRect().top <= 44 && !e.target.closest('input, textarea, select, button'),
+      cerrar: ({ desde }) => {
+        // Baja desde donde la soltó el dedo (f-baja parte del transform actual).
+        panel.style.transform = `translateY(${desde}px)`;
+        cerrar(hoja);
+      },
     });
-    panel.addEventListener('pointermove', (e) => {
-      if (y0 === null) return;
-      dy = Math.max(0, e.clientY - y0);
-      panel.style.transform = `translateY(${dy}px)`;
-    });
-    const soltar = () => {
-      if (y0 === null) return;
-      y0 = null;
-      panel.style.transform = '';
-      if (dy > 80) cerrar(hoja);
-    };
-    panel.addEventListener('pointerup', soltar);
-    panel.addEventListener('pointercancel', soltar);
     return hoja;
   }
   return { abrir, cerrar, abierta: () => pila.at(-1) ?? null, cerrarTodas: () => [...pila].forEach((h) => cerrar(h)) };

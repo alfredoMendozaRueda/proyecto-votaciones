@@ -1,0 +1,448 @@
+/* ==========================================================================
+   Kitsune · «Cristal líquido» (nov. 2026)
+   Una capa de material sobre el diseño «Bloques» (diseno.css): la interfaz
+   flota en cristal sobre un fondo de ascuas. Sigue las pautas de Apple:
+   - el cristal es para lo que flota (barra, cabecera, hojas, avisos): con
+     desenfoque, saturación, un filo de luz arriba a la izquierda y una
+     sombra teñida; lo que hay debajo se adivina, nunca se lee encima;
+   - las tarjetas son translúcidas (sin desenfoque cada una: rinde mejor en
+     el iPhone) con el mismo filo de luz;
+   - la selección es una «lente» clara que se desliza (fluidez.js);
+   - el movimiento usa muelles: críticos por defecto y con un poco de rebote
+     solo donde hubo impulso (pulsar, deslizar).
+   Respeta «reducir movimiento», «reducir transparencia» y «más contraste».
+   Va después de diseno.css: «:root:not(.x)» iguala su especificidad.
+   ========================================================================== */
+
+/* El brillo que sigue al dedo: se anima porque está registrado. */
+@property --luz {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+:root {
+  /* Muelles de Apple (amortiguamiento ζ · respuesta T), como curvas CSS. */
+  /* ζ 1 · 0,35 s: lo normal, sin rebote. */
+  --muelle-suave: linear(0, 0.0229, 0.079, 0.1535, 0.2365, 0.3213, 0.4036, 0.4808, 0.5516, 0.6153, 0.6717, 0.7213, 0.7644, 0.8016, 0.8334, 0.8606, 0.8836, 0.9031, 0.9195, 0.9332, 0.9447, 0.9543, 0.9623, 0.969, 0.9745, 0.979, 0.9828, 0.9859, 0.9884, 0.9905, 0.9923, 0.9937, 0.9948, 0.9958, 0.9966, 0.9972, 0.9977, 0.9982, 0.9985, 0.9988, 1);
+  --muelle-suave-ms: 515ms;
+  /* ζ 0,78 · 0,42 s: lo que tiene impulso (soltar al pulsar, la lente). */
+  --muelle-rebote: linear(0, 0.0193, 0.0693, 0.1395, 0.2219, 0.31, 0.3991, 0.4856, 0.567, 0.6417, 0.709, 0.7683, 0.8197, 0.8635, 0.9002, 0.9304, 0.9548, 0.9741, 0.989, 1.0002, 1.0083, 1.0138, 1.0173, 1.0192, 1.0199, 1.0197, 1.0188, 1.0174, 1.0158, 1.0141, 1.0123, 1.0106, 1.0089, 1.0074, 1.006, 1.0048, 1.0038, 1.0029, 1.0021, 1.0015, 1);
+  --muelle-rebote-ms: 555ms;
+  /* ζ 0,86 · 0,38 s: hojas (cajón). */
+  --muelle-hoja: linear(0, 0.0212, 0.0747, 0.1482, 0.2326, 0.3211, 0.4088, 0.4926, 0.5702, 0.6406, 0.7032, 0.758, 0.8052, 0.8454, 0.8791, 0.907, 0.9299, 0.9484, 0.9631, 0.9747, 0.9836, 0.9904, 0.9955, 0.9991, 1.0016, 1.0033, 1.0043, 1.0049, 1.005, 1.0049, 1.0047, 1.0043, 1.0039, 1.0035, 1.003, 1.0026, 1.0022, 1.0018, 1.0015, 1.0012, 1);
+  --muelle-hoja-ms: 530ms;
+  /* ζ 1 · 0,22 s: respuestas cortas. */
+  --muelle-rapido: linear(0, 0.023, 0.0791, 0.1537, 0.2368, 0.3217, 0.404, 0.4813, 0.5521, 0.6157, 0.6722, 0.7218, 0.7648, 0.8019, 0.8338, 0.8609, 0.8839, 0.9034, 0.9197, 0.9335, 0.9449, 0.9545, 0.9625, 0.9691, 0.9746, 0.9791, 0.9829, 0.986, 0.9885, 0.9906, 0.9923, 0.9937, 0.9949, 0.9958, 0.9966, 0.9972, 0.9977, 0.9982, 0.9985, 0.9988, 1);
+  --muelle-rapido-ms: 324ms;
+
+  /* El material. */
+  --vidrio-blur: 26px;
+  --vidrio-sat: 185%;
+  --vidrio-tinte: rgba(36, 25, 23, 0.5);
+  --vidrio-tinte-hoja: rgba(30, 21, 19, 0.74);
+  --vidrio-brillo: linear-gradient(180deg, rgba(255, 250, 246, 0.1), rgba(255, 250, 246, 0.025) 40%, rgba(255, 250, 246, 0) 62%);
+  /* El filo: luz arriba a la izquierda, un hilo más tenue abajo a la derecha. */
+  --vidrio-filo: inset 0.6px 0.8px 0 rgba(255, 246, 238, 0.3), inset -0.6px -0.6px 0 rgba(255, 246, 238, 0.07), inset 0 0 0 0.5px rgba(255, 246, 238, 0.07);
+  /* La luz que atraviesa el cristal y se queda en el borde de abajo. */
+  --vidrio-interior: inset 0 -14px 22px -20px rgba(255, 228, 214, 0.22), inset 0 16px 26px -24px rgba(255, 255, 255, 0.24);
+  --vidrio-sombra: 0 18px 42px -16px rgba(5, 1, 1, 0.75), 0 3px 10px -3px rgba(5, 1, 1, 0.4);
+  /* Brillo que sigue al dedo (fluidez.js pone --luz-x/--luz-y y sube --luz). */
+  --vidrio-especular: radial-gradient(150px circle at var(--luz-x, 50%) var(--luz-y, 0%), rgba(255, 248, 242, calc(var(--luz) * 0.2)), transparent 70%);
+
+  /* Las superficies dejan de ser opacas: se ve el fondo de ascuas a través. */
+  --b1: rgba(255, 236, 226, 0.052);
+  --b2: rgba(255, 236, 226, 0.085);
+  --b3: rgba(255, 236, 226, 0.13);
+  --lente: linear-gradient(180deg, #fffaf6, #efe3da);
+}
+
+/* ---------- El fondo: ascuas quietas (nada de bucles lentos que mareen) ---------- */
+
+:root:not(.x):not(.y) .escena[class] > .dialogo[class] {
+  background:
+    radial-gradient(110% 55% at 0% -5%, rgba(217, 58, 43, 0.26), transparent 58%),
+    radial-gradient(80% 45% at 105% 32%, rgba(201, 163, 94, 0.08), transparent 62%),
+    radial-gradient(120% 60% at 40% 112%, rgba(150, 32, 22, 0.3), transparent 62%),
+    var(--fondo);
+}
+
+:root:not(.x) :is(.dialogo__cuerpo, .vista) {
+  background: transparent;
+}
+
+/* ---------- Cristal: lo que flota ---------- */
+
+:root:not(.x) :is(.apartados, .dialogo__cabecera .icono-boton, .compositor, .chat__bajar, .zonas__lista, .aviso-flotante, .semana-tira__cabecera .icono-boton) {
+  border: 0;
+  background: var(--vidrio-especular), var(--vidrio-brillo), var(--vidrio-tinte);
+  -webkit-backdrop-filter: blur(var(--vidrio-blur)) saturate(var(--vidrio-sat));
+  backdrop-filter: blur(var(--vidrio-blur)) saturate(var(--vidrio-sat));
+  box-shadow: var(--vidrio-filo), var(--vidrio-interior), var(--vidrio-sombra);
+  transition: --luz 0.45s ease;
+}
+
+/* La barra: una cápsula de cristal más gruesa (más desenfoque, más sombra). */
+/* Más densa: lo que pasa por debajo se adivina, pero no se lee. */
+:root:not(.x) .apartados {
+  --vidrio-blur: 32px;
+  --vidrio-tinte: rgba(36, 25, 23, 0.68);
+  box-shadow: var(--vidrio-filo), var(--vidrio-interior), 0 22px 48px -14px rgba(5, 1, 1, 0.8), 0 4px 14px -4px rgba(5, 1, 1, 0.45);
+}
+
+/* La elegida es una lente clara que se desliza (fluidez.js). */
+:root:not(.x) .apartados button {
+  z-index: 1;
+  border-radius: 999px;
+  transition:
+    color 0.25s ease,
+    transform var(--muelle-rebote-ms) var(--muelle-rebote);
+}
+
+:root:not(.x) .apartados button[aria-selected='true'],
+:root:not(.x) .apartados #pestana-mas[aria-expanded='true'] {
+  background: linear-gradient(180deg, rgba(255, 246, 238, 0.17), rgba(255, 246, 238, 0.07));
+  box-shadow: inset 0.6px 0.8px 0 rgba(255, 246, 238, 0.34), inset -0.5px -0.5px 0 rgba(255, 246, 238, 0.1), 0 6px 16px -8px rgba(0, 0, 0, 0.6);
+  color: #fff;
+}
+
+:root:not(.x) .apartados button:active {
+  background-color: rgba(255, 246, 238, 0.06);
+}
+
+:root:not(.x) .apartados .insignia {
+  border-color: rgba(48, 34, 31, 0.95);
+}
+
+/* El botón de voz: cristal bermellón, con su propia luz. */
+:root:not(.x) .boton-voz {
+  background:
+    var(--vidrio-especular),
+    linear-gradient(180deg, rgba(255, 168, 150, 0.42), rgba(255, 120, 100, 0) 55%),
+    rgba(217, 58, 43, 0.82);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  box-shadow:
+    inset 0.6px 0.8px 0 rgba(255, 226, 216, 0.62),
+    inset -0.6px -0.6px 0 rgba(255, 200, 190, 0.18),
+    inset 0 -12px 18px -12px rgba(255, 205, 190, 0.45),
+    0 16px 36px -10px rgba(217, 58, 43, 0.7),
+    0 3px 10px rgba(5, 1, 1, 0.4);
+  transition:
+    transform var(--muelle-rebote-ms) var(--muelle-rebote),
+    --luz 0.45s ease;
+}
+
+:root:not(.x) .boton-voz:hover {
+  background:
+    var(--vidrio-especular),
+    linear-gradient(180deg, rgba(255, 178, 160, 0.46), rgba(255, 120, 100, 0) 55%),
+    rgba(232, 68, 52, 0.86);
+}
+
+/* La cabecera: los botones redondos son gotas de cristal, de 44 px (lo mínimo para el dedo). */
+:root:not(.x) .dialogo__cabecera .icono-boton {
+  width: 44px;
+  height: 44px;
+  color: var(--crema);
+}
+
+/* ---------- Tarjetas translúcidas ---------- */
+
+:root:not(.x):not(.y):not(.z) :is(.bloque, .grupo, .tarjeta-aviso, .gastos__cifra, .biblia__lectura, .biblia__plan, .biblia__versiculo, .biblia__crear, .biblia__plantilla, .empleo-portada, .empleo-perfil, .empleo-alerta, .empleo-correo, .empleo-star, .oferta, .calendario, .claves, .avanzado, .estado-cuenta, .cv-estilo, .plantilla, .sincro__espera, .gastos__previa, .registro-ia__fila, .gasto, .ajustes-temas, .ajustes-resultados, .asistente__carta, .gastos__dato, .hoja-mas__item, .linea__aviso) {
+  background-image: var(--vidrio-especular), var(--vidrio-brillo);
+  box-shadow: var(--vidrio-filo), inset 0 16px 26px -26px rgba(255, 255, 255, 0.2), 0 10px 26px -18px rgba(5, 1, 1, 0.7);
+  transition:
+    transform var(--muelle-rebote-ms) var(--muelle-rebote),
+    background-color 0.2s ease,
+    --luz 0.45s ease;
+}
+
+/* Lo siguiente (el héroe de Hoy): cristal bermellón. */
+:root:not(.x):not(.y):not(.z) .bloque--heroe {
+  background:
+    var(--vidrio-especular),
+    linear-gradient(165deg, rgba(255, 170, 150, 0.36), rgba(255, 120, 100, 0) 46%),
+    radial-gradient(120% 90% at 100% 100%, rgba(120, 14, 6, 0.45), transparent 60%),
+    rgba(217, 58, 43, 0.86);
+  box-shadow:
+    inset 0.6px 0.8px 0 rgba(255, 226, 216, 0.55),
+    inset -0.6px -0.6px 0 rgba(255, 200, 190, 0.16),
+    inset 0 -18px 30px -22px rgba(255, 210, 196, 0.5),
+    0 22px 46px -20px rgba(217, 58, 43, 0.75);
+}
+
+:root:not(.x) button.bloque--heroe:hover {
+  background-color: rgba(229, 66, 50, 0.9);
+}
+
+/* ---------- Controles ---------- */
+
+/* Pistas de pestañas: cristal fino. La elegida, una lente crema. */
+:root:not(.x) :is(.segmentado, .subapartados) {
+  background: var(--vidrio-brillo), rgba(255, 236, 226, 0.06);
+  box-shadow: inset 0 0.6px 0 rgba(255, 246, 238, 0.12), inset 0 0 0 0.5px rgba(255, 246, 238, 0.06);
+}
+
+:root:not(.x) :is(.segmentado button[aria-pressed='true'], .segmentado button[aria-selected='true'], .subapartados button[aria-selected='true'], .filtros button[aria-pressed='true'], .biblia__casilla[aria-pressed='true']) {
+  background: var(--lente);
+  color: var(--fondo);
+  box-shadow: inset 0 1px 0 #fff, inset 0 -1px 0 rgba(120, 80, 60, 0.18), 0 6px 16px -8px rgba(0, 0, 0, 0.7);
+}
+
+:root:not(.x) :is(.filtros button, .chip) {
+  box-shadow: var(--vidrio-filo);
+}
+
+:root:not(.x) .boton {
+  background-image: var(--vidrio-brillo);
+  box-shadow: var(--vidrio-filo);
+  transition:
+    transform var(--muelle-rebote-ms) var(--muelle-rebote),
+    background-color 0.2s ease;
+}
+
+:root:not(.x) .boton--primario {
+  background: linear-gradient(180deg, rgba(255, 170, 150, 0.34), rgba(255, 120, 100, 0) 55%), var(--rojo);
+  box-shadow:
+    inset 0.6px 0.8px 0 rgba(255, 226, 216, 0.55),
+    inset -0.5px -0.5px 0 rgba(255, 200, 190, 0.14),
+    0 10px 24px -12px rgba(217, 58, 43, 0.85);
+}
+
+:root:not(.x) :is(.campo, .buscador, .ajustes-buscar) {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 0 0 0.5px rgba(255, 246, 238, 0.08);
+}
+
+/* ---------- Pulsar: se hunde al tocar y vuelve con un muelle ---------- */
+/* Al pulsar responde ya (100 ms); al soltar, el muelle con un pelín de rebote. */
+
+:root:not(.x) :is(.boton, .bloque, .chip, .icono-boton, .hoja-mas__item, .filtros button, .segmentado button, .subapartados button, .apartados button, .boton-enviar, .hoja-mas__forma, .biblia__casilla) {
+  transition-property: transform, background-color, color, box-shadow, --luz;
+  transition-duration: var(--muelle-rebote-ms), 0.2s, 0.2s, 0.2s, 0.45s;
+  transition-timing-function: var(--muelle-rebote), ease, ease, ease, ease;
+}
+
+:root:not(.x) :is(.boton, .chip, .icono-boton, .filtros button, .segmentado button, .subapartados button, .apartados button, .boton-enviar, .biblia__casilla):active:not(:disabled) {
+  transform: scale(0.94);
+  transition-duration: 100ms, 0.2s, 0.2s, 0.2s, 0.2s;
+  transition-timing-function: ease-out;
+}
+
+:root:not(.x) :is(.bloque, .hoja-mas__item, .hoja-mas__forma):active {
+  transform: scale(0.965);
+  transition-duration: 110ms, 0.2s, 0.2s, 0.2s, 0.2s;
+  transition-timing-function: ease-out;
+}
+
+:root:not(.x) .boton-voz:active {
+  transform: scale(0.9);
+  transition-duration: 100ms, 0.2s;
+  transition-timing-function: ease-out;
+}
+
+/* ---------- Hoja «Más» y hojas: cristal grueso que sube con un muelle ---------- */
+
+.hoja-mas__fondo {
+  background: rgba(6, 2, 2, 0.42);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.hoja-mas__panel {
+  margin: 0 8px calc(8px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 16px;
+  border-radius: 34px;
+  background: var(--vidrio-brillo), var(--vidrio-tinte-hoja);
+  -webkit-backdrop-filter: blur(34px) saturate(190%);
+  backdrop-filter: blur(34px) saturate(190%);
+  box-shadow: var(--vidrio-filo), var(--vidrio-interior), 0 30px 70px -20px rgba(0, 0, 0, 0.85);
+  transform-origin: 50% 100%;
+  animation: cristal-sube var(--muelle-hoja-ms) var(--muelle-hoja) backwards;
+}
+
+.hoja-mas__asa {
+  background: rgba(255, 246, 238, 0.28);
+}
+
+.hoja {
+  background: var(--vidrio-brillo), var(--vidrio-tinte-hoja);
+  -webkit-backdrop-filter: blur(34px) saturate(190%);
+  backdrop-filter: blur(34px) saturate(190%);
+  border-top: 0;
+  box-shadow: var(--vidrio-filo), var(--vidrio-interior), 0 -24px 60px -20px rgba(0, 0, 0, 0.8);
+}
+
+/* El cristal se materializa: sube, se enfoca y se asienta. */
+@keyframes cristal-sube {
+  from {
+    opacity: 0.4;
+    transform: translateY(70%) scale(0.92);
+  }
+}
+
+/* Lo de detrás se aparta un poco mientras la hoja está abierta. */
+:root:not(.x) .dialogo__cuerpo,
+:root:not(.x) .dialogo__cabecera {
+  transition:
+    transform var(--muelle-hoja-ms) var(--muelle-hoja),
+    opacity 0.3s ease;
+}
+
+:root:not(.x) .dialogo:has(.hoja-mas:not([hidden], .cerrando)) :is(.dialogo__cuerpo, .dialogo__cabecera) {
+  transform: scale(0.955) translateY(6px);
+  opacity: 0.62;
+}
+
+/* Los elementos de la hoja llegan escalonados. */
+.hoja-mas:not([hidden]) :is(.hoja-mas__item, .hoja-mas__forma) {
+  animation: cristal-llega var(--muelle-suave-ms) var(--muelle-suave) both;
+}
+
+.hoja-mas:not([hidden]) :is(.hoja-mas__item, .hoja-mas__forma):nth-child(2) { animation-delay: 25ms; }
+.hoja-mas:not([hidden]) :is(.hoja-mas__item, .hoja-mas__forma):nth-child(3) { animation-delay: 50ms; }
+.hoja-mas:not([hidden]) :is(.hoja-mas__item, .hoja-mas__forma):nth-child(4) { animation-delay: 75ms; }
+.hoja-mas:not([hidden]) :is(.hoja-mas__item, .hoja-mas__forma):nth-child(5) { animation-delay: 60ms; }
+.hoja-mas:not([hidden]) :is(.hoja-mas__item, .hoja-mas__forma):nth-child(6) { animation-delay: 85ms; }
+.hoja-mas:not([hidden]) :is(.hoja-mas__item, .hoja-mas__forma):nth-child(7) { animation-delay: 110ms; }
+.hoja-mas:not([hidden]) :is(.hoja-mas__item, .hoja-mas__forma):nth-child(8) { animation-delay: 135ms; }
+.hoja-mas:not([hidden]) .hoja-mas__forma { animation-delay: 150ms; }
+
+@keyframes cristal-llega {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* La Forma de la hoja: cristal azul. */
+:root:not(.x) .hoja-mas__forma {
+  box-shadow: var(--vidrio-filo), inset 0 -14px 24px -20px rgba(130, 180, 255, 0.35), 0 14px 30px -16px rgba(47, 125, 255, 0.55);
+}
+
+/* ---------- Buscador general: cristal sobre todo ---------- */
+
+.lupa {
+  background: var(--vidrio-brillo), rgba(22, 15, 14, 0.8);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  backdrop-filter: blur(36px) saturate(180%);
+}
+
+/* ---------- Vistas: llegan y se asientan (fluidez.js las escalona) ---------- */
+
+.cristal-llega {
+  animation: cristal-llega var(--muelle-suave-ms) var(--muelle-suave) both;
+}
+
+/* La lente que viaja entre dos opciones (fluidez.js). */
+.lente-viaja {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.con-lente > :is(button, a) {
+  position: relative;
+  z-index: 1;
+}
+
+.lente-llegando {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* ---------- Accesibilidad ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  /* Sin esperas escalonadas: todo aparece a la vez. */
+  *,
+  *::before,
+  *::after {
+    animation-delay: 0s !important;
+  }
+
+  .hoja-mas__panel,
+  .hoja-mas:not([hidden]) :is(.hoja-mas__item, .hoja-mas__forma),
+  .cristal-llega {
+    animation: cristal-funde 0.2s ease both;
+  }
+
+  :root:not(.x) .dialogo:has(.hoja-mas:not([hidden])) :is(.dialogo__cuerpo, .dialogo__cabecera) {
+    transform: none;
+  }
+
+  :root:not(.x) :is(.boton, .bloque, .chip, .icono-boton, .hoja-mas__item, .filtros button, .segmentado button, .subapartados button, .apartados button, .boton-enviar, .hoja-mas__forma, .biblia__casilla, .boton-voz):active {
+    transform: none;
+  }
+}
+
+@keyframes cristal-funde {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Menos transparencia: cristal esmerilado casi opaco, sin desenfoque. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --b1: #171111;
+    --b2: #201918;
+    --b3: #2b2220;
+    --vidrio-tinte: rgba(34, 24, 22, 0.97);
+    --vidrio-tinte-hoja: rgba(30, 21, 19, 0.99);
+  }
+
+  :root:not(.x) :is(.apartados, .dialogo__cabecera .icono-boton, .compositor, .chat__bajar, .zonas__lista, .aviso-flotante, .boton-voz, .hoja, .lupa),
+  .hoja-mas__panel {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Más contraste: bordes definidos y fondos sólidos. */
+@media (prefers-contrast: more) {
+  :root {
+    --b1: #1a1312;
+    --b2: #241c1a;
+    --b3: #322826;
+    --t2: #d4c6bf;
+    --t3: #a89890;
+    --vidrio-tinte: rgba(30, 21, 19, 0.98);
+    --vidrio-filo: inset 0 0 0 1px rgba(255, 246, 238, 0.45);
+  }
+}
+
+/* La onda de tinta era de otro lenguaje (Material): en el cristal, la luz sigue al dedo. */
+.onda {
+  display: none;
+}
+
+/* ---------- Borde de desplazamiento (scroll edge) ---------- */
+/* Donde el contenido se mete bajo la barra flotante, se funde con el fondo:
+   así el cristal no tiene que leerse encima de texto. Solo en el móvil (en
+   escritorio la barra es un riel lateral). */
+:root.movil:not(.x) .dialogo__cuerpo {
+  position: relative;
+}
+
+:root.movil:not(.x) .dialogo__cuerpo::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  height: calc(var(--barra) + 46px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to bottom, rgba(10, 7, 7, 0), rgba(10, 7, 7, 0.72) 55%, rgba(10, 7, 7, 0.9));
+  pointer-events: none;
+}
+
+/* En el Chat, el cuadro de escribir vive justo encima de la barra: sin velo. */
+:root.movil:not(.x) .dialogo[data-vista='chat'] .dialogo__cuerpo::after,
+:root.movil:not(.x) .escena.teclado .dialogo__cuerpo::after {
+  display: none;
+}

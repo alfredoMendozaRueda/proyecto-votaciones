@@ -18,6 +18,7 @@ import { trozosDeVoz, limpiarParaVoz } from '../compartido/voz.js';
 import { prepararMovil } from './movil.js';
 import { prepararOndas, prepararIndicador, entrarVista, saltar, prepararEnvio } from './animaciones.js';
 import { prepararForma } from './forma/entrada.js';
+import { prepararFluidez, arrastrarParaCerrar } from './fluidez.js';
 
 // Electron trae window.asistente (preload). En el navegador se usa la versión
 // web real, salvo en el modo de ejemplo (?demo o la página de demostración).
@@ -190,6 +191,8 @@ function mostrarVista(nombre, seccionAjustes = null) {
     } else pestana.setAttribute('aria-current', activa ? 'page' : 'false');
   }
   botonMas.classList.toggle('activo', EN_MAS.has(destino));
+  // «Más» es una pestaña más de la barra: elegida si el apartado vive en su hoja.
+  botonMas.setAttribute('aria-selected', String(EN_MAS.has(destino)));
   cerrarMas();
   // Agenda: sus dos pestañas. Chat: sus botones de la cabecera.
   subAgenda.hidden = destino !== 'agenda';
@@ -213,15 +216,35 @@ function mostrarVista(nombre, seccionAjustes = null) {
 
 // ---------- Hoja «Más» ----------
 function abrirMas() {
+  // Si se estaba cerrando, se recupera desde donde va (interrumpible).
+  cerrandoMas?.cancel();
+  cerrandoMas = null;
+  hojaMas.classList.remove('cerrando');
   hojaMas.hidden = false;
   botonMas.setAttribute('aria-expanded', 'true');
   hojaMas.querySelector('.hoja-mas__item')?.focus({ preventScroll: true });
 }
 
-function cerrarMas() {
-  if (hojaMas.hidden) return;
-  hojaMas.hidden = true;
+// Se va por donde vino: baja desde donde esté (y con la velocidad del dedo).
+let cerrandoMas = null;
+function cerrarMas({ desde = 0, velocidad = 0 } = {}) {
+  if (hojaMas.hidden || cerrandoMas) return;
   botonMas.setAttribute('aria-expanded', 'false');
+  const panel = hojaMas.querySelector('.hoja-mas__panel');
+  const terminar = () => {
+    cerrandoMas = null;
+    hojaMas.hidden = true;
+    hojaMas.classList.remove('cerrando');
+    panel.style.transform = '';
+  };
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return terminar();
+  hojaMas.classList.add('cerrando');
+  const alto = panel.offsetHeight || 400;
+  // Cuanto más rápido se lanzó, antes llega abajo (entre 180 y 340 ms).
+  const ms = Math.max(180, Math.min(340, ((alto - desde) / Math.max(1, velocidad)) * 1000 || 340));
+  cerrandoMas = panel.animate([{ transform: `translateY(${desde}px)` }, { transform: `translateY(${alto + 30}px)` }], { duration: ms, easing: 'cubic-bezier(0.32, 0.72, 0, 1)', fill: 'forwards' });
+  hojaMas.querySelector('.hoja-mas__fondo').animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms, fill: 'forwards' });
+  cerrandoMas.onfinish = terminar;
 }
 
 // Insignia de Recordatorios: los que quedan para hoy.
@@ -858,27 +881,8 @@ async function iniciar() {
     if (ir === 'buscar') document.getElementById('boton-buscar').click();
     else mostrarVista(ir);
   });
-  // La hoja se cierra arrastrándola hacia abajo.
-  const panelMas = hojaMas.querySelector('.hoja-mas__panel');
-  let arrastre = null;
-  panelMas.addEventListener('pointerdown', (e) => (arrastre = { y: e.clientY }));
-  panelMas.addEventListener('pointermove', (e) => {
-    if (!arrastre) return;
-    const dy = Math.max(0, e.clientY - arrastre.y);
-    arrastre.dy = dy;
-    if (dy > 6) panelMas.style.transform = `translateY(${dy}px)`;
-  });
-  const soltar = () => {
-    if (!arrastre) return;
-    const { dy = 0 } = arrastre;
-    arrastre = null;
-    panelMas.style.transform = '';
-    // Tras arrastrar, el toque no cuenta como pulsar lo que hubiera debajo.
-    if (dy > 10) panelMas.addEventListener('click', (ev) => ev.stopPropagation(), { capture: true, once: true });
-    if (dy > 70) cerrarMas();
-  };
-  panelMas.addEventListener('pointerup', soltar);
-  panelMas.addEventListener('pointercancel', soltar);
+  // La hoja se cierra arrastrándola hacia abajo (sigue al dedo, con impulso).
+  arrastrarParaCerrar(hojaMas.querySelector('.hoja-mas__panel'), { cerrar: cerrarMas });
   // El botón de voz: con el mismo toque empieza a escucharte (el iPhone lo exige).
   document.getElementById('boton-voz').addEventListener('click', () => {
     vibrar(10);
@@ -943,6 +947,7 @@ async function iniciar() {
   };
   document.getElementById('boton-nueva').addEventListener('click', nuevaConversacion);
   prepararOndas(document);
+  prepararFluidez();
   moverIndicador = prepararIndicador(document.querySelector('.apartados'));
   prepararEnvio(document.getElementById('chat-formulario'), document.getElementById('chat-enviar'));
   if (api.plataforma !== 'electron') {
