@@ -1,0 +1,78 @@
+/* =====================================================================
+   FORMA · «Lujo». El acabado sobre el cristal (cristal.css): instrumento
+   de alta relojería en azul noche. Filos de platino de medio píxel,
+   etiquetas muy espaciadas, paneles en doble bisel (la lámina dentro de su
+   bandeja), grano fino y luz de reloj en las cifras.
+   ===================================================================== */
+
+.forma {
+  --platino: #cfdcf2;
+  --platino-filo: rgba(207, 220, 242, 0.26);
+  --platino-tenue: rgba(207, 220, 242, 0.1);
+}
+
+/* Grano fino, quieto y sin tocar nada (por encima del contenido, por debajo de la barra). */
+.forma::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .9 0 0 0 0 .95 0 0 0 0 1 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  opacity: 0.045;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* Etiquetas: platino apagado, muy espaciadas. */
+.forma .f-etiqueta {
+  letter-spacing: 0.22em;
+  color: rgba(190, 212, 248, 0.72);
+}
+
+/* Los paneles, en doble bisel: bandeja de 4 px con su propio filo. */
+.forma .f-panel {
+  box-shadow:
+    var(--fv-filo),
+    inset 0 0 0 0.5px var(--platino-tenue),
+    inset 0 16px 26px -26px rgba(255, 255, 255, 0.2),
+    0 0 0 4px rgba(130, 172, 255, 0.03),
+    0 0 0 4.5px rgba(207, 220, 242, 0.07),
+    0 14px 32px -22px rgba(0, 3, 12, 0.9);
+}
+
+.forma .f-panel--plano {
+  box-shadow: none;
+}
+
+/* La barra: canto de platino. */
+.forma .f-barra {
+  box-shadow:
+    inset 0.6px 0.8px 0 rgba(235, 244, 255, 0.34),
+    inset -0.6px -0.6px 0 rgba(207, 220, 242, 0.1),
+    inset 0 0 0 0.5px var(--platino-tenue),
+    var(--fv-interior),
+    0 22px 48px -14px rgba(0, 3, 12, 0.9),
+    0 4px 14px -4px rgba(0, 3, 12, 0.5);
+}
+
+/* Las cifras de instrumento: un halo frío, como la luz de una esfera. */
+.forma .f-medidor__cifra {
+  text-shadow: 0 0 28px rgba(90, 162, 255, 0.35);
+}
+
+/* La marca: el signo con su propio brillo. */
+.forma .f-marca {
+  letter-spacing: 0.2em;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .forma::before {
+    display: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .forma .f-etiqueta {
+    color: var(--platino);
+  }
+}

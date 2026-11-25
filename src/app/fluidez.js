@@ -170,6 +170,40 @@ function viajar(pista, desde, hasta) {
   setTimeout(fin, duration + 200);
 }
 
+// El icono de la elegida se encoge y rebota, como al pulsar un botón físico.
+function saludar(icono) {
+  if (!icono || reducido()) return;
+  const { easing, duration } = muelle('rebote');
+  try {
+    icono.animate([{ transform: 'scale(0.72) translateY(2px)' }, { transform: 'none' }], { duration, easing });
+  } catch {
+    /* sin WAAPI */
+  }
+}
+
+// El título de la cabecera cambia como en una revista: el nuevo sube y se enfoca.
+function prepararTitulo() {
+  const titulo = document.querySelector('.marca__nombre');
+  if (!titulo) return;
+  let anterior = titulo.textContent;
+  new MutationObserver(() => {
+    if (titulo.textContent === anterior) return;
+    anterior = titulo.textContent;
+    if (reducido()) return;
+    try {
+      titulo.animate(
+        [
+          { opacity: 0, transform: 'translateY(10px)', filter: 'blur(6px)' },
+          { opacity: 1, transform: 'none', filter: 'blur(0)' },
+        ],
+        { duration: 560, easing: 'cubic-bezier(0.32, 0.72, 0, 1)' },
+      );
+    } catch {
+      /* sin WAAPI */
+    }
+  }).observe(titulo, { childList: true, characterData: true, subtree: true });
+}
+
 function prepararLente() {
   let espera = null;
   document.addEventListener(
@@ -197,7 +231,10 @@ function prepararLente() {
         const nueva = pista?.querySelector(ELEGIDA);
         if (nueva) {
           const r = nueva.getBoundingClientRect();
-          if (Math.abs(r.left - e.rect.left) > 1 || Math.abs(r.top - e.rect.top) > 1) return viajar(pista, e.rect, nueva);
+          if (Math.abs(r.left - e.rect.left) > 1 || Math.abs(r.top - e.rect.top) > 1) {
+            saludar(nueva.querySelector('svg'));
+            return viajar(pista, e.rect, nueva);
+          }
         }
         if (++intentos < 8) requestAnimationFrame(mirar);
       };
@@ -231,9 +268,17 @@ const LLEGAN = [
 // Las primeras tarjetas visibles llegan una tras otra (como mucho 10). Si la
 // vista se pinta un momento después (datos que llegan), lo nuevo también
 // llega escalonado; lo que ya llegó no se repite.
-const llegados = new WeakSet();
+// Cada vez que se entra en una vista es una «ronda»: lo que ya llegó en esta
+// ronda no se repite, pero en la siguiente visita vuelve a llegar.
+const rondas = new WeakMap();
+let rondaActual = 0;
+const llegados = {
+  has: (el) => rondas.get(el) === rondaActual,
+  add: (el) => rondas.set(el, rondaActual),
+};
 export function escalonar(contenedor, opciones = {}) {
   if (!contenedor || reducido()) return;
+  rondaActual++;
   const lanzar = () => escalonarAhora(contenedor, opciones);
   requestAnimationFrame(lanzar);
   // Durante medio segundo, lo que se pinte de nuevo también llega.
@@ -248,6 +293,79 @@ export function escalonar(contenedor, opciones = {}) {
   });
   vigia.observe(contenedor, { childList: true, subtree: true });
   setTimeout(() => vigia.disconnect(), 500);
+}
+
+// Las cifras grandes suben desde una ranura (la tarjeta llega y, un instante
+// después, su número). Solo transform/opacity y un recorte.
+const CIFRAS = '.heroe__hora, .bloque__grande, .gastos__total, .asistente__hola, .f-medidor__cifra, .f-grande__cifra, .f-titulo';
+function subirCifra(el, retraso) {
+  if (llegados.has(el)) return;
+  llegados.add(el);
+  try {
+    el.animate(
+      [
+        { clipPath: 'inset(0 -20% 100% -20%)', transform: 'translateY(0.45em)', opacity: 0.2 },
+        { clipPath: 'inset(0 -20% -20% -20%)', transform: 'none', opacity: 1 },
+      ],
+      { duration: 720, easing: 'cubic-bezier(0.32, 0.72, 0, 1)', delay: retraso, fill: 'backwards' },
+    );
+  } catch {
+    /* sin WAAPI */
+  }
+}
+
+// Un destello de luz cruza la tarjeta principal al llegar (una vez por visita).
+function destellar(tarjeta, retraso = 380) {
+  let d = tarjeta.querySelector(':scope > .destello');
+  if (!d) {
+    d = document.createElement('span');
+    d.className = 'destello';
+    d.setAttribute('aria-hidden', 'true');
+    tarjeta.append(d);
+  }
+  try {
+    d.animate(
+      [
+        { transform: 'translateX(-120%) skewX(-16deg)', opacity: 0 },
+        { opacity: 1, offset: 0.25 },
+        { opacity: 1, offset: 0.75 },
+        { transform: 'translateX(420%) skewX(-16deg)', opacity: 0 },
+      ],
+      { duration: 1250, easing: 'cubic-bezier(0.45, 0, 0.2, 1)', delay: retraso, fill: 'both' },
+    );
+  } catch {
+    /* sin WAAPI */
+  }
+}
+
+// Lo que queda por debajo se revela al acercarse al desplazar (antes de verse,
+// así no parpadea): sube, se enfoca y aparece.
+let vigiaRevelar = null;
+function revelar(contenedor) {
+  if (!('IntersectionObserver' in window)) return;
+  vigiaRevelar ??= new IntersectionObserver(
+    (entradas) => {
+      for (const e of entradas) {
+        if (!e.isIntersecting) continue;
+        vigiaRevelar.unobserve(e.target);
+        if (llegados.has(e.target)) continue;
+        llegados.add(e.target);
+        try {
+          e.target.animate(
+            [
+              { opacity: 0, transform: 'translateY(26px) scale(0.985)', filter: 'blur(5px)' },
+              { opacity: 1, transform: 'none', filter: 'blur(0)' },
+            ],
+            { duration: 760, easing: 'cubic-bezier(0.32, 0.72, 0, 1)', fill: 'backwards' },
+          );
+        } catch {
+          /* sin WAAPI */
+        }
+      }
+    },
+    { rootMargin: '0px 0px 14% 0px' },
+  );
+  for (const el of contenedor.querySelectorAll(LLEGAN)) if (!llegados.has(el)) vigiaRevelar.observe(el);
 }
 
 function escalonarAhora(contenedor, { max = 10, paso = 32 } = {}) {
@@ -273,11 +391,20 @@ function escalonarAhora(contenedor, { max = 10, paso = 32 } = {}) {
         { duration, easing, delay: i * paso, fill: 'backwards' },
       );
       llegados.add(el);
+      // Su cifra grande, un instante después; y el destello si es la tarjeta principal.
+      for (const c of el.querySelectorAll(CIFRAS)) subirCifra(c, i * paso + 140);
+      if (el.matches('.bloque--heroe')) destellar(el, i * paso + 420);
     } catch {
       /* navegador sin WAAPI: sin animación */
     }
     i++;
   }
+  // Las cifras sueltas (fuera de tarjetas) y el resto, al desplazar.
+  for (const c of contenedor.querySelectorAll(CIFRAS)) {
+    const r = c.getBoundingClientRect();
+    if (r.height && r.top < alto) subirCifra(c, 80);
+  }
+  revelar(contenedor);
 }
 
 let preparado = false;
@@ -286,6 +413,7 @@ export function prepararFluidez() {
   preparado = true;
   prepararLuz();
   prepararLente();
+  prepararTitulo();
 }
 
 // ---------- Hojas que se arrastran para cerrar ----------

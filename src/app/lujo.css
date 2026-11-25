@@ -1,0 +1,236 @@
+/* ==========================================================================
+   Kitsune · «Lujo» (nov. 2026)
+   La última capa, sobre el cristal (cristal.css): el acabado. Lujo
+   editorial en negro espresso:
+   - Fraunces (serif con tamaño óptico) en titulares, horas y cifras; Geist
+     se queda para leer;
+   - champán solo en filos y etiquetas: brilla porque es escaso;
+   - etiquetas en versalitas espaciadas, filos de medio píxel y un grano de
+     papel casi invisible;
+   - las piezas principales, en «doble bisel»: una lámina dentro de una
+     bandeja, con curvas concéntricas;
+   - más aire: la letra respira y lo importante se lee primero.
+   Las animaciones viven en fluidez.js. Todo respeta las preferencias del
+   sistema (movimiento, transparencia y contraste).
+   ========================================================================== */
+
+:root {
+  --serif: 'Fraunces Variable', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --fondo: #090706;
+  --crema: #f4ece4;
+  --champan: #dcc29a;
+  --champan-2: #b99b6c;
+  --champan-filo: rgba(220, 194, 154, 0.32);
+  --champan-tenue: rgba(220, 194, 154, 0.14);
+  --curva-lujo: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* ---------- Grano: papel fino, quieto, por encima de todo y sin tocar nada ---------- */
+
+:root:not(.x) .dialogo__cuerpo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 .95 0 0 0 0 .9 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  opacity: 0.045;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* ---------- Tipografía editorial ---------- */
+
+/* El nombre del apartado: serif, ligera y con tamaño óptico. */
+:root:not(.x) .marca__nombre {
+  font-family: var(--serif);
+  font-size: 32px;
+  font-weight: 400;
+  font-optical-sizing: auto;
+  letter-spacing: -0.018em;
+  line-height: 1.05;
+}
+
+/* En Hoy, la fecha como un membrete: «Miércoles 25» y el mes en cursiva. */
+:root:not(.x) .dialogo[data-vista='hoy'] .marca__nombre {
+  font-family: var(--serif);
+  font-size: 21px;
+  font-style: italic;
+  font-weight: 350;
+  letter-spacing: -0.005em;
+  color: var(--t2);
+}
+
+:root:not(.x) .dialogo[data-vista='hoy'] .marca__nombre b {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--crema);
+}
+
+/* Las horas y las cifras grandes: serif fina, números de imprenta. */
+:root:not(.x) :is(.heroe__hora, .bloque__grande, .gastos__total) {
+  font-family: var(--serif);
+  font-optical-sizing: auto;
+  font-weight: 300;
+  font-variant-numeric: lining-nums proportional-nums;
+  letter-spacing: -0.03em;
+}
+
+:root:not(.x) .heroe__hora {
+  font-size: 58px;
+  line-height: 0.95;
+}
+
+/* El saludo del asistente: titular de revista, con la segunda línea en cursiva. */
+:root:not(.x) .asistente__hola {
+  font-family: var(--serif);
+  font-weight: 380;
+  font-optical-sizing: auto;
+  letter-spacing: -0.025em;
+  line-height: 1.02;
+}
+
+:root:not(.x) .asistente__hola span {
+  font-style: italic;
+  font-weight: 300;
+  color: var(--t2);
+}
+
+:root:not(.x) :is(.bloque--heroe .bloque__titulo, .hoja-mas__titulo, .ajustes__titulo, .bloque--biblia .bloque__titulo, .biblia__pasaje) {
+  font-family: var(--serif);
+  font-optical-sizing: auto;
+  font-weight: 450;
+  letter-spacing: -0.015em;
+}
+
+/* Etiquetas: versalitas pequeñas, muy espaciadas, en champán apagado. */
+:root:not(.x) :is(.bloque:not(.bloque--heroe) .bloque__etiqueta, .lista-correos__dia, .asistente__fecha) {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(220, 194, 154, 0.78);
+}
+
+/* La barra: nombres finos y espaciados, como en un reloj. */
+:root:not(.x) .apartados .apartado__nombre {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+/* ---------- Filos de champán ---------- */
+
+/* La barra y el botón de voz: un hilo de luz dorada en el canto. */
+:root:not(.x) .apartados {
+  box-shadow:
+    inset 0.6px 0.8px 0 rgba(255, 236, 214, 0.34),
+    inset -0.6px -0.6px 0 rgba(220, 194, 154, 0.12),
+    inset 0 0 0 0.5px var(--champan-tenue),
+    var(--vidrio-interior),
+    0 22px 48px -14px rgba(5, 1, 1, 0.8),
+    0 4px 14px -4px rgba(5, 1, 1, 0.45);
+}
+
+/* La elegida: lente con canto de champán. */
+:root:not(.x) .apartados button[aria-selected='true'] {
+  box-shadow:
+    inset 0.6px 0.8px 0 rgba(255, 240, 222, 0.42),
+    inset 0 0 0 0.5px var(--champan-filo),
+    0 6px 16px -8px rgba(0, 0, 0, 0.6);
+}
+
+/* ---------- Doble bisel: la lámina dentro de su bandeja ---------- */
+/* Una bandeja de 5 px alrededor (un tono más claro y su propio filo), con
+   la curva exterior concéntrica a la de la tarjeta. Solo en lo principal:
+   el héroe y la hoja «Más». */
+
+:root:not(.x):not(.y):not(.z) .bloque--heroe {
+  margin: 5px;
+  box-shadow:
+    inset 0.6px 0.8px 0 rgba(255, 230, 216, 0.55),
+    inset 0 0 0 0.5px rgba(255, 220, 190, 0.22),
+    inset 0 -18px 30px -22px rgba(255, 210, 196, 0.5),
+    0 0 0 5px rgba(255, 236, 226, 0.045),
+    0 0 0 5.5px var(--champan-tenue),
+    0 26px 50px -22px rgba(217, 58, 43, 0.75);
+}
+
+.hoja-mas__panel {
+  box-shadow:
+    var(--vidrio-filo),
+    inset 0 0 0 0.5px var(--champan-tenue),
+    var(--vidrio-interior),
+    0 0 0 6px rgba(255, 236, 226, 0.035),
+    0 0 0 6.5px rgba(220, 194, 154, 0.1),
+    0 30px 70px -20px rgba(0, 0, 0, 0.85);
+}
+
+/* Las tarjetas: filo un pelín dorado y un aire más (curvas más suaves). */
+:root:not(.x):not(.y):not(.z) :is(.bloque:not(.bloque--heroe), .grupo, .gastos__cifra, .biblia__lectura, .biblia__plan, .oferta, .ajustes-temas, .asistente__carta) {
+  box-shadow:
+    inset 0.6px 0.8px 0 rgba(255, 240, 228, 0.22),
+    inset -0.5px -0.5px 0 rgba(255, 240, 228, 0.05),
+    inset 0 0 0 0.5px rgba(220, 194, 154, 0.07),
+    inset 0 16px 26px -26px rgba(255, 255, 255, 0.2),
+    0 12px 28px -20px rgba(5, 1, 1, 0.75);
+}
+
+/* ---------- La hoja «Más»: Forma como una invitación ---------- */
+
+:root:not(.x) .hoja-mas__forma {
+  border-radius: 24px;
+}
+
+.hoja-mas__forma-flecha {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(90, 162, 255, 0.14);
+  box-shadow: inset 0 0 0 0.5px rgba(150, 200, 255, 0.3);
+  transition: transform var(--muelle-rebote-ms) var(--muelle-rebote);
+}
+
+/* La flecha se adelanta un poco cuando lo vas a pulsar (botón dentro del botón). */
+.hoja-mas__forma:is(:hover, :active) .hoja-mas__forma-flecha {
+  transform: translate(3px, -1px) scale(1.06);
+}
+
+/* ---------- El destello del héroe (fluidez.js lo lanza al entrar) ---------- */
+
+.destello {
+  position: absolute;
+  inset: -20% auto -20% -40%;
+  z-index: 2;
+  width: 38%;
+  background: linear-gradient(100deg, transparent, rgba(255, 246, 236, 0.32) 45%, rgba(255, 255, 255, 0.5) 50%, rgba(255, 246, 236, 0.32) 55%, transparent);
+  filter: blur(2px);
+  transform: translateX(-120%) skewX(-16deg);
+  pointer-events: none;
+  mix-blend-mode: soft-light;
+}
+
+/* ---------- Accesibilidad ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .destello {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root:not(.x) .dialogo__cuerpo::before {
+    display: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --champan: #ead6b2;
+  }
+
+  :root:not(.x) :is(.bloque:not(.bloque--heroe) .bloque__etiqueta, .lista-correos__dia, .asistente__fecha) {
+    color: var(--champan);
+  }
+}

@@ -1,4 +1,7 @@
 import '@fontsource-variable/geist';
+// Fraunces (serif con tamaño óptico): titulares y cifras del acabado «Lujo».
+import '@fontsource-variable/fraunces/opsz.css';
+import '@fontsource-variable/fraunces/opsz-italic.css';
 import { Kitsune } from '../kitsune/Kitsune.js';
 import { crearDemo } from './demo.js';
 import { crearBackendWeb } from './web/backend.js';

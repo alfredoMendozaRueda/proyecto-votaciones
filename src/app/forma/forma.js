@@ -4,6 +4,7 @@
 import '@fontsource-variable/archivo/wdth.css';
 import './forma.css';
 import './cristal.css';
+import './lujo.css';
 import { fechaISO, sumarDias, nombreDia } from '../../compartido/forma/fechas.js';
 import { normalizarForma } from '../../compartido/forma/datos.js';
 import { ic, escapar, crearHojas, crearTostada } from './ui.js';

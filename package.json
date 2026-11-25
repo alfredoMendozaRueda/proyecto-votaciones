@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "@fontsource-variable/archivo": "^5.3.0",
+    "@fontsource-variable/fraunces": "^5.3.0",
     "@fontsource-variable/geist": "^5.3.0",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
